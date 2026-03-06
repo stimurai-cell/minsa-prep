@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Compass,
   Crown,
+  FolderTree,
   LayoutDashboard,
   LogOut,
   ShieldCheck,
@@ -44,6 +45,7 @@ export default function Layout() {
 
   const adminLinks = [
     { to: '/admin?tab=dashboard', label: 'Visao geral', icon: LayoutDashboard, key: 'dashboard' },
+    { to: '/admin?tab=content', label: 'Conteudo', icon: FolderTree, key: 'content' },
     { to: '/admin?tab=generator', label: 'Gerador', icon: Sparkles, key: 'generator' },
     { to: '/admin?tab=users', label: 'Utilizadores', icon: Users, key: 'users' },
   ];
@@ -252,7 +254,7 @@ export default function Layout() {
       </div>
 
       <nav className={`fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur xl:hidden ${isImmersiveSession ? 'hidden' : ''}`}>
-        <div className={`mx-auto grid max-w-xl gap-2 ${profile?.role === 'admin' ? 'grid-cols-3' : 'grid-cols-5'}`}>
+        <div className={`mx-auto grid max-w-xl gap-2 ${profile?.role === 'admin' ? 'grid-cols-4' : 'grid-cols-5'}`}>
           {links.map((link) => {
             const Icon = link.icon;
             const isActive = getLinkActive(link);

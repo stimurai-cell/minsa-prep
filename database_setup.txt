@@ -332,14 +332,21 @@ BEGIN
     DROP POLICY IF EXISTS "Users can insert own quiz answers" ON quiz_attempt_answers;
     DROP POLICY IF EXISTS "Users can view own activity" ON activity_logs;
     DROP POLICY IF EXISTS "Users can insert own activity" ON activity_logs;
+    DROP POLICY IF EXISTS "Admins can insert areas" ON areas;
+    DROP POLICY IF EXISTS "Admins can update areas" ON areas;
+    DROP POLICY IF EXISTS "Admins can delete areas" ON areas;
     DROP POLICY IF EXISTS "Admins can insert topics" ON topics;
     DROP POLICY IF EXISTS "Admins can update topics" ON topics;
+    DROP POLICY IF EXISTS "Admins can delete topics" ON topics;
     DROP POLICY IF EXISTS "Admins can insert questions" ON questions;
     DROP POLICY IF EXISTS "Admins can update questions" ON questions;
+    DROP POLICY IF EXISTS "Admins can delete questions" ON questions;
     DROP POLICY IF EXISTS "Admins can insert alternatives" ON alternatives;
     DROP POLICY IF EXISTS "Admins can update alternatives" ON alternatives;
+    DROP POLICY IF EXISTS "Admins can delete alternatives" ON alternatives;
     DROP POLICY IF EXISTS "Admins can insert explanations" ON question_explanations;
     DROP POLICY IF EXISTS "Admins can update explanations" ON question_explanations;
+    DROP POLICY IF EXISTS "Admins can delete explanations" ON question_explanations;
 END$$;
 
 CREATE POLICY "Public read areas" ON areas FOR SELECT USING (true);
@@ -372,6 +379,25 @@ WITH CHECK (
 );
 CREATE POLICY "Users can view own activity" ON activity_logs FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own activity" ON activity_logs FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Admins can insert areas"
+ON areas
+FOR INSERT
+TO authenticated
+WITH CHECK (public.is_current_user_admin());
+
+CREATE POLICY "Admins can update areas"
+ON areas
+FOR UPDATE
+TO authenticated
+USING (public.is_current_user_admin())
+WITH CHECK (public.is_current_user_admin());
+
+CREATE POLICY "Admins can delete areas"
+ON areas
+FOR DELETE
+TO authenticated
+USING (public.is_current_user_admin());
 
 CREATE POLICY "Admins can insert topics"
 ON topics
@@ -407,6 +433,12 @@ WITH CHECK (
   )
 );
 
+CREATE POLICY "Admins can delete topics"
+ON topics
+FOR DELETE
+TO authenticated
+USING (public.is_current_user_admin());
+
 CREATE POLICY "Admins can insert questions"
 ON questions
 FOR INSERT
@@ -440,6 +472,12 @@ WITH CHECK (
       AND profiles.role = 'admin'
   )
 );
+
+CREATE POLICY "Admins can delete questions"
+ON questions
+FOR DELETE
+TO authenticated
+USING (public.is_current_user_admin());
 
 CREATE POLICY "Admins can insert alternatives"
 ON alternatives
@@ -475,6 +513,12 @@ WITH CHECK (
   )
 );
 
+CREATE POLICY "Admins can delete alternatives"
+ON alternatives
+FOR DELETE
+TO authenticated
+USING (public.is_current_user_admin());
+
 CREATE POLICY "Admins can insert explanations"
 ON question_explanations
 FOR INSERT
@@ -487,6 +531,12 @@ WITH CHECK (
       AND profiles.role = 'admin'
   )
 );
+
+CREATE POLICY "Admins can delete explanations"
+ON question_explanations
+FOR DELETE
+TO authenticated
+USING (public.is_current_user_admin());
 
 CREATE POLICY "Admins can update explanations"
 ON question_explanations

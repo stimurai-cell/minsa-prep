@@ -5,7 +5,33 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import { generateQuestions, getGeminiConfigStatus } from '../lib/gemini';
 import { stripAlternativePrefix } from '../lib/quiz';
-import { LayoutDashboard, Users, Database, Zap, Plus, Loader2, Settings } from 'lucide-react';
+import {
+  Database,
+  FolderTree,
+  LayoutDashboard,
+  Loader2,
+  Plus,
+  Settings,
+  Trash2,
+  Users,
+  Zap,
+} from 'lucide-react';
+
+type ManagedQuestion = {
+  id: string;
+  content: string;
+  difficulty: string;
+  exam_year: number | null;
+  alternatives?: { id: string; content: string; is_correct: boolean }[];
+  question_explanations?: { id: string; content: string }[];
+};
+
+type ManagedTopic = {
+  id: string;
+  name: string;
+  description?: string | null;
+  questions: ManagedQuestion[];
+};
 
 export default function Admin() {
   const { profile } = useAuthStore();
@@ -18,6 +44,15 @@ export default function Admin() {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [contentCatalog, setContentCatalog] = useState<any[]>([]);
+  const [managementArea, setManagementArea] = useState('');
+  const [managementTopics, setManagementTopics] = useState<ManagedTopic[]>([]);
+  const [loadingManagement, setLoadingManagement] = useState(false);
+  const [expandedTopicId, setExpandedTopicId] = useState<string | null>(null);
+  const [newAreaName, setNewAreaName] = useState('');
+  const [newAreaDescription, setNewAreaDescription] = useState('');
+  const [newTopicName, setNewTopicName] = useState('');
+  const [newTopicDescription, setNewTopicDescription] = useState('');
+  const [savingContent, setSavingContent] = useState(false);
   
   // Generator State
   const [genArea, setGenArea] = useState('');
@@ -101,6 +136,66 @@ export default function Admin() {
     }
   };
 
+  const fetchManagementContent = async (areaId: string) => {
+    if (!areaId) {
+      setManagementTopics([]);
+      return;
+    }
+
+    setLoadingManagement(true);
+    try {
+      const { data: topicRows, error: topicError } = await supabase
+        .from('topics')
+        .select('id, name, description')
+        .eq('area_id', areaId)
+        .order('name', { ascending: true });
+
+      if (topicError) throw topicError;
+
+      const topicIds = (topicRows || []).map((topic) => topic.id);
+      if (topicIds.length === 0) {
+        setManagementTopics([]);
+        return;
+      }
+
+      const { data: questionRows, error: questionError } = await supabase
+        .from('questions')
+        .select(
+          `
+          id,
+          topic_id,
+          content,
+          difficulty,
+          exam_year,
+          alternatives (id, content, is_correct),
+          question_explanations (id, content)
+        `
+        )
+        .in('topic_id', topicIds)
+        .order('created_at', { ascending: false });
+
+      if (questionError) throw questionError;
+
+      const questionsByTopic = new Map<string, ManagedQuestion[]>();
+      (questionRows || []).forEach((question: any) => {
+        const items = questionsByTopic.get(question.topic_id) || [];
+        items.push(question);
+        questionsByTopic.set(question.topic_id, items);
+      });
+
+      setManagementTopics(
+        (topicRows || []).map((topic) => ({
+          ...topic,
+          questions: questionsByTopic.get(topic.id) || [],
+        }))
+      );
+    } catch (error) {
+      console.error('Error fetching management content:', error);
+    } finally {
+      setLoadingManagement(false);
+    }
+  };
+
   useEffect(() => {
     const { mode, modelName } = getGeminiConfigStatus();
     setGeminiMode(mode);
@@ -124,6 +219,12 @@ export default function Admin() {
       fetchContentCatalog(genArea);
     }
   }, [genArea, fetchTopics]);
+
+  useEffect(() => {
+    if (managementArea) {
+      fetchManagementContent(managementArea);
+    }
+  }, [managementArea]);
 
   if (profile?.role !== 'admin') {
     return (
@@ -279,6 +380,119 @@ export default function Admin() {
     }
   };
 
+  const requireAdmin = (action: string) => {
+    const message =
+      `Tem certeza que deseja ${action}? Esta acao pode remover conteudo em cascata e nao deve ser usada sem revisao.`;
+    return window.confirm(message);
+  };
+
+  const handleCreateArea = async () => {
+    if (!newAreaName.trim()) return;
+
+    setSavingContent(true);
+    try {
+      const { error } = await supabase.from('areas').insert({
+        name: newAreaName.trim(),
+        description: newAreaDescription.trim() || null,
+      });
+
+      if (error) throw error;
+
+      setNewAreaName('');
+      setNewAreaDescription('');
+      await fetchAreas();
+      await fetchStats();
+    } catch (error: any) {
+      alert(error?.message || 'Erro ao criar area.');
+    } finally {
+      setSavingContent(false);
+    }
+  };
+
+  const handleCreateTopic = async () => {
+    if (!managementArea || !newTopicName.trim()) return;
+
+    setSavingContent(true);
+    try {
+      const { error } = await supabase.from('topics').insert({
+        area_id: managementArea,
+        name: newTopicName.trim(),
+        description: newTopicDescription.trim() || null,
+      });
+
+      if (error) throw error;
+
+      setNewTopicName('');
+      setNewTopicDescription('');
+      await fetchTopics(managementArea);
+      await fetchContentCatalog(managementArea);
+      await fetchManagementContent(managementArea);
+    } catch (error: any) {
+      alert(error?.message || 'Erro ao criar topico.');
+    } finally {
+      setSavingContent(false);
+    }
+  };
+
+  const handleDeleteArea = async (areaId: string) => {
+    if (!requireAdmin('apagar esta area')) return;
+
+    setSavingContent(true);
+    try {
+      const { error } = await supabase.from('areas').delete().eq('id', areaId);
+      if (error) throw error;
+
+      if (managementArea === areaId) {
+        setManagementArea('');
+        setManagementTopics([]);
+      }
+
+      await fetchAreas();
+      await fetchStats();
+    } catch (error: any) {
+      alert(error?.message || 'Erro ao apagar area. Se existirem perfis ligados a ela, remova ou altere primeiro.');
+    } finally {
+      setSavingContent(false);
+    }
+  };
+
+  const handleDeleteTopic = async (topicId: string) => {
+    if (!requireAdmin('apagar este topico')) return;
+
+    setSavingContent(true);
+    try {
+      const { error } = await supabase.from('topics').delete().eq('id', topicId);
+      if (error) throw error;
+
+      await fetchTopics(managementArea);
+      await fetchContentCatalog(managementArea);
+      await fetchManagementContent(managementArea);
+      await fetchStats();
+    } catch (error: any) {
+      alert(error?.message || 'Erro ao apagar topico.');
+    } finally {
+      setSavingContent(false);
+    }
+  };
+
+  const handleDeleteQuestion = async (questionId: string) => {
+    if (!requireAdmin('apagar esta pergunta')) return;
+
+    setSavingContent(true);
+    try {
+      const { error } = await supabase.from('questions').delete().eq('id', questionId);
+      if (error) throw error;
+
+      await fetchContentCatalog(managementArea);
+      await fetchManagementContent(managementArea);
+      await fetchStats();
+    } catch (error: any) {
+      alert(error?.message || 'Erro ao apagar pergunta.');
+    } finally {
+      setSavingContent(false);
+    }
+  };
+
   return (
     <div className="space-y-5 md:space-y-6">
       <div className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f2f7ff_40%,#f4fbf7_100%)] p-5 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.35)] md:p-6">
@@ -296,6 +510,12 @@ export default function Admin() {
           className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'dashboard' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
         >
           Visão Geral
+        </button>
+        <button
+          onClick={() => setActiveTab('content')}
+          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'content' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
+        >
+          Conteudo
         </button>
         <button
           onClick={() => setActiveTab('generator')}
@@ -338,6 +558,247 @@ export default function Admin() {
             <div>
               <p className="text-sm text-gray-500 font-medium">Usuários Premium</p>
               <p className="text-2xl font-bold text-gray-900">{stats.premium}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'content' && (
+        <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+          <div className="space-y-6">
+            <div className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600">
+                  <FolderTree className="h-6 w-6" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-slate-900">Criar area</h2>
+                  <p className="text-sm text-slate-500">Use isto apenas quando surgir uma nova carreira real.</p>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                <input
+                  type="text"
+                  value={newAreaName}
+                  onChange={(e) => setNewAreaName(e.target.value)}
+                  placeholder="Nome da area"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                />
+                <textarea
+                  rows={3}
+                  value={newAreaDescription}
+                  onChange={(e) => setNewAreaDescription(e.target.value)}
+                  placeholder="Descricao breve"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateArea}
+                  disabled={savingContent || !newAreaName.trim()}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  <Plus className="h-4 w-4" />
+                  Criar area
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-lg font-black text-slate-900">Areas existentes</h2>
+              <div className="mt-4 space-y-3">
+                {areas.map((area) => (
+                  <div key={area.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-slate-900">{area.name}</p>
+                        <p className="mt-1 text-sm text-slate-500">{area.description || 'Sem descricao.'}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setManagementArea(area.id)}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                        >
+                          Gerir
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteArea(area.id)}
+                          disabled={savingContent}
+                          className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 disabled:opacity-50"
+                        >
+                          Apagar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="text-lg font-black text-slate-900">Gestao de topicos e perguntas</h2>
+                <p className="text-sm text-slate-500">Apague topicos inteiros ou perguntas especificas sem passar pelo banco manualmente.</p>
+              </div>
+              <div className="w-full max-w-sm">
+                <label className="mb-2 block text-sm font-medium text-slate-700">Area</label>
+                <select
+                  value={managementArea}
+                  onChange={(e) => setManagementArea(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                >
+                  <option value="">Selecione uma area</option>
+                  {areas.map((area) => (
+                    <option key={area.id} value={area.id}>
+                      {area.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {managementArea && (
+              <div className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                <h3 className="text-sm font-black text-emerald-800">Criar topico manualmente</h3>
+                <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                  <input
+                    type="text"
+                    value={newTopicName}
+                    onChange={(e) => setNewTopicName(e.target.value)}
+                    placeholder="Nome do topico"
+                    className="rounded-xl border border-emerald-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                  />
+                  <input
+                    type="text"
+                    value={newTopicDescription}
+                    onChange={(e) => setNewTopicDescription(e.target.value)}
+                    placeholder="Descricao opcional"
+                    className="rounded-xl border border-emerald-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCreateTopic}
+                    disabled={savingContent || !newTopicName.trim()}
+                    className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    Criar topico
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-5 space-y-4">
+              {!managementArea ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                  Escolha uma area para gerenciar o conteudo.
+                </div>
+              ) : loadingManagement ? (
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                  A carregar estrutura de conteudo...
+                </div>
+              ) : managementTopics.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                  Esta area ainda nao tem topicos.
+                </div>
+              ) : (
+                managementTopics.map((topic) => (
+                  <div key={topic.id} className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <p className="text-lg font-black text-slate-900">{topic.name}</p>
+                        <p className="mt-1 text-sm text-slate-500">{topic.description || 'Sem descricao.'}</p>
+                        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          {topic.questions.length} perguntas
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedTopicId(expandedTopicId === topic.id ? null : topic.id)}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                        >
+                          {expandedTopicId === topic.id ? 'Esconder' : 'Ver perguntas'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTopic(topic.id)}
+                          disabled={savingContent}
+                          className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Apagar topico
+                        </button>
+                      </div>
+                    </div>
+
+                    {expandedTopicId === topic.id && (
+                      <div className="mt-4 space-y-3">
+                        {topic.questions.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
+                            Nenhuma pergunta neste topico.
+                          </div>
+                        ) : (
+                          topic.questions.map((question, index) => (
+                            <div key={question.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-black text-slate-900">
+                                    {index + 1}. {question.content}
+                                  </p>
+                                  <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
+                                    <span className="rounded-full bg-cyan-50 px-3 py-1 text-cyan-700">
+                                      {question.difficulty}
+                                    </span>
+                                    {question.exam_year && (
+                                      <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">
+                                        {question.exam_year}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {question.alternatives && question.alternatives.length > 0 && (
+                                    <div className="mt-3 space-y-2">
+                                      {question.alternatives.map((alternative) => (
+                                        <div
+                                          key={alternative.id}
+                                          className={`rounded-lg px-3 py-2 text-sm ${
+                                            alternative.is_correct
+                                              ? 'bg-emerald-50 text-emerald-800'
+                                              : 'bg-slate-50 text-slate-600'
+                                          }`}
+                                        >
+                                          {alternative.content}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {question.question_explanations?.[0]?.content && (
+                                    <p className="mt-3 text-sm leading-6 text-slate-500">
+                                      Explicacao: {question.question_explanations[0].content}
+                                    </p>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteQuestion(question.id)}
+                                  disabled={savingContent}
+                                  className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 disabled:opacity-50"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Apagar pergunta
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
