@@ -48,8 +48,8 @@ export default function Admin() {
     setLoadingUsers(false);
   };
 
-  const [apiKeyMissing, setApiKeyMissing] = useState(false);
   const [geminiModel, setGeminiModel] = useState('');
+  const [geminiMode, setGeminiMode] = useState('');
 
   const fetchStats = async () => {
     const { count: usersCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
@@ -102,8 +102,8 @@ export default function Admin() {
   };
 
   useEffect(() => {
-    const { hasApiKey, modelName } = getGeminiConfigStatus();
-    setApiKeyMissing(!hasApiKey);
+    const { mode, modelName } = getGeminiConfigStatus();
+    setGeminiMode(mode);
     setGeminiModel(modelName);
   }, []);
 
@@ -407,17 +407,9 @@ export default function Admin() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Form */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-            {apiKeyMissing && (
-              <div className="bg-amber-50 border border-amber-200 text-amber-700 p-4 rounded-xl text-sm mb-4">
-                <strong>Atenção:</strong> Chave da API Gemini não encontrada. 
-                Se estiver no <strong>VS Code (Local)</strong>, adicione <code>VITE_GEMINI_API_KEY=sua_chave</code> ao arquivo <code>.env</code> e reinicie o servidor.
-              </div>
-            )}
-            {!apiKeyMissing && (
-              <div className="bg-blue-50 border border-blue-200 text-blue-700 p-4 rounded-xl text-sm mb-4">
-                Modelo Gemini ativo: <code>{geminiModel}</code>
-              </div>
-            )}
+            <div className="bg-blue-50 border border-blue-200 text-blue-700 p-4 rounded-xl text-sm mb-4">
+              Modo Gemini: <code>{geminiMode}</code> | Modelo preferencial: <code>{geminiModel}</code>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
                 <p className="text-xs uppercase tracking-wider text-emerald-700 font-semibold">Questoes</p>

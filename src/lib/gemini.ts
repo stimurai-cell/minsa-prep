@@ -1,16 +1,7 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import { buildQuestionsPrompt, defaultGeminiModel, type GenerateQuestionsPayload } from './gemini-config';
 
-const apiKey =
-  import.meta.env.VITE_GEMINI_API_KEY ||
-  (typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : '') ||
-  '';
-
-const modelName =
-  import.meta.env.VITE_GEMINI_MODEL ||
-  (typeof process !== 'undefined' ? process.env?.GEMINI_MODEL : '') ||
-  'gemini-2.5-flash';
-
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+const localFallbackKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+const localFallbackModel = import.meta.env.VITE_GEMINI_MODEL || defaultGeminiModel;
 
 const getErrorMessage = (error: unknown) => {
   if (!(error instanceof Error)) {
@@ -30,9 +21,58 @@ const getErrorMessage = (error: unknown) => {
   return message;
 };
 
+const generateQuestionsLocally = async (payload: GenerateQuestionsPayload) => {
+  const { GoogleGenAI, Type } = await import('@google/genai');
+  const ai = new GoogleGenAI({ apiKey: localFallbackKey });
+
+  const response = await ai.models.generateContent({
+    model: localFallbackModel,
+    contents: buildQuestionsPrompt(payload),
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          questions: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                question: { type: Type.STRING },
+                alternatives: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      text: { type: Type.STRING },
+                      isCorrect: { type: Type.BOOLEAN },
+                    },
+                    required: ['text', 'isCorrect'],
+                  },
+                },
+                explanation: { type: Type.STRING },
+                difficulty: { type: Type.STRING },
+              },
+              required: ['question', 'alternatives', 'explanation', 'difficulty'],
+            },
+          },
+        },
+        required: ['questions'],
+      },
+    },
+  });
+
+  if (!response.text) {
+    throw new Error('O Gemini respondeu sem corpo de texto.');
+  }
+
+  return JSON.parse(response.text);
+};
+
 export const getGeminiConfigStatus = () => ({
-  hasApiKey: Boolean(apiKey),
-  modelName,
+  mode: 'serverless',
+  localFallbackEnabled: Boolean(import.meta.env.DEV && localFallbackKey),
+  modelName: localFallbackModel,
 });
 
 export const generateQuestions = async (
@@ -42,89 +82,39 @@ export const generateQuestions = async (
   difficulty: string,
   rawContent: string
 ) => {
-  if (!ai) {
-    throw new Error(
-      'Chave do Gemini nao encontrada. Use VITE_GEMINI_API_KEY no .env para o frontend local.'
-    );
-  }
+  const payload: GenerateQuestionsPayload = {
+    area,
+    topic,
+    count,
+    difficulty,
+    rawContent,
+  };
 
   try {
-    const prompt = `
-      Voce e um especialista em concursos publicos da area da saude em Angola (MINSA).
-      Gere ${count} questoes de multipla escolha sobre o topico "${topic}" da area de "${area}".
-
-      REGRAS CRITICAS:
-      1. Use portugues correto com todos os acentos e pontuacao.
-      2. Cada questao deve ter exatamente 4 alternativas.
-      3. Nao inclua letras como "a.", "b.", "c." ou "d." no texto das alternativas.
-      4. O nivel de dificuldade deve ser "${difficulty}".
-      5. Baseie-se no seguinte conteudo de referencia (se fornecido):
-      ${rawContent}
-      6. Varie a posicao da alternativa correta entre as 4 opcoes.
-
-      Retorne apenas um JSON valido seguindo estritamente este formato:
-      {
-        "questions": [
-          {
-            "question": "Texto da pergunta",
-            "alternatives": [
-              {"text": "Texto da alternativa", "isCorrect": false},
-              {"text": "Texto da alternativa", "isCorrect": true},
-              {"text": "Texto da alternativa", "isCorrect": false},
-              {"text": "Texto da alternativa", "isCorrect": false}
-            ],
-            "explanation": "Explicacao detalhada de por que a alternativa correta e a certa e as outras estao erradas.",
-            "difficulty": "${difficulty}"
-          }
-        ]
-      }
-    `;
-
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            questions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  question: { type: Type.STRING },
-                  alternatives: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        text: { type: Type.STRING },
-                        isCorrect: { type: Type.BOOLEAN },
-                      },
-                      required: ['text', 'isCorrect'],
-                    },
-                  },
-                  explanation: { type: Type.STRING },
-                  difficulty: { type: Type.STRING },
-                },
-                required: ['question', 'alternatives', 'explanation', 'difficulty'],
-              },
-            },
-          },
-          required: ['questions'],
-        },
+    const response = await fetch('/api/generate-questions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify(payload),
     });
 
-    if (!response.text) {
-      throw new Error('O Gemini respondeu sem corpo de texto.');
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result?.error || 'Falha ao gerar questoes com a API.');
     }
 
-    return JSON.parse(response.text);
+    return result;
   } catch (error) {
-    const message = getErrorMessage(error);
-    console.error('Error generating questions with Gemini:', error);
-    throw new Error(message);
+    if (import.meta.env.DEV && localFallbackKey) {
+      try {
+        return await generateQuestionsLocally(payload);
+      } catch (fallbackError) {
+        throw new Error(getErrorMessage(fallbackError));
+      }
+    }
+
+    throw new Error(getErrorMessage(error));
   }
 };

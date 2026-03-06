@@ -15,9 +15,9 @@ View your app in AI Studio: https://ai.studio/apps/f1b05ae2-e3aa-4e92-9b87-77b54
 
 1. Install dependencies:
    `npm install`
-2. Configure the Gemini key in `.env.local` or `.env`
-   - Recommended for local Vite: `VITE_GEMINI_API_KEY=your_key`
-   - Also supported: `GEMINI_API_KEY=your_key`
-   - Optional model override: `VITE_GEMINI_MODEL=gemini-2.5-flash`
+2. Configure Gemini
+   - Production / serverless: `GEMINI_API_KEY=your_key`
+   - Optional model override: `GEMINI_MODEL=gemini-2.5-flash`
+   - Local fallback only: `VITE_GEMINI_API_KEY=your_key`
 3. Run the app:
    `npm run dev`
