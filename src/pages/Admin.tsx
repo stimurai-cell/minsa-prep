@@ -6,6 +6,8 @@ import { useAppStore } from '../store/useAppStore';
 import { generateQuestions, getGeminiConfigStatus } from '../lib/gemini';
 import { stripAlternativePrefix } from '../lib/quiz';
 import {
+  BellRing,
+  CheckCircle2,
   Database,
   FolderTree,
   LayoutDashboard,
@@ -14,6 +16,7 @@ import {
   Settings,
   Trash2,
   Users,
+  XCircle,
   Zap,
 } from 'lucide-react';
 
@@ -33,13 +36,30 @@ type ManagedTopic = {
   questions: ManagedQuestion[];
 };
 
+type PaymentRequest = {
+  id: string;
+  created_at: string;
+  user_id: string;
+  payer_name: string;
+  plan_id: string;
+  plan_name: string;
+  amount_kwanza: number;
+  duration_months: number;
+  payment_reference: string;
+  proof_url: string;
+  student_note?: string | null;
+  admin_notes?: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  profiles?: { full_name: string } | null;
+};
+
 export default function Admin() {
   const { profile } = useAuthStore();
   const { areas, topics, fetchAreas, fetchTopics } = useAppStore();
   const [searchParams, setSearchParams] = useSearchParams();
   
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'dashboard');
-  const [stats, setStats] = useState({ users: 0, questions: 0, premium: 0 });
+  const [stats, setStats] = useState({ users: 0, questions: 0, premium: 0, pendingPayments: 0 });
   const [userList, setUserList] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
@@ -53,6 +73,10 @@ export default function Admin() {
   const [newTopicName, setNewTopicName] = useState('');
   const [newTopicDescription, setNewTopicDescription] = useState('');
   const [savingContent, setSavingContent] = useState(false);
+  const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+  const [paymentFilter, setPaymentFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
+  const [adminPaymentNotes, setAdminPaymentNotes] = useState<Record<string, string>>({});
   
   // Generator State
   const [genArea, setGenArea] = useState('');
@@ -69,6 +93,11 @@ export default function Admin() {
     const tab = searchParams.get('tab');
     if (tab) setActiveTab(tab);
   }, [searchParams]);
+
+  const changeTab = (tab: string) => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
 
   const fetchUsers = async () => {
     setLoadingUsers(true);
@@ -90,12 +119,40 @@ export default function Admin() {
     const { count: usersCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
     const { count: qCount } = await supabase.from('questions').select('*', { count: 'exact', head: true });
     const { count: premCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'premium');
+    const { count: pendingPaymentsCount } = await supabase
+      .from('payment_requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'pending');
 
     setStats({
       users: usersCount || 0,
       questions: qCount || 0,
-      premium: premCount || 0
+      premium: premCount || 0,
+      pendingPayments: pendingPaymentsCount || 0,
     });
+  };
+
+  const fetchPaymentRequests = async () => {
+    setLoadingPayments(true);
+    try {
+      let query = supabase
+        .from('payment_requests')
+        .select('*, profiles(full_name)')
+        .order('created_at', { ascending: false });
+
+      if (paymentFilter !== 'all') {
+        query = query.eq('status', paymentFilter);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      setPaymentRequests((data || []) as PaymentRequest[]);
+    } catch (error) {
+      console.error('Error fetching payment requests:', error);
+    } finally {
+      setLoadingPayments(false);
+    }
   };
 
   const fetchContentCatalog = async (areaId: string) => {
@@ -214,6 +271,12 @@ export default function Admin() {
   }, [activeTab]);
 
   useEffect(() => {
+    if (activeTab === 'payments' || activeTab === 'dashboard') {
+      void fetchPaymentRequests();
+    }
+  }, [activeTab, paymentFilter]);
+
+  useEffect(() => {
     if (genArea) {
       fetchTopics(genArea);
       fetchContentCatalog(genArea);
@@ -225,6 +288,17 @@ export default function Admin() {
       fetchManagementContent(managementArea);
     }
   }, [managementArea]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      void fetchStats();
+      if (activeTab === 'payments' || activeTab === 'dashboard') {
+        void fetchPaymentRequests();
+      }
+    }, 30000);
+
+    return () => window.clearInterval(interval);
+  }, [activeTab, paymentFilter]);
 
   if (profile?.role !== 'admin') {
     return (
@@ -493,6 +567,69 @@ export default function Admin() {
     }
   };
 
+  const handleReviewPayment = async (request: PaymentRequest, status: 'approved' | 'rejected') => {
+    const adminNotes = adminPaymentNotes[request.id]?.trim() || null;
+    const confirmed = window.confirm(
+      status === 'approved'
+        ? 'Confirmar aprovacao deste pagamento e ativar premium?'
+        : 'Confirmar rejeicao deste pagamento?'
+    );
+
+    if (!confirmed) return;
+
+    setLoadingPayments(true);
+    try {
+      const reviewedAt = new Date().toISOString();
+      const { error: paymentError } = await supabase
+        .from('payment_requests')
+        .update({
+          status,
+          admin_notes: adminNotes,
+          reviewed_at: reviewedAt,
+        })
+        .eq('id', request.id);
+
+      if (paymentError) throw paymentError;
+
+      if (status === 'approved') {
+        const startDate = new Date();
+        const endDate = new Date();
+        endDate.setMonth(endDate.getMonth() + (request.duration_months || 1));
+
+        await supabase
+          .from('subscriptions')
+          .update({ is_active: false })
+          .eq('user_id', request.user_id)
+          .eq('is_active', true);
+
+        const { error: subscriptionError } = await supabase.from('subscriptions').insert({
+          user_id: request.user_id,
+          plan_type: request.plan_id,
+          start_date: startDate.toISOString(),
+          end_date: endDate.toISOString(),
+          is_active: true,
+        });
+
+        if (subscriptionError) throw subscriptionError;
+
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ role: 'premium' })
+          .eq('id', request.user_id);
+
+        if (profileError) throw profileError;
+      }
+
+      await fetchStats();
+      await fetchPaymentRequests();
+      await fetchUsers();
+    } catch (error: any) {
+      alert(error?.message || 'Erro ao rever pagamento.');
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
+
   return (
     <div className="space-y-5 md:space-y-6">
       <div className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f2f7ff_40%,#f4fbf7_100%)] p-5 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.35)] md:p-6">
@@ -506,25 +643,31 @@ export default function Admin() {
       {/* Tabs */}
       <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
         <button
-          onClick={() => setActiveTab('dashboard')}
+          onClick={() => changeTab('dashboard')}
           className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'dashboard' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
         >
           Visão Geral
         </button>
         <button
-          onClick={() => setActiveTab('content')}
+          onClick={() => changeTab('payments')}
+          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'payments' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
+        >
+          Pagamentos {stats.pendingPayments > 0 ? `(${stats.pendingPayments})` : ''}
+        </button>
+        <button
+          onClick={() => changeTab('content')}
           className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'content' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
         >
           Conteudo
         </button>
         <button
-          onClick={() => setActiveTab('generator')}
+          onClick={() => changeTab('generator')}
           className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'generator' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
         >
           Gerador IA
         </button>
         <button
-          onClick={() => setActiveTab('users')}
+          onClick={() => changeTab('users')}
           className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'users' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
         >
           Gerenciar Usuários
@@ -532,7 +675,24 @@ export default function Admin() {
       </div>
 
       {activeTab === 'dashboard' && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="space-y-4">
+          {stats.pendingPayments > 0 && (
+            <div className="rounded-[1.8rem] border border-amber-200 bg-amber-50 p-5">
+              <div className="flex items-start gap-3">
+                <BellRing className="mt-1 h-5 w-5 text-amber-700" />
+                <div>
+                  <p className="text-lg font-black text-slate-900">
+                    Há {stats.pendingPayments} pagamento{stats.pendingPayments > 1 ? 's' : ''} pendente{stats.pendingPayments > 1 ? 's' : ''}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-700">
+                    Revise estes comprovativos o mais rápido possível para o estudante não ficar à espera do plano.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
               <Users className="w-6 h-6" />
@@ -560,6 +720,130 @@ export default function Admin() {
               <p className="text-2xl font-bold text-gray-900">{stats.premium}</p>
             </div>
           </div>
+          <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
+              <BellRing className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 font-medium">Pagamentos Pendentes</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.pendingPayments}</p>
+            </div>
+          </div>
+        </div>
+        </div>
+      )}
+
+      {activeTab === 'payments' && (
+        <div className="space-y-5">
+          <div className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-2xl font-black text-slate-900">Pagamentos para aprovação</h2>
+                <p className="text-sm text-slate-500">Aprove ou rejeite e ative o premium manualmente.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(['pending', 'approved', 'rejected', 'all'] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    type="button"
+                    onClick={() => setPaymentFilter(filter)}
+                    className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                      paymentFilter === filter ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {filter === 'pending'
+                      ? 'Pendentes'
+                      : filter === 'approved'
+                        ? 'Aprovados'
+                        : filter === 'rejected'
+                          ? 'Rejeitados'
+                          : 'Todos'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {loadingPayments ? (
+            <div className="rounded-[1.8rem] border border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500">
+              A carregar pedidos de pagamento...
+            </div>
+          ) : paymentRequests.length === 0 ? (
+            <div className="rounded-[1.8rem] border border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500">
+              Nenhum pagamento nesta fila.
+            </div>
+          ) : (
+            paymentRequests.map((request) => (
+              <div key={request.id} className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
+                        {request.status}
+                      </span>
+                      <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
+                        {request.plan_name}
+                      </span>
+                      <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-800">
+                        {request.amount_kwanza?.toLocaleString('pt-PT')} Kz
+                      </span>
+                    </div>
+                    <p className="mt-3 text-lg font-black text-slate-900">{request.profiles?.full_name || request.payer_name}</p>
+                    <div className="mt-2 space-y-1 text-sm text-slate-600">
+                      <p>Referência: {request.payment_reference}</p>
+                      <p>Pedido: {new Date(request.created_at).toLocaleString('pt-PT')}</p>
+                      {request.student_note && <p>Nota do estudante: {request.student_note}</p>}
+                      {request.admin_notes && <p>Nota do admin: {request.admin_notes}</p>}
+                    </div>
+                    <a
+                      href={request.proof_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-4 inline-flex rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700"
+                    >
+                      Abrir comprovativo
+                    </a>
+                  </div>
+
+                  <div className="w-full max-w-md rounded-[1.4rem] border border-slate-200 bg-slate-50 p-4">
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">Nota do admin</label>
+                    <textarea
+                      rows={3}
+                      value={adminPaymentNotes[request.id] ?? request.admin_notes ?? ''}
+                      onChange={(e) =>
+                        setAdminPaymentNotes((prev) => ({
+                          ...prev,
+                          [request.id]: e.target.value,
+                        }))
+                      }
+                      placeholder="Escreva aqui a decisão ou motivo."
+                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                    />
+                    {request.status === 'pending' && (
+                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={() => handleReviewPayment(request, 'approved')}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white"
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                          Aprovar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleReviewPayment(request, 'rejected')}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600"
+                        >
+                          <XCircle className="h-4 w-4" />
+                          Rejeitar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       )}
 

@@ -9,6 +9,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'difficulty_level') THEN
         CREATE TYPE difficulty_level AS ENUM ('easy', 'medium', 'hard');
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payment_request_status') THEN
+        CREATE TYPE payment_request_status AS ENUM ('pending', 'approved', 'rejected');
+    END IF;
 END$$;
 
 -- 2. Areas (e.g., Pharmacy, Nursing)
@@ -132,6 +135,24 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   start_date TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
   end_date TIMESTAMP WITH TIME ZONE NOT NULL,
   is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+CREATE TABLE IF NOT EXISTS payment_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  payer_name TEXT NOT NULL,
+  plan_id TEXT NOT NULL,
+  plan_name TEXT NOT NULL,
+  amount_kwanza INT NOT NULL,
+  duration_months INT DEFAULT 1,
+  payment_reference TEXT NOT NULL,
+  proof_url TEXT NOT NULL,
+  proof_storage_path TEXT,
+  student_note TEXT,
+  admin_notes TEXT,
+  status payment_request_status DEFAULT 'pending',
+  reviewed_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
 
@@ -305,6 +326,7 @@ ALTER TABLE user_topic_progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE quiz_attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE quiz_attempt_answers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payment_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE areas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE topics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
@@ -332,6 +354,10 @@ BEGIN
     DROP POLICY IF EXISTS "Users can insert own quiz answers" ON quiz_attempt_answers;
     DROP POLICY IF EXISTS "Users can view own activity" ON activity_logs;
     DROP POLICY IF EXISTS "Users can insert own activity" ON activity_logs;
+    DROP POLICY IF EXISTS "Users can view own payment requests" ON payment_requests;
+    DROP POLICY IF EXISTS "Users can insert own payment requests" ON payment_requests;
+    DROP POLICY IF EXISTS "Admins can view payment requests" ON payment_requests;
+    DROP POLICY IF EXISTS "Admins can update payment requests" ON payment_requests;
     DROP POLICY IF EXISTS "Admins can insert areas" ON areas;
     DROP POLICY IF EXISTS "Admins can update areas" ON areas;
     DROP POLICY IF EXISTS "Admins can delete areas" ON areas;
@@ -379,6 +405,10 @@ WITH CHECK (
 );
 CREATE POLICY "Users can view own activity" ON activity_logs FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own activity" ON activity_logs FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can view own payment requests" ON payment_requests FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own payment requests" ON payment_requests FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Admins can view payment requests" ON payment_requests FOR SELECT USING (public.is_current_user_admin());
+CREATE POLICY "Admins can update payment requests" ON payment_requests FOR UPDATE TO authenticated USING (public.is_current_user_admin()) WITH CHECK (public.is_current_user_admin());
 
 CREATE POLICY "Admins can insert areas"
 ON areas
@@ -557,4 +587,22 @@ WITH CHECK (
     WHERE profiles.id = auth.uid()
       AND profiles.role = 'admin'
   )
+);
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('payment-proofs', 'payment-proofs', true)
+ON CONFLICT (id) DO NOTHING;
+
+DO $$
+BEGIN
+    DROP POLICY IF EXISTS "Users can upload payment proofs" ON storage.objects;
+END$$;
+
+CREATE POLICY "Users can upload payment proofs"
+ON storage.objects
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  bucket_id = 'payment-proofs'
+  AND (storage.foldername(name))[1] = auth.uid()::text
 );

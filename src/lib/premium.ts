@@ -3,6 +3,9 @@ export type PremiumPlan = {
   name: string;
   badge: string;
   cadence: string;
+  priceLabel: string;
+  priceAmount: number;
+  durationMonths: number;
   headline: string;
   description: string;
   features: string[];
@@ -15,12 +18,15 @@ export const premiumPlans: PremiumPlan[] = [
     name: 'Plano Gratuito',
     badge: 'Entrada',
     cadence: 'Sem custo',
+    priceLabel: '0 Kz',
+    priceAmount: 0,
+    durationMonths: 0,
     headline: 'Bom para testar o ritmo da plataforma.',
     description: 'Ideal para novos estudantes entrarem, responderem questoes e perceberem valor antes de subir.',
     features: [
       'Treinos e provas essenciais',
       'Progresso base por topico',
-      'Acesso inicial ao ranking',
+      'Ritmo inicial sem compromisso financeiro',
     ],
   },
   {
@@ -28,6 +34,9 @@ export const premiumPlans: PremiumPlan[] = [
     name: 'Premium Focus',
     badge: 'Mais estrategico',
     cadence: 'Mensal',
+    priceLabel: '6.500 Kz / mes',
+    priceAmount: 6500,
+    durationMonths: 1,
     headline: 'Pacote mais indicado para a maioria dos candidatos.',
     description: 'Entrega consistencia sem assustar no preco. Deve ser o plano mais promovido na app.',
     features: [
@@ -42,6 +51,9 @@ export const premiumPlans: PremiumPlan[] = [
     name: 'Premium Intensivo',
     badge: 'Maximo rendimento',
     cadence: 'Mensal ou trimestral',
+    priceLabel: '15.000 Kz / 3 meses',
+    priceAmount: 15000,
+    durationMonths: 3,
     headline: 'Para quem quer preparar-se com acompanhamento total.',
     description: 'Bom para upsell de candidatos em reta final ou perfis premium recorrentes.',
     features: [

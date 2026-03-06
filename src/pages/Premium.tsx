@@ -1,6 +1,8 @@
-import { CheckCircle2, Crown, Lock, Rocket, ShieldCheck, Star } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, Crown, Lock, Rocket, ShieldCheck, Star, Upload, Wallet } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { premiumPlans } from '../lib/premium';
+import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 
 const premiumComparisons = [
@@ -28,9 +30,110 @@ const premiumPerks = [
   'Melhor argumento comercial dentro do proprio app',
 ];
 
+const paymentMethods = [
+  { bank: 'Express', value: '928047010' },
+  { bank: 'BAI', value: '0040-0000-6719-8212-1017-0' },
+  { bank: 'Atlantico', value: '0055-0000-1903-4290-1018-7' },
+  { bank: 'BIC', value: '0051-0000-4332-6097-1014-5' },
+  { bank: 'SOL', value: '0044-0000-3489-7416-1018-5' },
+];
+
+type PaymentRequest = {
+  id: string;
+  plan_name: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+  admin_notes?: string | null;
+};
+
 export default function Premium() {
   const { profile } = useAuthStore();
   const isPremium = profile?.role === 'premium' || profile?.role === 'admin';
+  const paidPlans = useMemo(() => premiumPlans.filter((plan) => plan.priceAmount > 0), []);
+  const [selectedPlanId, setSelectedPlanId] = useState(paidPlans[0]?.id || 'focus');
+  const [payerName, setPayerName] = useState(profile?.full_name || '');
+  const [paymentReference, setPaymentReference] = useState('');
+  const [paymentNote, setPaymentNote] = useState('');
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [latestRequest, setLatestRequest] = useState<PaymentRequest | null>(null);
+
+  const selectedPlan = paidPlans.find((plan) => plan.id === selectedPlanId) || paidPlans[0];
+
+  useEffect(() => {
+    setPayerName(profile?.full_name || '');
+  }, [profile?.full_name]);
+
+  useEffect(() => {
+    const fetchLatestRequest = async () => {
+      if (!profile?.id) return;
+
+      const { data } = await supabase
+        .from('payment_requests')
+        .select('id, plan_name, status, created_at, admin_notes')
+        .eq('user_id', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (data) {
+        setLatestRequest(data as PaymentRequest);
+      }
+    };
+
+    void fetchLatestRequest();
+  }, [profile?.id, successMessage]);
+
+  const handleSubmitPaymentRequest = async () => {
+    if (!profile?.id || !selectedPlan || !payerName.trim() || !paymentReference.trim() || !proofFile) {
+      alert('Preencha o nome, a referencia e anexe o comprovativo.');
+      return;
+    }
+
+    setSubmitting(true);
+    setSuccessMessage('');
+
+    try {
+      const fileExt = proofFile.name.split('.').pop() || 'jpg';
+      const filePath = `${profile.id}/${crypto.randomUUID()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('payment-proofs')
+        .upload(filePath, proofFile, { upsert: false });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage.from('payment-proofs').getPublicUrl(filePath);
+
+      const { error: requestError } = await supabase.from('payment_requests').insert({
+        user_id: profile.id,
+        payer_name: payerName.trim(),
+        plan_id: selectedPlan.id,
+        plan_name: selectedPlan.name,
+        amount_kwanza: selectedPlan.priceAmount,
+        duration_months: selectedPlan.durationMonths,
+        payment_reference: paymentReference.trim(),
+        proof_url: publicUrlData.publicUrl,
+        proof_storage_path: filePath,
+        student_note: paymentNote.trim() || null,
+        status: 'pending',
+      });
+
+      if (requestError) throw requestError;
+
+      setPaymentReference('');
+      setPaymentNote('');
+      setProofFile(null);
+      setSuccessMessage(
+        'Comprovativo enviado. O pedido vai ser revisto o mais rapido possivel e, logo em seguida, o plano escolhido sera ativado.'
+      );
+    } catch (error: any) {
+      alert(error?.message || 'Erro ao enviar comprovativo.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 md:space-y-8">
@@ -130,6 +233,7 @@ export default function Premium() {
               </div>
               <h3 className="mt-4 text-2xl font-black text-slate-900">{plan.name}</h3>
               <p className="mt-1 text-sm font-semibold text-emerald-700">{plan.cadence}</p>
+              <p className="mt-1 text-2xl font-black text-slate-900">{plan.priceLabel}</p>
               <p className="mt-4 text-sm font-semibold text-slate-800">{plan.headline}</p>
               <p className="mt-3 text-sm leading-6 text-slate-600">{plan.description}</p>
               <div className="mt-5 space-y-2">
@@ -143,6 +247,7 @@ export default function Premium() {
 
               <button
                 type="button"
+                onClick={() => plan.priceAmount > 0 && setSelectedPlanId(plan.id)}
                 className={`mt-5 w-full rounded-2xl px-4 py-4 text-sm font-black uppercase tracking-[0.12em] transition ${
                   plan.highlight
                     ? 'bg-[linear-gradient(90deg,#facc15_0%,#34d399_100%)] text-slate-950'
@@ -159,6 +264,142 @@ export default function Premium() {
           ))}
         </div>
       </section>
+
+      {!isPremium && selectedPlan && (
+        <section className="grid gap-5 xl:grid-cols-[1fr_0.95fr]">
+          <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.35)] md:p-6">
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600">
+                <Wallet className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Pagamento simples</p>
+                <h2 className="text-2xl font-black text-slate-900">Transferencia e envio do comprovativo</h2>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-[1.6rem] border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-semibold text-amber-900">
+                Depois de fazer o pagamento, envie o comprovativo aqui. O pedido sera revisto o mais rapido que for possivel e, logo em seguida, tera o plano escolhido ativo.
+              </p>
+            </div>
+
+            {latestRequest && (
+              <div className="mt-4 rounded-[1.4rem] border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ultimo pedido</p>
+                <p className="mt-2 text-sm font-bold text-slate-900">{latestRequest.plan_name}</p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Estado: <span className="font-black uppercase">{latestRequest.status}</span>
+                </p>
+                {latestRequest.admin_notes && (
+                  <p className="mt-2 text-sm text-slate-600">Nota do admin: {latestRequest.admin_notes}</p>
+                )}
+              </div>
+            )}
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {paidPlans.map((plan) => (
+                <button
+                  key={plan.id}
+                  type="button"
+                  onClick={() => setSelectedPlanId(plan.id)}
+                  className={`rounded-[1.4rem] border px-4 py-4 text-left transition ${
+                    selectedPlanId === plan.id
+                      ? 'border-emerald-500 bg-emerald-50'
+                      : 'border-slate-200 bg-slate-50'
+                  }`}
+                >
+                  <p className="text-lg font-black text-slate-900">{plan.name}</p>
+                  <p className="mt-1 text-sm font-semibold text-emerald-700">{plan.priceLabel}</p>
+                  <p className="mt-2 text-sm text-slate-600">{plan.headline}</p>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">Nome de quem pagou</label>
+                <input
+                  type="text"
+                  value={payerName}
+                  onChange={(e) => setPayerName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">Referencia da transferencia</label>
+                <input
+                  type="text"
+                  value={paymentReference}
+                  onChange={(e) => setPaymentReference(e.target.value)}
+                  placeholder="Ex.: referencia, terminal ou numero da operacao"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">Comprovativo</label>
+                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-600">
+                  <Upload className="h-4 w-4" />
+                  {proofFile ? proofFile.name : 'Selecionar imagem ou PDF do comprovativo'}
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">Observacao opcional</label>
+                <textarea
+                  rows={3}
+                  value={paymentNote}
+                  onChange={(e) => setPaymentNote(e.target.value)}
+                  placeholder="Se precisar, diga o banco, hora da transferencia ou outro detalhe util."
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleSubmitPaymentRequest}
+                disabled={submitting}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white disabled:opacity-50"
+              >
+                <Upload className="h-4 w-4" />
+                {submitting ? 'A enviar comprovativo...' : `Enviar pedido para ${selectedPlan.name}`}
+              </button>
+              {successMessage && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-semibold text-emerald-800">
+                  {successMessage}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.35)] md:p-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Dados para transferencia</p>
+              <p className="mt-3 text-lg font-black text-slate-900">Titular: JOSE SIMAO PEDRO</p>
+              <div className="mt-4 space-y-3">
+                {paymentMethods.map((method) => (
+                  <div key={method.bank} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{method.bank}</p>
+                    <p className="mt-1 break-all text-sm font-bold text-slate-900">{method.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-[2rem] border border-emerald-200 bg-emerald-50 p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Suporte</p>
+              <p className="mt-2 text-lg font-black text-slate-900">WhatsApp: 244936793706</p>
+              <p className="mt-3 text-sm leading-6 text-slate-700">
+                Se o comprovativo demorar a carregar ou se a internet estiver fraca, o estudante pode pedir apoio por WhatsApp enquanto o pedido continua registado no sistema para revisao do admin.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="grid gap-4 lg:grid-cols-[1fr_auto]">
         <div className="rounded-[1.8rem] border border-emerald-200 bg-emerald-50 p-5">
