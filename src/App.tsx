@@ -10,6 +10,7 @@ import Training from './pages/Training';
 import Simulation from './pages/Simulation';
 import Ranking from './pages/Ranking';
 import Admin from './pages/Admin';
+import Premium from './pages/Premium';
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuthStore();
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="training" element={<Training />} />
           <Route path="simulation" element={<Simulation />} />
           <Route path="ranking" element={<Ranking />} />
+          <Route path="premium" element={<Premium />} />
           <Route path="admin" element={<Admin />} />
         </Route>
       </Routes>

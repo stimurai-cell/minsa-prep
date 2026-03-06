@@ -5,6 +5,7 @@ import {
   BookOpen,
   ChevronDown,
   Compass,
+  Crown,
   LayoutDashboard,
   LogOut,
   ShieldCheck,
@@ -52,6 +53,7 @@ export default function Layout() {
     { to: '/training', label: 'Treino', icon: BookOpen },
     { to: '/simulation', label: 'Prova', icon: Compass },
     { to: '/ranking', label: 'Ranking', icon: Award },
+    { to: '/premium', label: 'Premium', icon: Crown },
   ];
 
   const links = profile?.role === 'admin' ? adminLinks : studentLinks;
@@ -250,7 +252,7 @@ export default function Layout() {
       </div>
 
       <nav className={`fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur xl:hidden ${isImmersiveSession ? 'hidden' : ''}`}>
-        <div className={`mx-auto grid max-w-xl gap-2 ${profile?.role === 'admin' ? 'grid-cols-3' : 'grid-cols-4'}`}>
+        <div className={`mx-auto grid max-w-xl gap-2 ${profile?.role === 'admin' ? 'grid-cols-3' : 'grid-cols-5'}`}>
           {links.map((link) => {
             const Icon = link.icon;
             const isActive = getLinkActive(link);

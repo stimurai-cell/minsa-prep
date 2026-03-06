@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowRight,
@@ -53,25 +53,27 @@ export default function Simulation() {
   const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null);
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
   const [resultHistory, setResultHistory] = useState<boolean[]>([]);
+  const hasPremiumAccess = profile?.role === 'premium' || profile?.role === 'admin';
 
   const sessionActive = searchParams.get('session') === '1';
   const sessionDifficulty = (searchParams.get('difficulty') as DifficultyPreference) || 'mixed';
+  const effectiveDifficulty = hasPremiumAccess ? sessionDifficulty : 'medium';
 
   useEffect(() => {
     fetchAreas();
   }, [fetchAreas]);
 
   useEffect(() => {
-    setSelectedDifficulty(sessionDifficulty);
-  }, [sessionDifficulty]);
+    setSelectedDifficulty(hasPremiumAccess ? sessionDifficulty : 'medium');
+  }, [hasPremiumAccess, sessionDifficulty]);
 
   useEffect(() => {
     if (!sessionActive || questions.length > 0 || loading || !profile?.selected_area_id) {
       return;
     }
 
-    void bootSimulationSession(sessionDifficulty);
-  }, [loading, profile?.selected_area_id, questions.length, sessionActive, sessionDifficulty]);
+    void bootSimulationSession(effectiveDifficulty);
+  }, [effectiveDifficulty, loading, profile?.selected_area_id, questions.length, sessionActive]);
 
   useEffect(() => {
     if (!sessionActive || !questions.length || !sessionStartedAt) {
@@ -249,7 +251,8 @@ export default function Simulation() {
   };
 
   const startSimulation = () => {
-    navigate(`/simulation?session=1&difficulty=${selectedDifficulty}`);
+    const difficulty = hasPremiumAccess ? selectedDifficulty : 'medium';
+    navigate(`/simulation?session=1&difficulty=${difficulty}`);
   };
 
   const leaveSimulationSession = () => {
@@ -610,20 +613,32 @@ export default function Simulation() {
                 <button
                   key={difficulty}
                   type="button"
-                  onClick={() => setSelectedDifficulty(difficulty)}
+                  onClick={() => hasPremiumAccess && setSelectedDifficulty(difficulty)}
+                  disabled={!hasPremiumAccess && difficulty !== 'medium'}
                   className={`rounded-2xl px-3 py-3 text-sm font-semibold transition ${
                     selectedDifficulty === difficulty
                       ? 'bg-emerald-600 text-white'
-                      : 'border border-slate-200 bg-slate-50 text-slate-700'
+                      : !hasPremiumAccess && difficulty !== 'medium'
+                        ? 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400'
+                        : 'border border-slate-200 bg-slate-50 text-slate-700'
                   }`}
                 >
                   {getDifficultyLabel(difficulty)}
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-xs text-slate-500">
-              Em modo misto, a prova tenta distribuir questoes entre facil, normal e dificil antes de completar as 30.
-            </p>
+            {hasPremiumAccess ? (
+              <p className="mt-2 text-xs text-slate-500">
+                Em modo misto, a prova tenta distribuir questoes entre facil, normal e dificil antes de completar as 30.
+              </p>
+            ) : (
+              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+                No gratuito, a prova corre em <span className="font-black">Normal</span>. A escolha livre de dificuldade fica reservada ao premium.
+                <Link to="/premium" className="ml-1 font-black underline">
+                  Ver premium
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 

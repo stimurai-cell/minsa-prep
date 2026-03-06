@@ -4,12 +4,14 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import AreaLockCard from '../components/AreaLockCard';
+import PremiumGate from '../components/PremiumGate';
 
 export default function Ranking() {
   const { profile } = useAuthStore();
   const { areas, fetchAreas } = useAppStore();
   const [ranking, setRanking] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const hasPremiumAccess = profile?.role === 'premium' || profile?.role === 'admin';
 
   useEffect(() => {
     fetchAreas();
@@ -62,6 +64,22 @@ export default function Ranking() {
 
   if (!profile?.selected_area_id) {
     return <AreaLockCard areas={areas} />;
+  }
+
+  if (!hasPremiumAccess) {
+    return (
+      <PremiumGate
+        title="Ranking completo da area"
+        description="O ranking tem forte valor percebido porque mostra posicao, concorrencia e performance relativa. Por isso faz mais sentido deixá-lo como recurso premium."
+        featureList={[
+          'Top 10 da sua area com comparacao real',
+          'Leitura mais clara da competitividade',
+          'Melhor incentivo para manter consistencia nas provas',
+          'Upgrade natural para estudantes mais comprometidos',
+        ]}
+        ctaLabel="Desbloquear ranking"
+      />
+    );
   }
 
   return (

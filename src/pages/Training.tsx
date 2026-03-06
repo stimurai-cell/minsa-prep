@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowRight,
   BookOpen,
@@ -50,10 +50,12 @@ export default function Training() {
   const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null);
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
   const [resultHistory, setResultHistory] = useState<boolean[]>([]);
+  const hasPremiumAccess = profile?.role === 'premium' || profile?.role === 'admin';
 
   const sessionActive = searchParams.get('session') === '1';
   const sessionTopicId = searchParams.get('topic') || '';
   const sessionDifficulty = (searchParams.get('difficulty') as DifficultyPreference) || 'mixed';
+  const effectiveDifficulty = hasPremiumAccess ? sessionDifficulty : 'medium';
 
   useEffect(() => {
     fetchAreas();
@@ -72,16 +74,16 @@ export default function Training() {
   }, [sessionTopicId]);
 
   useEffect(() => {
-    setSelectedDifficulty(sessionDifficulty);
-  }, [sessionDifficulty]);
+    setSelectedDifficulty(hasPremiumAccess ? sessionDifficulty : 'medium');
+  }, [hasPremiumAccess, sessionDifficulty]);
 
   useEffect(() => {
     if (!sessionActive || !sessionTopicId || questions.length > 0 || loading) {
       return;
     }
 
-    void bootTrainingSession(sessionTopicId, sessionDifficulty);
-  }, [loading, questions.length, sessionActive, sessionDifficulty, sessionTopicId]);
+    void bootTrainingSession(sessionTopicId, effectiveDifficulty);
+  }, [effectiveDifficulty, loading, questions.length, sessionActive, sessionTopicId]);
 
   const selectedAreaName = useMemo(
     () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Area nao definida',
@@ -183,7 +185,8 @@ export default function Training() {
 
   const startTraining = () => {
     if (!selectedTopic) return;
-    navigate(`/training?session=1&topic=${selectedTopic}&difficulty=${selectedDifficulty}`);
+    const difficulty = hasPremiumAccess ? selectedDifficulty : 'medium';
+    navigate(`/training?session=1&topic=${selectedTopic}&difficulty=${difficulty}`);
   };
 
   const leaveTrainingSession = () => {
@@ -594,20 +597,33 @@ export default function Training() {
                   <button
                     key={difficulty}
                     type="button"
-                    onClick={() => setSelectedDifficulty(difficulty)}
+                    onClick={() => hasPremiumAccess && setSelectedDifficulty(difficulty)}
+                    disabled={!hasPremiumAccess && difficulty !== 'medium'}
                     className={`rounded-2xl px-3 py-3 text-sm font-semibold transition ${
                       selectedDifficulty === difficulty
                         ? 'bg-emerald-600 text-white'
-                        : 'border border-slate-200 bg-slate-50 text-slate-700'
+                        : !hasPremiumAccess && difficulty !== 'medium'
+                          ? 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400'
+                          : 'border border-slate-200 bg-slate-50 text-slate-700'
                     }`}
                   >
                     {getDifficultyLabel(difficulty)}
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-xs text-slate-500">
-                Em modo misto, o sistema tenta equilibrar facil, normal e dificil antes de completar a sessao.
-              </p>
+              {hasPremiumAccess ? (
+                <p className="mt-2 text-xs text-slate-500">
+                  Em modo misto, o sistema tenta equilibrar facil, normal e dificil antes de completar a sessao.
+                </p>
+              ) : (
+                <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+                  O plano gratuito usa <span className="font-black">Normal</span> por defeito.
+                  Para escolher <span className="font-black">Facil</span>, <span className="font-black">Dificil</span> ou <span className="font-black">Misto</span>, suba para o premium.
+                  <Link to="/premium" className="ml-1 font-black underline">
+                    Ver premium
+                  </Link>
+                </div>
+              )}
             </div>
 
             <button

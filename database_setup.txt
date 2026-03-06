@@ -154,6 +154,7 @@ ON CONFLICT (name) DO NOTHING;
 DO $$
 DECLARE
   canonical_farmacia UUID;
+  duplicate_topic RECORD;
 BEGIN
   SELECT id INTO canonical_farmacia
   FROM areas
@@ -162,6 +163,37 @@ BEGIN
   LIMIT 1;
 
   IF canonical_farmacia IS NOT NULL THEN
+    FOR duplicate_topic IN
+      SELECT duplicate.id AS duplicate_topic_id, canonical.id AS canonical_topic_id
+      FROM topics duplicate
+      JOIN areas source_area ON source_area.id = duplicate.area_id
+      JOIN topics canonical
+        ON canonical.name = duplicate.name
+       AND canonical.area_id = canonical_farmacia
+      WHERE source_area.id <> canonical_farmacia
+        AND source_area.name ILIKE 'Farm%'
+    LOOP
+      UPDATE questions
+      SET topic_id = duplicate_topic.canonical_topic_id
+      WHERE topic_id = duplicate_topic.duplicate_topic_id;
+
+      UPDATE user_topic_progress
+      SET topic_id = duplicate_topic.canonical_topic_id
+      WHERE topic_id = duplicate_topic.duplicate_topic_id
+        AND NOT EXISTS (
+          SELECT 1
+          FROM user_topic_progress existing_progress
+          WHERE existing_progress.user_id = user_topic_progress.user_id
+            AND existing_progress.topic_id = duplicate_topic.canonical_topic_id
+        );
+
+      DELETE FROM user_topic_progress
+      WHERE topic_id = duplicate_topic.duplicate_topic_id;
+
+      DELETE FROM topics
+      WHERE id = duplicate_topic.duplicate_topic_id;
+    END LOOP;
+
     UPDATE topics
     SET area_id = canonical_farmacia
     WHERE area_id IN (
@@ -210,16 +242,12 @@ SELECT id, U&'\00C9tica e Deontologia' FROM areas WHERE name = 'Enfermagem'
 ON CONFLICT (area_id, name) DO NOTHING;
 
 -- AUTO-PROFILE TRIGGER
+-- Estrategia definitiva:
+-- O perfil do estudante passa a ser criado/atualizado pela aplicacao apos o sign up.
+-- Mantemos a funcao como no-op apenas para compatibilidade com instalacoes antigas.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO public.profiles (id, full_name, role)
-  VALUES (
-    new.id, 
-    COALESCE(NULLIF(TRIM(new.raw_user_meta_data->>'full_name'), ''), SPLIT_PART(new.email, '@', 1), 'Usuario'), 
-    CASE WHEN new.email = 'jossdemo@gmail.com' THEN 'admin'::user_role ELSE 'free'::user_role END
-  )
-  ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role WHERE profiles.id = EXCLUDED.id AND profiles.role != 'admin';
   RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -265,9 +293,6 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- UPDATE profiles SET role = 'admin' WHERE id IN (SELECT id FROM auth.users WHERE email = 'jossdemo@gmail.com');
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 DROP TRIGGER IF EXISTS protect_profile_updates_trigger ON public.profiles;
 CREATE TRIGGER protect_profile_updates_trigger
