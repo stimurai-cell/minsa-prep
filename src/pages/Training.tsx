@@ -15,6 +15,7 @@ import { getDifficultyLabel } from '../lib/labels';
 import {
   calculateTrainingXp,
   getAlternativeLabel,
+  pickQuestionsForSession,
   prepareQuestionSet,
 } from '../lib/quiz';
 import { useAuthStore } from '../store/useAuthStore';
@@ -29,6 +30,8 @@ type SessionSummary = {
   durationSeconds: number;
 };
 
+type DifficultyPreference = 'mixed' | 'easy' | 'medium' | 'hard';
+
 export default function Training() {
   const { profile, refreshProfile } = useAuthStore();
   const { areas, topics, fetchAreas, fetchTopics } = useAppStore();
@@ -36,6 +39,7 @@ export default function Training() {
   const [searchParams] = useSearchParams();
 
   const [selectedTopic, setSelectedTopic] = useState('');
+  const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyPreference>('mixed');
   const [questions, setQuestions] = useState<any[]>([]);
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [pendingAlt, setPendingAlt] = useState<string | null>(null);
@@ -49,6 +53,7 @@ export default function Training() {
 
   const sessionActive = searchParams.get('session') === '1';
   const sessionTopicId = searchParams.get('topic') || '';
+  const sessionDifficulty = (searchParams.get('difficulty') as DifficultyPreference) || 'mixed';
 
   useEffect(() => {
     fetchAreas();
@@ -67,12 +72,16 @@ export default function Training() {
   }, [sessionTopicId]);
 
   useEffect(() => {
+    setSelectedDifficulty(sessionDifficulty);
+  }, [sessionDifficulty]);
+
+  useEffect(() => {
     if (!sessionActive || !sessionTopicId || questions.length > 0 || loading) {
       return;
     }
 
-    void bootTrainingSession(sessionTopicId);
-  }, [loading, questions.length, sessionActive, sessionTopicId]);
+    void bootTrainingSession(sessionTopicId, sessionDifficulty);
+  }, [loading, questions.length, sessionActive, sessionDifficulty, sessionTopicId]);
 
   const selectedAreaName = useMemo(
     () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Area nao definida',
@@ -113,11 +122,11 @@ export default function Training() {
     await refreshProfile(profile.id);
   };
 
-  const bootTrainingSession = async (topicId: string) => {
+  const bootTrainingSession = async (topicId: string, difficulty: DifficultyPreference) => {
     setLoading(true);
 
     try {
-      const { data: qData, error: qError } = await supabase
+      let query = supabase
         .from('questions')
         .select(
           `
@@ -127,13 +136,19 @@ export default function Training() {
         `
         )
         .eq('topic_id', topicId)
-        .limit(10);
+        .limit(80);
+
+      if (difficulty !== 'mixed') {
+        query = query.eq('difficulty', difficulty);
+      }
+
+      const { data: qData, error: qError } = await query;
 
       if (qError) throw qError;
 
       if (qData && qData.length > 0) {
         resetTrainingSession();
-        setQuestions(prepareQuestionSet(qData));
+        setQuestions(prepareQuestionSet(pickQuestionsForSession(qData, 10, difficulty)));
         setSessionStartedAt(Date.now());
         setShowIntro(true);
       } else {
@@ -171,7 +186,7 @@ export default function Training() {
 
   const startTraining = () => {
     if (!selectedTopic) return;
-    navigate(`/training?session=1&topic=${selectedTopic}`);
+    navigate(`/training?session=1&topic=${selectedTopic}&difficulty=${selectedDifficulty}`);
   };
 
   const leaveTrainingSession = () => {
@@ -322,7 +337,7 @@ export default function Training() {
                 >
                   <p className="text-3xl font-black leading-tight text-slate-800">Vamos entrar em ritmo.</p>
                   <p className="mt-3 text-lg leading-8 text-slate-600">
-                    Voce vai responder <span className="font-black text-cyan-500">{questions.length} questoes</span> de {selectedTopicName}.
+                    Voce vai responder <span className="font-black text-cyan-500">{questions.length} questoes</span> de {selectedTopicName} em modo {getDifficultyLabel(selectedDifficulty).toLowerCase()}.
                   </p>
                   <p className="mt-2 text-base text-slate-500">
                     Toque, confirme e receba a correcao na mesma tela antes de seguir.
@@ -366,22 +381,22 @@ export default function Training() {
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="mt-3 grid grid-cols-3 gap-2">
             <div className="rounded-2xl bg-white px-4 py-3 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.25)]">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Questao</p>
-              <p className="mt-1 text-lg font-black text-slate-900">{currentQIndex + 1}/{questions.length}</p>
+              <p className="mt-1 text-base font-black text-slate-900">{currentQIndex + 1}/{questions.length}</p>
             </div>
             <div className="rounded-2xl bg-emerald-50 px-4 py-3">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-600">Certas</p>
-              <p className="mt-1 text-lg font-black text-emerald-700">{correctAnswers}</p>
+              <p className="mt-1 text-base font-black text-emerald-700">{correctAnswers}</p>
             </div>
             <div className="rounded-2xl bg-rose-50 px-4 py-3">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-rose-500">Erradas</p>
-              <p className="mt-1 text-lg font-black text-rose-600">{wrongAnswers}</p>
+              <p className="mt-1 text-base font-black text-rose-600">{wrongAnswers}</p>
             </div>
           </div>
 
-          <div className="mt-4 flex-1 overflow-hidden">
+          <div className="mt-3 flex min-h-0 flex-1 overflow-hidden">
             <AnimatePresence mode="wait">
               <motion.div
                 key={currentQ.id}
@@ -389,7 +404,7 @@ export default function Training() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -28 }}
                 transition={{ duration: 0.24, ease: 'easeOut' }}
-                className="rounded-[2rem] bg-white px-5 py-5 shadow-[0_28px_90px_-50px_rgba(15,23,42,0.3)]"
+                className="flex h-full min-h-0 flex-col rounded-[2rem] bg-white px-4 py-4 shadow-[0_28px_90px_-50px_rgba(15,23,42,0.3)]"
               >
               <div className="flex items-center justify-between gap-3">
                 <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
@@ -401,18 +416,19 @@ export default function Training() {
                 </span>
               </div>
 
-              <h1 className="mt-4 text-xl font-black leading-8 text-slate-900 md:text-[1.65rem] md:leading-10">
+              <h1 className="mt-3 text-lg font-black leading-7 text-slate-900 md:text-[1.45rem] md:leading-9">
                 {currentQ.content}
               </h1>
 
-              <div className="mt-5 grid gap-3">
+              <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
+                <div className="grid gap-2.5">
                 {currentQ.alternatives.map((alt: any, index: number) => {
                   const isSelected = pendingAlt === alt.id || selectedAlt === alt.id;
                   const isCorrect = Boolean(alt.is_correct);
                   const isWrongSelection = isAnswered && selectedAlt === alt.id && !isCorrect;
 
                   let classes =
-                    'flex w-full items-start gap-4 rounded-[1.5rem] border-2 px-4 py-4 text-left transition-all ';
+                    'flex w-full items-start gap-3 rounded-[1.35rem] border-2 px-3 py-3 text-left transition-all ';
 
                   if (!isAnswered) {
                     classes += isSelected
@@ -434,7 +450,7 @@ export default function Training() {
                       disabled={isAnswered}
                       className={classes}
                     >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-sm font-black uppercase text-slate-600">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-sm font-black uppercase text-slate-600">
                         {getAlternativeLabel(index)}
                       </div>
                       <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -449,11 +465,12 @@ export default function Training() {
                           {isAnswered && isWrongSelection && <CircleX className="h-5 w-5 text-rose-500" />}
                           {isAnswered && !isCorrect && !isWrongSelection && <Circle className="h-5 w-5 text-slate-300" />}
                         </div>
-                        <span className="text-sm leading-6 text-slate-800 md:text-base">{alt.content}</span>
+                        <span className="text-sm leading-5 text-slate-800">{alt.content}</span>
                       </div>
                     </button>
                   );
                 })}
+                </div>
               </div>
               </motion.div>
             </AnimatePresence>
@@ -464,7 +481,7 @@ export default function Training() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.22, ease: 'easeOut' }}
-            className={`mt-4 rounded-[1.8rem] border px-5 py-5 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.35)] ${
+            className={`mt-3 rounded-[1.6rem] border px-4 py-4 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.35)] ${
               isAnswered ? 'border-lime-200 bg-lime-100' : 'border-white/80 bg-white'
             }`}
           >
@@ -475,7 +492,7 @@ export default function Training() {
                   type="button"
                   onClick={confirmAnswer}
                   disabled={!pendingAlt}
-                  className="mt-4 w-full rounded-[1.2rem] bg-[linear-gradient(90deg,#39d4f1_0%,#31dfb0_100%)] px-5 py-4 text-lg font-black uppercase tracking-[0.12em] text-slate-950 shadow-[0_7px_0_0_rgba(8,145,178,0.85)] transition hover:translate-y-[1px] hover:shadow-[0_5px_0_0_rgba(8,145,178,0.85)] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="mt-3 w-full rounded-[1.15rem] bg-[linear-gradient(90deg,#39d4f1_0%,#31dfb0_100%)] px-5 py-3.5 text-base font-black uppercase tracking-[0.12em] text-slate-950 shadow-[0_6px_0_0_rgba(8,145,178,0.85)] transition hover:translate-y-[1px] hover:shadow-[0_4px_0_0_rgba(8,145,178,0.85)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Confirmar resposta
                 </button>
@@ -484,18 +501,18 @@ export default function Training() {
               <>
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className={`text-2xl font-black ${selectedAlt && currentQ.alternatives.find((alt: any) => alt.id === selectedAlt)?.is_correct ? 'text-lime-700' : 'text-rose-600'}`}>
+                    <p className={`text-xl font-black ${selectedAlt && currentQ.alternatives.find((alt: any) => alt.id === selectedAlt)?.is_correct ? 'text-lime-700' : 'text-rose-600'}`}>
                       {selectedAlt && currentQ.alternatives.find((alt: any) => alt.id === selectedAlt)?.is_correct
                         ? 'Excelente!'
                         : 'Vamos corrigir'}
                     </p>
-                    <p className="mt-2 text-sm leading-6 text-slate-700">{currentExplanation}</p>
+                    <p className="mt-2 max-h-24 overflow-y-auto pr-1 text-sm leading-5 text-slate-700">{currentExplanation}</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={nextQuestion}
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-[1.2rem] bg-[#67d300] px-5 py-4 text-lg font-black uppercase tracking-[0.12em] text-white shadow-[0_7px_0_0_rgba(77,124,15,0.95)] transition hover:translate-y-[1px] hover:shadow-[0_5px_0_0_rgba(77,124,15,0.95)]"
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-[1.15rem] bg-[#67d300] px-5 py-3.5 text-base font-black uppercase tracking-[0.12em] text-white shadow-[0_6px_0_0_rgba(77,124,15,0.95)] transition hover:translate-y-[1px] hover:shadow-[0_4px_0_0_rgba(77,124,15,0.95)]"
                 >
                   {currentQIndex < questions.length - 1 ? 'Seguir' : 'Ver resultado'}
                   <ArrowRight className="h-5 w-5" />
@@ -565,6 +582,29 @@ export default function Training() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Nivel</label>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {(['mixed', 'easy', 'medium', 'hard'] as DifficultyPreference[]).map((difficulty) => (
+                  <button
+                    key={difficulty}
+                    type="button"
+                    onClick={() => setSelectedDifficulty(difficulty)}
+                    className={`rounded-2xl px-3 py-3 text-sm font-semibold transition ${
+                      selectedDifficulty === difficulty
+                        ? 'bg-emerald-600 text-white'
+                        : 'border border-slate-200 bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    {getDifficultyLabel(difficulty)}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                Em modo misto, o sistema tenta equilibrar facil, normal e dificil antes de completar a sessao.
+              </p>
             </div>
 
             <button

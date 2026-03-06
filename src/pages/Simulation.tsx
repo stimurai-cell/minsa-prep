@@ -12,7 +12,13 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { supabase } from '../lib/supabase';
-import { calculateSimulationXp, getAlternativeLabel, prepareQuestionSet } from '../lib/quiz';
+import {
+  calculateSimulationXp,
+  getAlternativeLabel,
+  pickQuestionsForSession,
+  prepareQuestionSet,
+} from '../lib/quiz';
+import { getDifficultyLabel } from '../lib/labels';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import AreaLockCard from '../components/AreaLockCard';
@@ -26,6 +32,8 @@ type SessionSummary = {
   score: number;
 };
 
+type DifficultyPreference = 'mixed' | 'easy' | 'medium' | 'hard';
+
 export default function Simulation() {
   const { profile, refreshProfile } = useAuthStore();
   const { areas, fetchAreas } = useAppStore();
@@ -33,6 +41,7 @@ export default function Simulation() {
   const [searchParams] = useSearchParams();
 
   const [loading, setLoading] = useState(false);
+  const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyPreference>('mixed');
   const [questions, setQuestions] = useState<any[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [currentQIndex, setCurrentQIndex] = useState(0);
@@ -46,18 +55,23 @@ export default function Simulation() {
   const [resultHistory, setResultHistory] = useState<boolean[]>([]);
 
   const sessionActive = searchParams.get('session') === '1';
+  const sessionDifficulty = (searchParams.get('difficulty') as DifficultyPreference) || 'mixed';
 
   useEffect(() => {
     fetchAreas();
   }, [fetchAreas]);
 
   useEffect(() => {
+    setSelectedDifficulty(sessionDifficulty);
+  }, [sessionDifficulty]);
+
+  useEffect(() => {
     if (!sessionActive || questions.length > 0 || loading || !profile?.selected_area_id) {
       return;
     }
 
-    void bootSimulationSession();
-  }, [loading, profile?.selected_area_id, questions.length, sessionActive]);
+    void bootSimulationSession(sessionDifficulty);
+  }, [loading, profile?.selected_area_id, questions.length, sessionActive, sessionDifficulty]);
 
   useEffect(() => {
     if (!sessionActive || !questions.length || !sessionStartedAt) {
@@ -117,7 +131,7 @@ export default function Simulation() {
     await refreshProfile(profile.id);
   };
 
-  const bootSimulationSession = async () => {
+  const bootSimulationSession = async (difficulty: DifficultyPreference) => {
     if (!profile?.selected_area_id) return;
 
     setLoading(true);
@@ -135,7 +149,7 @@ export default function Simulation() {
       }
 
       const topicIds = topics.map((topic) => topic.id);
-      const { data: qData, error: qError } = await supabase
+      let query = supabase
         .from('questions')
         .select(
           `
@@ -145,13 +159,19 @@ export default function Simulation() {
         `
         )
         .in('topic_id', topicIds)
-        .limit(30);
+        .limit(240);
+
+      if (difficulty !== 'mixed') {
+        query = query.eq('difficulty', difficulty);
+      }
+
+      const { data: qData, error: qError } = await query;
 
       if (qError) throw qError;
 
       if (qData && qData.length > 0) {
         resetSimulationSession();
-        setQuestions(prepareQuestionSet(qData));
+        setQuestions(prepareQuestionSet(pickQuestionsForSession(qData, 30, difficulty)));
         setSessionStartedAt(Date.now());
         setShowIntro(true);
       } else {
@@ -232,7 +252,7 @@ export default function Simulation() {
   };
 
   const startSimulation = () => {
-    navigate('/simulation?session=1');
+    navigate(`/simulation?session=1&difficulty=${selectedDifficulty}`);
   };
 
   const leaveSimulationSession = () => {
@@ -336,7 +356,7 @@ export default function Simulation() {
                 </div>
                 <h1 className="mt-5 text-3xl font-black leading-tight">Entre em ambiente de simulacao real.</h1>
                 <p className="mt-3 text-base leading-7 text-cyan-50">
-                  Voce vai responder {questions.length} questoes, uma por vez, com temporizador visivel e correcao imediata antes de seguir.
+                  Voce vai responder {questions.length} questoes em modo {getDifficultyLabel(selectedDifficulty).toLowerCase()}, uma por vez, com temporizador visivel e correcao imediata antes de seguir.
                 </p>
 
                 <div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -395,22 +415,22 @@ export default function Simulation() {
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="mt-3 grid grid-cols-3 gap-2">
             <div className="rounded-2xl bg-white px-4 py-3 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.25)]">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Questao</p>
-              <p className="mt-1 text-lg font-black text-slate-900">{currentQIndex + 1}/{questions.length}</p>
+              <p className="mt-1 text-base font-black text-slate-900">{currentQIndex + 1}/{questions.length}</p>
             </div>
             <div className="rounded-2xl bg-emerald-50 px-4 py-3">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-600">Certas</p>
-              <p className="mt-1 text-lg font-black text-emerald-700">{correctAnswers}</p>
+              <p className="mt-1 text-base font-black text-emerald-700">{correctAnswers}</p>
             </div>
             <div className="rounded-2xl bg-rose-50 px-4 py-3">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-rose-500">Erradas</p>
-              <p className="mt-1 text-lg font-black text-rose-600">{wrongAnswers}</p>
+              <p className="mt-1 text-base font-black text-rose-600">{wrongAnswers}</p>
             </div>
           </div>
 
-          <div className="mt-4 flex-1 overflow-hidden">
+          <div className="mt-3 flex min-h-0 flex-1 overflow-hidden">
             <AnimatePresence mode="wait">
               <motion.div
                 key={currentQ.id}
@@ -418,7 +438,7 @@ export default function Simulation() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -28 }}
                 transition={{ duration: 0.24, ease: 'easeOut' }}
-                className="rounded-[2rem] bg-white px-5 py-5 shadow-[0_28px_90px_-50px_rgba(15,23,42,0.3)]"
+                className="flex h-full min-h-0 flex-col rounded-[2rem] bg-white px-4 py-4 shadow-[0_28px_90px_-50px_rgba(15,23,42,0.3)]"
               >
               <div className="flex items-center justify-between gap-3">
                 <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
@@ -430,18 +450,19 @@ export default function Simulation() {
                 </span>
               </div>
 
-              <h1 className="mt-4 text-xl font-black leading-8 text-slate-900 md:text-[1.65rem] md:leading-10">
+              <h1 className="mt-3 text-lg font-black leading-7 text-slate-900 md:text-[1.45rem] md:leading-9">
                 {currentQ.content}
               </h1>
 
-              <div className="mt-5 grid gap-3">
+              <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
+                <div className="grid gap-2.5">
                 {currentQ.alternatives.map((alt: any, index: number) => {
                   const isSelected = pendingAlt === alt.id || selectedAlt === alt.id;
                   const isCorrect = Boolean(alt.is_correct);
                   const isWrongSelection = isAnswered && selectedAlt === alt.id && !isCorrect;
 
                   let classes =
-                    'flex w-full items-start gap-4 rounded-[1.5rem] border-2 px-4 py-4 text-left transition-all ';
+                    'flex w-full items-start gap-3 rounded-[1.35rem] border-2 px-3 py-3 text-left transition-all ';
 
                   if (!isAnswered) {
                     classes += isSelected
@@ -463,7 +484,7 @@ export default function Simulation() {
                       disabled={isAnswered}
                       className={classes}
                     >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-sm font-black uppercase text-slate-600">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-sm font-black uppercase text-slate-600">
                         {getAlternativeLabel(index)}
                       </div>
                       <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -478,11 +499,12 @@ export default function Simulation() {
                           {isAnswered && isWrongSelection && <CircleX className="h-5 w-5 text-rose-500" />}
                           {isAnswered && !isCorrect && !isWrongSelection && <Circle className="h-5 w-5 text-slate-300" />}
                         </div>
-                        <span className="text-sm leading-6 text-slate-800 md:text-base">{alt.content}</span>
+                        <span className="text-sm leading-5 text-slate-800">{alt.content}</span>
                       </div>
                     </button>
                   );
                 })}
+                </div>
               </div>
               </motion.div>
             </AnimatePresence>
@@ -493,7 +515,7 @@ export default function Simulation() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.22, ease: 'easeOut' }}
-            className={`mt-4 rounded-[1.8rem] border px-5 py-5 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.35)] ${
+            className={`mt-3 rounded-[1.6rem] border px-4 py-4 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.35)] ${
               isAnswered ? 'border-lime-200 bg-lime-100' : 'border-white/80 bg-white'
             }`}
           >
@@ -504,23 +526,23 @@ export default function Simulation() {
                   type="button"
                   onClick={confirmAnswer}
                   disabled={!pendingAlt}
-                  className="mt-4 w-full rounded-[1.2rem] bg-[linear-gradient(90deg,#39d4f1_0%,#31dfb0_100%)] px-5 py-4 text-lg font-black uppercase tracking-[0.12em] text-slate-950 shadow-[0_7px_0_0_rgba(8,145,178,0.85)] transition hover:translate-y-[1px] hover:shadow-[0_5px_0_0_rgba(8,145,178,0.85)] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="mt-3 w-full rounded-[1.15rem] bg-[linear-gradient(90deg,#39d4f1_0%,#31dfb0_100%)] px-5 py-3.5 text-base font-black uppercase tracking-[0.12em] text-slate-950 shadow-[0_6px_0_0_rgba(8,145,178,0.85)] transition hover:translate-y-[1px] hover:shadow-[0_4px_0_0_rgba(8,145,178,0.85)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Confirmar resposta
                 </button>
               </>
             ) : (
               <>
-                <p className={`text-2xl font-black ${selectedAlt && currentQ.alternatives.find((alt: any) => alt.id === selectedAlt)?.is_correct ? 'text-lime-700' : 'text-rose-600'}`}>
+                <p className={`text-xl font-black ${selectedAlt && currentQ.alternatives.find((alt: any) => alt.id === selectedAlt)?.is_correct ? 'text-lime-700' : 'text-rose-600'}`}>
                   {selectedAlt && currentQ.alternatives.find((alt: any) => alt.id === selectedAlt)?.is_correct
                     ? 'Resposta certa!'
                     : 'Resposta corrigida'}
                 </p>
-                <p className="mt-2 text-sm leading-6 text-slate-700">{currentExplanation}</p>
+                <p className="mt-2 max-h-24 overflow-y-auto pr-1 text-sm leading-5 text-slate-700">{currentExplanation}</p>
                 <button
                   type="button"
                   onClick={nextQuestion}
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-[1.2rem] bg-[#67d300] px-5 py-4 text-lg font-black uppercase tracking-[0.12em] text-white shadow-[0_7px_0_0_rgba(77,124,15,0.95)] transition hover:translate-y-[1px] hover:shadow-[0_5px_0_0_rgba(77,124,15,0.95)]"
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-[1.15rem] bg-[#67d300] px-5 py-3.5 text-base font-black uppercase tracking-[0.12em] text-white shadow-[0_6px_0_0_rgba(77,124,15,0.95)] transition hover:translate-y-[1px] hover:shadow-[0_4px_0_0_rgba(77,124,15,0.95)]"
                 >
                   {currentQIndex < questions.length - 1 ? 'Proxima questao' : 'Finalizar prova'}
                   <ArrowRight className="h-5 w-5" />
@@ -575,6 +597,29 @@ export default function Simulation() {
           >
             Iniciar simulacao de prova
           </button>
+
+          <div className="mt-4">
+            <label className="mb-2 block text-sm font-semibold text-slate-700">Nivel</label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {(['mixed', 'easy', 'medium', 'hard'] as DifficultyPreference[]).map((difficulty) => (
+                <button
+                  key={difficulty}
+                  type="button"
+                  onClick={() => setSelectedDifficulty(difficulty)}
+                  className={`rounded-2xl px-3 py-3 text-sm font-semibold transition ${
+                    selectedDifficulty === difficulty
+                      ? 'bg-emerald-600 text-white'
+                      : 'border border-slate-200 bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  {getDifficultyLabel(difficulty)}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Em modo misto, a prova tenta distribuir questoes entre facil, normal e dificil antes de completar as 30.
+            </p>
+          </div>
         </div>
 
         <div className="rounded-[1.75rem] border border-blue-100 bg-blue-50 p-5 text-blue-900 shadow-[0_18px_50px_-40px_rgba(59,130,246,0.45)]">

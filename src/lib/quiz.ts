@@ -23,6 +23,82 @@ export const prepareQuestionSet = (questions: any[]) =>
 
 export const getAlternativeLabel = (index: number) => ['a', 'b', 'c', 'd'][index] || '?';
 
+type DifficultyPreference = 'mixed' | 'easy' | 'medium' | 'hard';
+
+const difficultyOrder: Exclude<DifficultyPreference, 'mixed'>[] = ['easy', 'medium', 'hard'];
+
+const interleaveByTopic = (questions: any[]) => {
+  const byTopic = new Map<string, any[]>();
+
+  questions.forEach((question) => {
+    const topicId = question.topic_id || 'no-topic';
+    const bucket = byTopic.get(topicId) || [];
+    bucket.push(question);
+    byTopic.set(topicId, bucket);
+  });
+
+  const queues = [...byTopic.values()].map((bucket) => shuffleArray(bucket));
+  const interleaved: any[] = [];
+
+  while (queues.some((queue) => queue.length > 0)) {
+    queues.forEach((queue) => {
+      const next = queue.shift();
+
+      if (next) {
+        interleaved.push(next);
+      }
+    });
+  }
+
+  return interleaved;
+};
+
+export const pickQuestionsForSession = (
+  questions: any[],
+  count: number,
+  preference: DifficultyPreference = 'mixed'
+) => {
+  const prepared = interleaveByTopic(shuffleArray(questions));
+
+  if (preference !== 'mixed') {
+    const exact = prepared.filter((question) => question.difficulty === preference);
+    const fallback = prepared.filter((question) => question.difficulty !== preference);
+
+    return [...exact, ...fallback].slice(0, count);
+  }
+
+  const buckets = {
+    easy: prepared.filter((question) => question.difficulty === 'easy'),
+    medium: prepared.filter((question) => question.difficulty === 'medium'),
+    hard: prepared.filter((question) => question.difficulty === 'hard'),
+  };
+
+  const targets = {
+    easy: Math.ceil(count * 0.3),
+    medium: Math.ceil(count * 0.4),
+    hard: Math.floor(count * 0.3),
+  };
+
+  const selected: any[] = [];
+
+  difficultyOrder.forEach((difficulty) => {
+    const bucket = buckets[difficulty];
+    selected.push(...bucket.splice(0, targets[difficulty]));
+  });
+
+  const remainingPool = interleaveByTopic([
+    ...buckets.easy,
+    ...buckets.medium,
+    ...buckets.hard,
+  ]);
+
+  if (selected.length < count) {
+    selected.push(...remainingPool.slice(0, count - selected.length));
+  }
+
+  return interleaveByTopic(selected).slice(0, count);
+};
+
 export const getPerformanceLabel = (accuracy: number) => {
   if (accuracy >= 95) return 'Incrivel';
   if (accuracy >= 85) return 'Otima';
