@@ -1,16 +1,17 @@
-import { useEffect } from 'react';
-import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Outlet, NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Award,
   BookOpen,
+  ChevronDown,
   Compass,
   LayoutDashboard,
   LogOut,
-  Settings,
   ShieldCheck,
   Sparkles,
   Users,
   Menu,
+  UserRound,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
@@ -21,10 +22,16 @@ export default function Layout() {
   const { areas, fetchAreas } = useAppStore();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const [accountOpen, setAccountOpen] = useState(false);
 
   useEffect(() => {
     fetchAreas();
   }, [fetchAreas]);
+
+  useEffect(() => {
+    setAccountOpen(false);
+  }, [location.pathname, location.search]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -49,6 +56,9 @@ export default function Layout() {
 
   const links = profile?.role === 'admin' ? adminLinks : studentLinks;
   const currentAdminTab = new URLSearchParams(location.search).get('tab') || 'dashboard';
+  const isImmersiveSession =
+    (location.pathname === '/training' || location.pathname === '/simulation') &&
+    searchParams.get('session') === '1';
 
   const getLinkActive = (link: (typeof links)[number]) => {
     if (profile?.role === 'admin' && 'key' in link) {
@@ -73,7 +83,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#eef7f1_52%,#f6fbf7_100%)] text-slate-900">
       <div className="mx-auto flex min-h-screen max-w-[1600px]">
-        <aside className="hidden w-80 shrink-0 border-r border-white/70 bg-[linear-gradient(180deg,#ffffff_0%,#f4fbf7_100%)] xl:flex xl:flex-col">
+        <aside className={`hidden w-80 shrink-0 border-r border-white/70 bg-[linear-gradient(180deg,#ffffff_0%,#f4fbf7_100%)] xl:flex xl:flex-col ${isImmersiveSession ? 'xl:hidden' : ''}`}>
           <div className="border-b border-slate-100 px-7 py-8">
             <div className="flex items-center gap-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-[1.4rem] bg-emerald-600 text-white shadow-[0_18px_40px_-18px_rgba(16,185,129,0.6)]">
@@ -127,20 +137,42 @@ export default function Layout() {
                   </div>
                 </div>
               )}
-            </div>
 
-            <button
-              onClick={handleSignOut}
-              className="mt-4 flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-red-600 transition hover:bg-red-50"
-            >
-              <LogOut className="h-5 w-5" />
-              <span className="font-semibold">Sair</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setAccountOpen((prev) => !prev)}
+                className="mt-4 flex w-full items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-left text-slate-700 transition hover:bg-slate-50"
+              >
+                <span className="flex items-center gap-3 text-sm font-semibold">
+                  <UserRound className="h-5 w-5" />
+                  Conta
+                </span>
+                <ChevronDown className={`h-4 w-4 transition ${accountOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {accountOpen && (
+                <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    Sessao
+                  </p>
+                  <p className="mt-2 text-sm text-slate-600">
+                    A sua conta permanece ativa neste dispositivo ate sair manualmente.
+                  </p>
+                  <button
+                    onClick={handleSignOut}
+                    className="mt-4 flex w-full items-center justify-center gap-3 rounded-2xl bg-red-50 px-4 py-3 font-semibold text-red-600 transition hover:bg-red-100"
+                  >
+                    <LogOut className="h-5 w-5" />
+                    <span>Terminar sessao</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </aside>
 
-        <main className="flex-1 pb-28 xl:pb-8">
-          <div className="sticky top-0 z-30 border-b border-white/70 bg-white/85 backdrop-blur xl:hidden">
+        <main className={`flex-1 ${isImmersiveSession ? '' : 'pb-28 xl:pb-8'}`}>
+          <div className={`sticky top-0 z-30 border-b border-white/70 bg-white/85 backdrop-blur xl:hidden ${isImmersiveSession ? 'hidden' : ''}`}>
             <div className="px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
@@ -157,11 +189,11 @@ export default function Layout() {
 
                 <button
                   type="button"
-                  onClick={handleSignOut}
+                  onClick={() => setAccountOpen((prev) => !prev)}
                   className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600"
-                  aria-label="Sair"
+                  aria-label="Abrir conta"
                 >
-                  <LogOut className="h-5 w-5" />
+                  <UserRound className="h-5 w-5" />
                 </button>
               </div>
 
@@ -191,16 +223,33 @@ export default function Layout() {
                   <span className="truncate">{areaName}</span>
                 </div>
               )}
+
+              {accountOpen && (
+                <div className="mt-3 rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-[0_20px_50px_-40px_rgba(15,23,42,0.35)]">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Conta</p>
+                  <p className="mt-2 text-sm text-slate-600">
+                    A sessao fica guardada no dispositivo ate terminar manualmente.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="mt-4 flex w-full items-center justify-center gap-3 rounded-2xl bg-red-50 px-4 py-3 font-semibold text-red-600 transition hover:bg-red-100"
+                  >
+                    <LogOut className="h-5 w-5" />
+                    <span>Terminar sessao</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="mx-auto max-w-7xl px-4 pb-8 pt-4 md:px-6 xl:p-8">
+          <div className={isImmersiveSession ? '' : 'mx-auto max-w-7xl px-4 pb-8 pt-4 md:px-6 xl:p-8'}>
             <Outlet />
           </div>
         </main>
       </div>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur xl:hidden">
+      <nav className={`fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur xl:hidden ${isImmersiveSession ? 'hidden' : ''}`}>
         <div className={`mx-auto grid max-w-xl gap-2 ${profile?.role === 'admin' ? 'grid-cols-3' : 'grid-cols-4'}`}>
           {links.map((link) => {
             const Icon = link.icon;
