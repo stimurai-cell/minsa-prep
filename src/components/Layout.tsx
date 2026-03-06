@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Outlet, Link, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Award,
   BookOpen,
@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Sparkles,
   Users,
+  Menu,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
@@ -19,6 +20,7 @@ export default function Layout() {
   const { profile, signOut } = useAuthStore();
   const { areas, fetchAreas } = useAppStore();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     fetchAreas();
@@ -32,85 +34,76 @@ export default function Layout() {
   const areaName =
     areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Area ainda nao definida';
 
+  const adminLinks = [
+    { to: '/admin?tab=dashboard', label: 'Visao geral', icon: LayoutDashboard, key: 'dashboard' },
+    { to: '/admin?tab=generator', label: 'Gerador', icon: Sparkles, key: 'generator' },
+    { to: '/admin?tab=users', label: 'Utilizadores', icon: Users, key: 'users' },
+  ];
+
+  const studentLinks = [
+    { to: '/dashboard', label: 'Painel', icon: LayoutDashboard },
+    { to: '/training', label: 'Treino', icon: BookOpen },
+    { to: '/simulation', label: 'Prova', icon: Compass },
+    { to: '/ranking', label: 'Ranking', icon: Award },
+  ];
+
+  const links = profile?.role === 'admin' ? adminLinks : studentLinks;
+  const currentAdminTab = new URLSearchParams(location.search).get('tab') || 'dashboard';
+
+  const getLinkActive = (link: (typeof links)[number]) => {
+    if (profile?.role === 'admin' && 'key' in link) {
+      return location.pathname === '/admin' && currentAdminTab === link.key;
+    }
+
+    return location.pathname === link.to;
+  };
+
+  const navClass = (isActive: boolean, tone: 'student' | 'admin') =>
+    [
+      'flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition',
+      tone === 'admin'
+        ? isActive
+          ? 'bg-slate-900 text-white shadow-[0_18px_40px_-28px_rgba(15,23,42,0.6)]'
+          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+        : isActive
+          ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]'
+          : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-700',
+    ].join(' ');
+
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f6f8fb_0%,#eef6f2_100%)] text-slate-900">
-      <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col md:flex-row">
-        <aside className="w-full border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f5fbf7_100%)] md:min-h-screen md:w-72 md:border-b-0 md:border-r">
-          <div className="border-b border-slate-100 p-6">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-200">
-                <Sparkles className="h-6 w-6" />
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#eef7f1_52%,#f6fbf7_100%)] text-slate-900">
+      <div className="mx-auto flex min-h-screen max-w-[1600px]">
+        <aside className="hidden w-80 shrink-0 border-r border-white/70 bg-[linear-gradient(180deg,#ffffff_0%,#f4fbf7_100%)] xl:flex xl:flex-col">
+          <div className="border-b border-slate-100 px-7 py-8">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-[1.4rem] bg-emerald-600 text-white shadow-[0_18px_40px_-18px_rgba(16,185,129,0.6)]">
+                <Sparkles className="h-7 w-7" />
               </div>
               <div>
                 <h1 className="text-3xl font-black tracking-tight text-emerald-700">MINSA Prep</h1>
-                <p className="text-xs font-semibold uppercase tracking-[0.26em] text-slate-500">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">
                   Concursos da saude
                 </p>
               </div>
             </div>
           </div>
 
-          <nav className="space-y-1 p-4">
-            {profile?.role === 'admin' ? (
-              <>
-                <Link
-                  to="/admin?tab=dashboard"
-                  className="flex items-center gap-3 rounded-2xl px-4 py-3 text-slate-700 transition hover:bg-purple-50 hover:text-purple-700"
-                >
-                  <LayoutDashboard className="h-5 w-5" />
-                  <span className="font-semibold">Visao geral</span>
-                </Link>
-                <Link
-                  to="/admin?tab=generator"
-                  className="flex items-center gap-3 rounded-2xl px-4 py-3 text-slate-700 transition hover:bg-purple-50 hover:text-purple-700"
-                >
-                  <Sparkles className="h-5 w-5" />
-                  <span className="font-semibold">Gerador de conteudo</span>
-                </Link>
-                <Link
-                  to="/admin?tab=users"
-                  className="flex items-center gap-3 rounded-2xl px-4 py-3 text-slate-700 transition hover:bg-purple-50 hover:text-purple-700"
-                >
-                  <Users className="h-5 w-5" />
-                  <span className="font-semibold">Utilizadores</span>
-                </Link>
-              </>
-            ) : (
-              <>
-                <Link
-                  to="/dashboard"
-                  className="flex items-center gap-3 rounded-2xl px-4 py-3 text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
-                >
-                  <LayoutDashboard className="h-5 w-5" />
-                  <span className="font-semibold">Painel</span>
-                </Link>
-                <Link
-                  to="/training"
-                  className="flex items-center gap-3 rounded-2xl px-4 py-3 text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
-                >
-                  <BookOpen className="h-5 w-5" />
-                  <span className="font-semibold">Treino</span>
-                </Link>
-                <Link
-                  to="/simulation"
-                  className="flex items-center gap-3 rounded-2xl px-4 py-3 text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
-                >
-                  <Compass className="h-5 w-5" />
-                  <span className="font-semibold">Simulacao de Prova</span>
-                </Link>
-                <Link
-                  to="/ranking"
-                  className="flex items-center gap-3 rounded-2xl px-4 py-3 text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
-                >
-                  <Award className="h-5 w-5" />
-                  <span className="font-semibold">Ranking</span>
-                </Link>
-              </>
-            )}
+          <nav className="space-y-2 px-5 py-6">
+            {links.map((link) => {
+              const Icon = link.icon;
+              const isActive = getLinkActive(link);
+
+              return (
+                <NavLink key={link.to} to={link.to} className={navClass(isActive, profile?.role === 'admin' ? 'admin' : 'student')}>
+                  <Icon className="h-5 w-5" />
+                  <span>{link.label}</span>
+                </NavLink>
+              );
+            })}
           </nav>
 
-          <div className="mt-auto border-t border-slate-100 p-4">
-            <div className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-[0_18px_50px_-44px_rgba(15,23,42,0.35)]">
+          <div className="mt-auto border-t border-slate-100 px-5 py-5">
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.35)]">
               <div className="flex items-start gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-sm font-black text-emerald-700">
                   {profile?.full_name?.charAt(0) || 'U'}
@@ -138,7 +131,7 @@ export default function Layout() {
 
             <button
               onClick={handleSignOut}
-              className="mt-3 flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-red-600 transition hover:bg-red-50"
+              className="mt-4 flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-red-600 transition hover:bg-red-50"
             >
               <LogOut className="h-5 w-5" />
               <span className="font-semibold">Sair</span>
@@ -146,12 +139,94 @@ export default function Layout() {
           </div>
         </aside>
 
-        <main className="flex-1">
-          <div className="mx-auto max-w-7xl p-4 md:p-8">
+        <main className="flex-1 pb-28 xl:pb-8">
+          <div className="sticky top-0 z-30 border-b border-white/70 bg-white/85 backdrop-blur xl:hidden">
+            <div className="px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-[0_18px_40px_-18px_rgba(16,185,129,0.6)]">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-xl font-black tracking-tight text-emerald-700">MINSA Prep</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
+                      {profile?.role === 'admin' ? 'Ambiente admin' : 'Concursos da saude'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600"
+                  aria-label="Sair"
+                >
+                  <LogOut className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="mt-4 flex items-center gap-3 rounded-[1.5rem] border border-white/70 bg-[linear-gradient(135deg,#ffffff_0%,#f3fbf6_100%)] px-4 py-3 shadow-[0_20px_60px_-46px_rgba(15,23,42,0.35)]">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-sm font-black text-emerald-700">
+                  {profile?.full_name?.charAt(0) || 'U'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-slate-900">{profile?.full_name}</p>
+                  <p className="text-xs text-slate-500">{getRoleLabel(profile?.role)}</p>
+                </div>
+                {profile?.role !== 'admin' ? (
+                  <div className="rounded-2xl bg-yellow-50 px-3 py-2 text-right">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-yellow-700">XP</p>
+                    <p className="text-lg font-black text-yellow-600">{profile?.total_xp || 0}</p>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl bg-slate-100 px-3 py-2 text-slate-600">
+                    <Menu className="h-5 w-5" />
+                  </div>
+                )}
+              </div>
+
+              {profile?.role !== 'admin' && (
+                <div className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                  <ShieldCheck className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{areaName}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mx-auto max-w-7xl px-4 pb-8 pt-4 md:px-6 xl:p-8">
             <Outlet />
           </div>
         </main>
       </div>
+
+      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur xl:hidden">
+        <div className={`mx-auto grid max-w-xl gap-2 ${profile?.role === 'admin' ? 'grid-cols-3' : 'grid-cols-4'}`}>
+          {links.map((link) => {
+            const Icon = link.icon;
+            const isActive = getLinkActive(link);
+
+            return (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-semibold transition ${
+                  profile?.role === 'admin'
+                    ? isActive
+                      ? 'bg-slate-900 text-white'
+                      : 'text-slate-500'
+                    : isActive
+                      ? 'bg-emerald-600 text-white'
+                      : 'text-slate-500'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="truncate">{link.label}</span>
+              </NavLink>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 }

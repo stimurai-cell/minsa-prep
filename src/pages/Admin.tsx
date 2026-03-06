@@ -280,39 +280,40 @@ export default function Admin() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-5 md:space-y-6">
+      <div className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f2f7ff_40%,#f4fbf7_100%)] p-5 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.35)] md:p-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Painel Administrativo</h1>
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Ambiente administrativo</p>
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-gray-900 md:text-4xl">Painel Administrativo</h1>
           <p className="text-gray-500">Gerencie a plataforma e gere conteúdo.</p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-gray-200 pb-px">
+      <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
         <button
           onClick={() => setActiveTab('dashboard')}
-          className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-colors ${activeTab === 'dashboard' ? 'bg-white border border-gray-200 border-b-white text-emerald-600 -mb-px' : 'text-gray-500 hover:text-gray-700'}`}
+          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'dashboard' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
         >
           Visão Geral
         </button>
         <button
           onClick={() => setActiveTab('generator')}
-          className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-colors ${activeTab === 'generator' ? 'bg-white border border-gray-200 border-b-white text-emerald-600 -mb-px' : 'text-gray-500 hover:text-gray-700'}`}
+          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'generator' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
         >
           Gerador IA
         </button>
         <button
           onClick={() => setActiveTab('users')}
-          className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-colors ${activeTab === 'users' ? 'bg-white border border-gray-200 border-b-white text-emerald-600 -mb-px' : 'text-gray-500 hover:text-gray-700'}`}
+          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'users' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
         >
           Gerenciar Usuários
         </button>
       </div>
 
       {activeTab === 'dashboard' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
               <Users className="w-6 h-6" />
             </div>
@@ -321,7 +322,7 @@ export default function Admin() {
               <p className="text-2xl font-bold text-gray-900">{stats.users}</p>
             </div>
           </div>
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
+          <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
               <Database className="w-6 h-6" />
             </div>
@@ -330,7 +331,7 @@ export default function Admin() {
               <p className="text-2xl font-bold text-gray-900">{stats.questions}</p>
             </div>
           </div>
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
+          <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-purple-50 flex items-center justify-center text-purple-600">
               <Zap className="w-6 h-6" />
             </div>

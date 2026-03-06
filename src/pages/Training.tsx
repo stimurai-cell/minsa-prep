@@ -212,15 +212,15 @@ export default function Training() {
 
   if (!sessionStarted) {
     return (
-      <div className="mx-auto max-w-5xl space-y-8">
-        <section className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#fdfde9_38%,#eef9f3_100%)] p-6 shadow-[0_28px_90px_-50px_rgba(15,23,42,0.35)] md:p-8">
+      <div className="mx-auto max-w-5xl space-y-5 md:space-y-8">
+        <section className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#fdfde9_38%,#eef9f3_100%)] p-5 shadow-[0_28px_90px_-50px_rgba(15,23,42,0.35)] md:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl">
               <div className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">
                 <Sparkles className="h-4 w-4" />
                 Modo treino
               </div>
-              <h1 className="mt-4 text-4xl font-black tracking-tight text-slate-900">Pratique, ganhe XP e avance</h1>
+              <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-900 md:text-4xl">Pratique, ganhe XP e avance</h1>
               <p className="mt-3 text-sm leading-6 text-slate-600">
                 Escolha um topico, responda 10 questoes e feche a sessao com bonus de experiencia.
               </p>
@@ -239,8 +239,8 @@ export default function Training() {
           </div>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.35)]">
+        <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.35)] md:p-6">
             <h2 className="text-2xl font-black text-slate-900">Escolha um topico</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               O treino monta uma sessao curta e dinamica para manter o ritmo.
@@ -305,30 +305,30 @@ export default function Training() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_360px]">
-        <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-42px_rgba(15,23,42,0.45)]">
-          <div className="mb-5 flex flex-col gap-4 rounded-[1.5rem] bg-[linear-gradient(135deg,#0f172a_0%,#17352a_100%)] px-5 py-5 text-white md:flex-row md:items-center md:justify-between">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_320px] xl:gap-6">
+        <section className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-[0_24px_80px_-42px_rgba(15,23,42,0.45)] md:p-5">
+          <div className="mb-4 flex flex-col gap-4 rounded-[1.5rem] bg-[linear-gradient(135deg,#0f172a_0%,#17352a_100%)] px-4 py-4 text-white md:px-5 md:py-5">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200">Sessao ativa</p>
-              <h1 className="mt-2 flex items-center gap-2 text-2xl font-black">
+              <h1 className="mt-2 flex items-center gap-2 text-xl font-black md:text-2xl">
                 <BookOpen className="h-6 w-6 text-emerald-300" />
                 Questao {currentQIndex + 1} de {questions.length}
               </h1>
             </div>
 
-            <div className="flex flex-wrap gap-3">
-              <span className="rounded-full bg-white/10 px-4 py-2 text-sm font-semibold">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <span className="rounded-full bg-white/10 px-4 py-2 text-center text-sm font-semibold">
                 {selectedAreaName}
               </span>
-              <span className="rounded-full bg-white/10 px-4 py-2 text-sm font-semibold">
+              <span className="rounded-full bg-white/10 px-4 py-2 text-center text-sm font-semibold">
                 Dificuldade: {getDifficultyLabel(currentQ.difficulty)}
               </span>
             </div>
           </div>
 
-          <div className="flex min-h-[calc(100vh-16rem)] flex-col">
-            <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50 px-5 py-5">
-              <p className="text-lg font-semibold leading-8 text-slate-900">{currentQ.content}</p>
+          <div className="flex min-h-[calc(100vh-15rem)] flex-col">
+            <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50 px-4 py-4 md:px-5 md:py-5">
+              <p className="text-base font-semibold leading-7 text-slate-900 md:text-lg md:leading-8">{currentQ.content}</p>
             </div>
 
             <div className="mt-4 flex-1 overflow-hidden">
@@ -358,10 +358,10 @@ export default function Training() {
                       key={alt.id}
                       onClick={() => !isAnswered && setPendingAlt(alt.id)}
                       disabled={isAnswered}
-                      className={classes}
-                    >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-sm font-black text-slate-600">
-                        {getAlternativeLabel(index)}
+                    className={classes}
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-sm font-black text-slate-600">
+                      {getAlternativeLabel(index)}
                       </div>
                       <div className="flex flex-1 items-start gap-3">
                         <div className="pt-0.5">
@@ -383,14 +383,14 @@ export default function Training() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-[1.75rem] border border-slate-200 bg-white px-5 py-4 shadow-[0_18px_50px_-42px_rgba(15,23,42,0.35)]">
+            <div className="mt-4 rounded-[1.75rem] border border-slate-200 bg-white px-4 py-4 shadow-[0_18px_50px_-42px_rgba(15,23,42,0.35)] md:px-5">
               {!isAnswered ? (
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-col gap-3">
                   <p className="text-sm text-slate-600">Escolha uma alternativa e confirme para seguir.</p>
                   <button
                     onClick={confirmAnswer}
                     disabled={!pendingAlt}
-                    className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex w-full items-center justify-center rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Confirmar resposta
                   </button>
@@ -406,7 +406,7 @@ export default function Training() {
                   <div className="flex justify-end">
                     <button
                       onClick={nextQuestion}
-                      className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 md:w-auto"
                     >
                       {currentQIndex < questions.length - 1 ? 'Proxima questao' : 'Ver resultado'}
                       <ArrowRight className="h-4 w-4" />
@@ -418,7 +418,7 @@ export default function Training() {
           </div>
         </section>
 
-        <aside className="space-y-4">
+        <aside className="order-first grid gap-4 sm:grid-cols-2 lg:order-none lg:block lg:space-y-4">
           <div className="rounded-[2rem] border border-yellow-200 bg-yellow-50 p-5 shadow-[0_24px_60px_-42px_rgba(234,179,8,0.35)]">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-yellow-600">XP atual</p>
             <p className="mt-2 text-4xl font-black text-yellow-600">{profile.total_xp || 0}</p>

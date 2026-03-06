@@ -100,40 +100,40 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-8">
-      <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,#dff7ea,transparent_36%),linear-gradient(135deg,#ffffff_0%,#f5fff9_48%,#eff6ff_100%)] p-8 shadow-[0_28px_90px_-48px_rgba(15,23,42,0.45)]">
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+    <div className="space-y-5 md:space-y-8">
+      <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,#dff7ea,transparent_36%),linear-gradient(135deg,#ffffff_0%,#f5fff9_48%,#eff6ff_100%)] p-5 shadow-[0_28px_90px_-48px_rgba(15,23,42,0.45)] md:p-8">
+        <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">Painel do estudante</p>
-            <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-900">
+            <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-900 md:text-4xl">
               Ola, {profile?.full_name?.split(' ')[0]}
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-              O sistema agora trabalha com uma area fixa. Todo o seu conteudo e o seu progresso ficam presos a esse percurso.
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 md:text-base">
+              Entre, continue o seu ritmo, ganhe XP e acompanhe o progresso da sua area.
             </p>
 
-            <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white/80 px-4 py-2 text-sm font-semibold text-emerald-800">
+            <div className="mt-5 inline-flex max-w-full items-center gap-2 rounded-full border border-emerald-200 bg-white/80 px-4 py-2 text-sm font-semibold text-emerald-800">
               <Lock className="h-4 w-4" />
-              Area ativa: {areaName}
+              <span className="truncate">Area ativa: {areaName}</span>
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-[1.6rem] border border-white/60 bg-white/80 p-5">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-[1.6rem] border border-white/60 bg-white/90 p-4 md:p-5">
               <p className="text-sm font-medium text-slate-500">Plano</p>
               <p className="mt-2 flex items-center gap-2 text-2xl font-black text-slate-900">
                 <Target className="h-5 w-5 text-emerald-600" />
                 {profile?.preparation_time_months} {profile?.preparation_time_months === 1 ? 'mes' : 'meses'}
               </p>
             </div>
-            <div className="rounded-[1.6rem] border border-white/60 bg-white/80 p-5">
+            <div className="rounded-[1.6rem] border border-white/60 bg-white/90 p-4 md:p-5">
               <p className="text-sm font-medium text-slate-500">Ultima simulacao de prova</p>
               <p className="mt-2 flex items-center gap-2 text-2xl font-black text-slate-900">
                 <Clock3 className="h-5 w-5 text-sky-600" />
                 {stats.lastSimScore}%
               </p>
             </div>
-            <div className="rounded-[1.6rem] border border-white/60 bg-white/80 p-5">
+            <div className="rounded-[1.6rem] border border-white/60 bg-white/90 p-4 md:p-5">
               <p className="text-sm font-medium text-slate-500">XP total</p>
               <p className="mt-2 flex items-center gap-2 text-2xl font-black text-yellow-600">
                 <Award className="h-5 w-5" />
@@ -145,7 +145,7 @@ export default function Dashboard() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.4)]">
+        <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.4)] md:p-6">
           <div className="flex items-center gap-4">
             <div className="rounded-2xl bg-blue-50 p-3 text-blue-600">
               <CheckCircle className="h-6 w-6" />
@@ -157,7 +157,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.4)]">
+        <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.4)] md:p-6">
           <div className="flex items-center gap-4">
             <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600">
               <BarChart2 className="h-6 w-6" />
@@ -169,7 +169,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.4)]">
+        <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.4)] md:p-6">
           <div className="flex items-center gap-4">
             <div className="rounded-2xl bg-orange-50 p-3 text-orange-600">
               <BookOpen className="h-6 w-6" />
@@ -182,8 +182,8 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)]">
+      <section className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)] md:p-6">
           <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-5">
             <div>
               <h2 className="text-xl font-black text-slate-900">Sessao recomendada</h2>
@@ -201,17 +201,17 @@ export default function Dashboard() {
             preparamos um percurso de treino centrado na area {areaName}.
           </p>
 
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
             <Link
               to="/training"
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 text-sm font-semibold text-white transition hover:bg-emerald-700"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 text-sm font-semibold text-white transition hover:bg-emerald-700"
             >
               <PlayCircle className="h-5 w-5" />
               Iniciar treino
             </Link>
             <Link
               to="/simulation"
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-6 py-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-6 py-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
             >
               <Clock3 className="h-5 w-5" />
               Fazer simulacao de prova
@@ -219,7 +219,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)]">
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)] md:p-6">
           <h2 className="text-xl font-black text-slate-900">Dominio por topico</h2>
           <div className="mt-5 space-y-4">
             {topicProgress.length === 0 ? (

@@ -199,15 +199,15 @@ export default function Simulation() {
 
   if (!sessionStarted) {
     return (
-      <div className="mx-auto max-w-5xl space-y-8">
-        <section className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f2fbff_40%,#f5fff3_100%)] p-6 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.35)] md:p-8">
+      <div className="mx-auto max-w-5xl space-y-5 md:space-y-8">
+        <section className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f2fbff_40%,#f5fff3_100%)] p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.35)] md:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl">
               <div className="inline-flex items-center gap-2 rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-sky-700">
                 <Sparkles className="h-4 w-4" />
                 Simulacao de prova
               </div>
-              <h1 className="mt-4 text-4xl font-black tracking-tight text-slate-900">Prova completa com recompensa final</h1>
+              <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-900 md:text-4xl">Prova completa com recompensa final</h1>
               <p className="mt-3 text-sm leading-6 text-slate-600">
                 Entre, resolva a prova, veja o resultado final e recolha XP no fim da sessao.
               </p>
@@ -226,8 +226,8 @@ export default function Simulation() {
           </div>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.35)]">
+        <section className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.35)] md:p-6">
             <h2 className="text-2xl font-black text-slate-900">Pronto para a simulacao de prova?</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               O sistema monta 30 questoes da sua area e embaralha a ordem para deixar a experiencia sempre fresca.
@@ -261,8 +261,8 @@ export default function Simulation() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="sticky top-0 z-10 flex items-center justify-between rounded-[1.75rem] border border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
+    <div className="mx-auto max-w-4xl space-y-5 md:space-y-6">
+      <div className="sticky top-[72px] z-10 flex flex-col gap-3 rounded-[1.75rem] border border-slate-200 bg-white/95 px-4 py-4 backdrop-blur md:top-4 md:flex-row md:items-center md:justify-between md:px-5">
         <div>
           <h1 className="text-xl font-black text-slate-900">Simulacao de prova</h1>
           <p className="text-sm text-slate-500">{selectedAreaName}</p>
@@ -273,10 +273,10 @@ export default function Simulation() {
         </div>
       </div>
 
-      <div className="space-y-8 pb-24">
+      <div className="space-y-5 pb-28 md:space-y-8">
         {questions.map((question, index) => (
-          <div key={question.id} className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-44px_rgba(15,23,42,0.35)]">
-            <h3 className="mb-6 flex gap-4 text-lg font-semibold text-slate-900">
+          <div key={question.id} className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-44px_rgba(15,23,42,0.35)] md:p-6">
+            <h3 className="mb-5 flex gap-4 text-base font-semibold text-slate-900 md:mb-6 md:text-lg">
               <span className="font-black text-emerald-600">{index + 1}.</span>
               {question.content}
             </h3>
@@ -309,8 +309,8 @@ export default function Simulation() {
         ))}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200 bg-white/95 p-4 backdrop-blur md:pl-64">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4">
+      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200 bg-white/95 p-4 backdrop-blur">
+        <div className="mx-auto flex max-w-4xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <p className="text-sm font-semibold text-slate-500">
             Respondidas: {Object.keys(answers).length} de {questions.length}
           </p>
@@ -320,7 +320,7 @@ export default function Simulation() {
                 finishSimulation();
               }
             }}
-            className="rounded-xl bg-emerald-600 px-8 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+            className="w-full rounded-xl bg-emerald-600 px-8 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 md:w-auto"
           >
             Finalizar simulacao de prova
           </button>
