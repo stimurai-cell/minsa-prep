@@ -1,0 +1,4 @@
+1. quando faço login no admin, aparece logo a tela normal de um utilizador normal em vez de uma tela inicial do admin, se ainda não tem, cria-a. 
+2. no perfil do admin, no menu (lateral esquerda) tinha de ter os itens gerai do admin (Visão Geral, Gerador de IA, Gerenciar Usuários , e não o painel Admin.
+
+3. no menu Gerador IA no tópico não tem de ter tema (tópico) predefinido, imagina que eu sinta que um certo tema é relevante e queira criar conteúdo pra tal, não conseguiriei porque já está predefinido

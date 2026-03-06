@@ -1,0 +1,434 @@
+-- MINSA Prep - Database Schema & Initial Data (Ultra-Robust Version)
+
+-- 1. Create Types (with existence check)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+        CREATE TYPE user_role AS ENUM ('free', 'premium', 'admin');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'difficulty_level') THEN
+        CREATE TYPE difficulty_level AS ENUM ('easy', 'medium', 'hard');
+    END IF;
+END$$;
+
+-- 2. Areas (e.g., Pharmacy, Nursing)
+CREATE TABLE IF NOT EXISTS areas (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  description TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+-- Ensure unique index for areas name (required for ON CONFLICT)
+CREATE UNIQUE INDEX IF NOT EXISTS areas_name_idx ON areas (name);
+
+-- 3. Topics
+CREATE TABLE IF NOT EXISTS topics (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  area_id UUID REFERENCES areas(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+-- Ensure unique index for topics per area (required for ON CONFLICT)
+CREATE UNIQUE INDEX IF NOT EXISTS topics_area_id_name_idx ON topics (area_id, name);
+
+-- 4. Profiles (Extends Supabase Auth Users)
+CREATE TABLE IF NOT EXISTS profiles (
+  id UUID REFERENCES auth.users(id) PRIMARY KEY,
+  full_name TEXT NOT NULL,
+  role user_role DEFAULT 'free',
+  selected_area_id UUID,
+  preparation_time_months INT DEFAULT 1,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+-- Add constraint if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'fk_selected_area') THEN
+        ALTER TABLE profiles ADD CONSTRAINT fk_selected_area FOREIGN KEY (selected_area_id) REFERENCES areas(id);
+    END IF;
+END$$;
+
+-- 5. Questions
+CREATE TABLE IF NOT EXISTS questions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  topic_id UUID REFERENCES topics(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  difficulty difficulty_level DEFAULT 'medium',
+  exam_year INT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+-- 6. Alternatives
+CREATE TABLE IF NOT EXISTS alternatives (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  question_id UUID REFERENCES questions(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  is_correct BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+-- 7. Question Explanations
+CREATE TABLE IF NOT EXISTS question_explanations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  question_id UUID REFERENCES questions(id) ON DELETE CASCADE UNIQUE,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+-- 8. User Topic Progress (Domain System)
+CREATE TABLE IF NOT EXISTS user_topic_progress (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  topic_id UUID REFERENCES topics(id) ON DELETE CASCADE,
+  domain_score DECIMAL(5,2) DEFAULT 0.00 CHECK (domain_score >= 0 AND domain_score <= 100),
+  questions_answered INT DEFAULT 0,
+  correct_answers INT DEFAULT 0,
+  last_reviewed_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
+  UNIQUE(user_id, topic_id)
+);
+
+-- 9. Quiz Attempts (Simulados)
+CREATE TABLE IF NOT EXISTS quiz_attempts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  area_id UUID REFERENCES areas(id) ON DELETE CASCADE,
+  score DECIMAL(5,2) DEFAULT 0.00,
+  total_questions INT NOT NULL,
+  correct_answers INT DEFAULT 0,
+  started_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
+  completed_at TIMESTAMP WITH TIME ZONE,
+  is_completed BOOLEAN DEFAULT FALSE
+);
+
+-- 10. Quiz Attempt Answers
+CREATE TABLE IF NOT EXISTS quiz_attempt_answers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  quiz_attempt_id UUID REFERENCES quiz_attempts(id) ON DELETE CASCADE,
+  question_id UUID REFERENCES questions(id) ON DELETE CASCADE,
+  selected_alternative_id UUID REFERENCES alternatives(id),
+  is_correct BOOLEAN NOT NULL,
+  answered_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+-- 11. Subscriptions
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  plan_type TEXT NOT NULL,
+  start_date TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
+  end_date TIMESTAMP WITH TIME ZONE NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+-- 12. Activity Logs
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  activity_type TEXT NOT NULL, 
+  activity_date DATE DEFAULT CURRENT_DATE,
+  count INT DEFAULT 1,
+  UNIQUE(user_id, activity_type, activity_date)
+);
+
+-- INITIAL DATA SEEDING
+INSERT INTO areas (name, description) VALUES 
+('Farmácia', 'Área focada em medicamentos, farmacologia e assistência farmacêutica.'),
+('Enfermagem', 'Área focada em cuidados ao paciente, procedimentos e saúde pública.')
+ON CONFLICT (name) DO NOTHING;
+
+-- Seed Topics for Farmácia
+INSERT INTO topics (area_id, name) 
+SELECT id, 'Farmacologia Geral' FROM areas WHERE name = 'Farmácia'
+UNION ALL
+SELECT id, 'Legislação Farmacêutica' FROM areas WHERE name = 'Farmácia'
+UNION ALL
+SELECT id, 'Farmácia Clínica' FROM areas WHERE name = 'Farmácia'
+ON CONFLICT (area_id, name) DO NOTHING;
+
+-- Seed Topics for Enfermagem
+INSERT INTO topics (area_id, name) 
+SELECT id, 'Anatomia e Fisiologia' FROM areas WHERE name = 'Enfermagem'
+UNION ALL
+SELECT id, 'Saúde da Mulher e da Criança' FROM areas WHERE name = 'Enfermagem'
+UNION ALL
+SELECT id, 'Ética e Deontologia' FROM areas WHERE name = 'Enfermagem'
+ON CONFLICT (area_id, name) DO NOTHING;
+
+-- AUTO-PROFILE TRIGGER
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, full_name, role)
+  VALUES (
+    new.id, 
+    COALESCE(new.raw_user_meta_data->>'full_name', 'Usuário'), 
+    CASE WHEN new.email = 'jossdemo@gmail.com' THEN 'admin'::user_role ELSE 'free'::user_role END
+  )
+  ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role WHERE profiles.id = EXCLUDED.id AND profiles.role != 'admin';
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.is_current_user_admin()
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1
+    FROM public.profiles
+    WHERE id = auth.uid()
+      AND role = 'admin'
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.protect_profile_updates()
+RETURNS trigger AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF OLD.id = auth.uid() AND NOT public.is_current_user_admin() THEN
+    IF NEW.role IS DISTINCT FROM OLD.role THEN
+      RAISE EXCEPTION 'Nao pode alterar o cargo do proprio perfil.';
+    END IF;
+
+    IF OLD.selected_area_id IS NOT NULL
+       AND NEW.selected_area_id IS DISTINCT FROM OLD.selected_area_id THEN
+      RAISE EXCEPTION 'A area de estudo fica bloqueada apos a primeira definicao.';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- MANUAL FIX FOR EXISTING ADMIN (Run this in SQL Editor if already registered)
+-- UPDATE profiles SET role = 'admin' WHERE id IN (SELECT id FROM auth.users WHERE email = 'jossdemo@gmail.com');
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+DROP TRIGGER IF EXISTS protect_profile_updates_trigger ON public.profiles;
+CREATE TRIGGER protect_profile_updates_trigger
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.protect_profile_updates();
+
+-- RLS POLICIES
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_topic_progress ENABLE ROW LEVEL SECURITY;
+ALTER TABLE quiz_attempts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE quiz_attempt_answers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE areas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE topics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE alternatives ENABLE ROW LEVEL SECURITY;
+ALTER TABLE question_explanations ENABLE ROW LEVEL SECURITY;
+
+-- Policies (Drop and recreate to avoid "already exists" errors)
+DO $$
+BEGIN
+    DROP POLICY IF EXISTS "Public read areas" ON areas;
+    DROP POLICY IF EXISTS "Public read topics" ON topics;
+    DROP POLICY IF EXISTS "Public read questions" ON questions;
+    DROP POLICY IF EXISTS "Public read alternatives" ON alternatives;
+    DROP POLICY IF EXISTS "Public read explanations" ON question_explanations;
+    DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
+    DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
+    DROP POLICY IF EXISTS "Admins can view all profiles" ON profiles;
+    DROP POLICY IF EXISTS "Admins can update all profiles" ON profiles;
+    DROP POLICY IF EXISTS "Users can view own progress" ON user_topic_progress;
+    DROP POLICY IF EXISTS "Users can insert own progress" ON user_topic_progress;
+    DROP POLICY IF EXISTS "Users can update own progress" ON user_topic_progress;
+    DROP POLICY IF EXISTS "Users can view own quizzes" ON quiz_attempts;
+    DROP POLICY IF EXISTS "Users can insert own quizzes" ON quiz_attempts;
+    DROP POLICY IF EXISTS "Users can insert own quiz answers" ON quiz_attempt_answers;
+    DROP POLICY IF EXISTS "Users can view own activity" ON activity_logs;
+    DROP POLICY IF EXISTS "Users can insert own activity" ON activity_logs;
+    DROP POLICY IF EXISTS "Admins can insert topics" ON topics;
+    DROP POLICY IF EXISTS "Admins can update topics" ON topics;
+    DROP POLICY IF EXISTS "Admins can insert questions" ON questions;
+    DROP POLICY IF EXISTS "Admins can update questions" ON questions;
+    DROP POLICY IF EXISTS "Admins can insert alternatives" ON alternatives;
+    DROP POLICY IF EXISTS "Admins can update alternatives" ON alternatives;
+    DROP POLICY IF EXISTS "Admins can insert explanations" ON question_explanations;
+    DROP POLICY IF EXISTS "Admins can update explanations" ON question_explanations;
+END$$;
+
+CREATE POLICY "Public read areas" ON areas FOR SELECT USING (true);
+CREATE POLICY "Public read topics" ON topics FOR SELECT USING (true);
+CREATE POLICY "Public read questions" ON questions FOR SELECT USING (true);
+CREATE POLICY "Public read alternatives" ON alternatives FOR SELECT USING (true);
+CREATE POLICY "Public read explanations" ON question_explanations FOR SELECT USING (true);
+
+CREATE POLICY "Users can view own profile" ON profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Admins can view all profiles" ON profiles FOR SELECT USING (public.is_current_user_admin());
+CREATE POLICY "Admins can update all profiles" ON profiles FOR UPDATE USING (public.is_current_user_admin()) WITH CHECK (public.is_current_user_admin());
+CREATE POLICY "Users can view own progress" ON user_topic_progress FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own progress" ON user_topic_progress FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own progress" ON user_topic_progress FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can view own quizzes" ON quiz_attempts FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own quizzes" ON quiz_attempts FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can insert own quiz answers"
+ON quiz_attempt_answers
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM quiz_attempts
+    WHERE quiz_attempts.id = quiz_attempt_answers.quiz_attempt_id
+      AND quiz_attempts.user_id = auth.uid()
+  )
+);
+CREATE POLICY "Users can view own activity" ON activity_logs FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own activity" ON activity_logs FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Admins can insert topics"
+ON topics
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM profiles
+    WHERE profiles.id = auth.uid()
+      AND profiles.role = 'admin'
+  )
+);
+
+CREATE POLICY "Admins can update topics"
+ON topics
+FOR UPDATE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM profiles
+    WHERE profiles.id = auth.uid()
+      AND profiles.role = 'admin'
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM profiles
+    WHERE profiles.id = auth.uid()
+      AND profiles.role = 'admin'
+  )
+);
+
+CREATE POLICY "Admins can insert questions"
+ON questions
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM profiles
+    WHERE profiles.id = auth.uid()
+      AND profiles.role = 'admin'
+  )
+);
+
+CREATE POLICY "Admins can update questions"
+ON questions
+FOR UPDATE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM profiles
+    WHERE profiles.id = auth.uid()
+      AND profiles.role = 'admin'
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM profiles
+    WHERE profiles.id = auth.uid()
+      AND profiles.role = 'admin'
+  )
+);
+
+CREATE POLICY "Admins can insert alternatives"
+ON alternatives
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM profiles
+    WHERE profiles.id = auth.uid()
+      AND profiles.role = 'admin'
+  )
+);
+
+CREATE POLICY "Admins can update alternatives"
+ON alternatives
+FOR UPDATE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM profiles
+    WHERE profiles.id = auth.uid()
+      AND profiles.role = 'admin'
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM profiles
+    WHERE profiles.id = auth.uid()
+      AND profiles.role = 'admin'
+  )
+);
+
+CREATE POLICY "Admins can insert explanations"
+ON question_explanations
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM profiles
+    WHERE profiles.id = auth.uid()
+      AND profiles.role = 'admin'
+  )
+);
+
+CREATE POLICY "Admins can update explanations"
+ON question_explanations
+FOR UPDATE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM profiles
+    WHERE profiles.id = auth.uid()
+      AND profiles.role = 'admin'
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM profiles
+    WHERE profiles.id = auth.uid()
+      AND profiles.role = 'admin'
+  )
+);

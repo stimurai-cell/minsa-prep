@@ -1,0 +1,189 @@
+Você é um arquiteto de software sênior especializado em aplicações educacionais escaláveis e leves para mercados emergentes.
+Vamos construir uma plataforma chamada MINSA Prep.
+Objetivo do sistema:
+Plataforma web de simulados e treino inteligente para concursos da saúde em Angola, começando com duas áreas:
+Farmácia
+Enfermagem
+Stack obrigatória:
+React (Vite ou Next.js leve)
+Supabase (Auth + PostgreSQL)
+Hospedagem Vercel
+API Gemini (apenas no admin para gerar questões)
+Interface extremamente leve e otimizada para internet 3G
+Código modular, limpo e escalável
+⚠️ O sistema deve ser simples, rápido, performático e fácil de manter por um único desenvolvedor.
+1️⃣ ESTRUTURA DO SISTEMA
+O sistema deve conter:
+🔐 Autenticação
+Registro
+Login
+Reset password
+Controle de roles: free | premium | admin
+👨‍🎓 Área do Estudante
+Dashboard
+Mostrar:
+Total de questões resolvidas
+Percentual médio geral
+Percentual por tópico
+Último simulado
+Ranking geral
+Plano de estudo ativo (1, 2 ou 3 meses)
+📝 Modo Treino
+Funcionalidade:
+Escolher Área (Farmácia ou Enfermagem)
+Escolher Tópico
+Resolver questões
+Sistema de correção imediata
+Mostrar explicação após resposta
+Sistema de domínio por tópico:
+Cada tópico tem score de 0 a 100%
+Acerto: +2%
+Erro: -1%
+Máximo 100%
+Mínimo 0%
+Regras de reaparecimento:
+Domínio < 60% → reaparece frequentemente
+Domínio 60–80% → frequência média
+Domínio > 80% → entra em revisão espaçada
+⏱️ Modo Simulado
+30 a 50 questões
+Tempo cronometrado
+Resultado detalhado:
+Percentual geral
+Percentual por tópico
+Questões erradas com explicação
+Armazenar histórico
+📅 Plano Inteligente de Estudo (Premium)
+Ao criar conta, o utilizador escolhe:
+1 mês
+2 meses
+3 meses
+O sistema deve:
+Calcular total de tópicos
+Distribuir automaticamente:
+X questões novas por dia
+Y revisões de erro
+1 simulado por semana
+Exibir “Sessão do Dia” pronta
+Não usar IA para isso.
+Apenas lógica matemática baseada em dias disponíveis.
+🏆 Ranking
+Ranking geral por área
+Baseado na média dos últimos 5 simulados
+Atualização automática
+2️⃣ ÁREA ADMIN
+Criar rota protegida /admin
+Funcionalidades:
+📊 Dashboard Admin
+Mostrar:
+Total de usuários
+Usuários ativos hoje
+Usuários online agora
+Total premium
+Total free
+Total de questões
+Total de simulados realizados
+Novos usuários nos últimos 7 dias
+📚 Gestão de Conteúdo
+CRUD para:
+Áreas
+Tópicos
+Questões
+Alternativas
+Explicações
+Nível de dificuldade
+Ano de concurso (opcional)
+🤖 Gerador Inteligente de Questões (Integração Gemini)
+Criar funcionalidade:
+Admin cola conteúdo bruto.
+Admin seleciona:
+Área
+Tópico
+Quantidade de questões
+Nível de dificuldade
+Sistema envia prompt estruturado para API Gemini.
+Gemini deve retornar JSON no formato:
+{
+"questions": [
+{
+"question": "",
+"alternatives": [
+{"text": "", "isCorrect": false},
+{"text": "", "isCorrect": false},
+{"text": "", "isCorrect": true},
+{"text": "", "isCorrect": false}
+],
+"explanation": "",
+"difficulty": "medium"
+}
+]
+}
+Sistema salva automaticamente no Supabase.
+3️⃣ ESTRUTURA DO BANCO (PostgreSQL – Supabase)
+Criar schema completo com:
+users (default do Supabase)
+profiles
+areas
+topics
+questions
+alternatives
+question_explanations
+user_topic_progress
+quiz_attempts
+quiz_attempt_answers
+subscriptions
+activity_logs
+Relacionamentos claros.
+Chaves estrangeiras bem definidas.
+Índices para performance.
+4️⃣ REQUISITOS DE PERFORMANCE
+Interface minimalista
+Sem bibliotecas pesadas
+Sem animações desnecessárias
+Carregamento rápido
+Código dividido em componentes reutilizáveis
+Uso eficiente de queries
+Evitar N+1 queries
+5️⃣ EXPERIÊNCIA DO UTILIZADOR
+Primeiro acesso deve:
+Mostrar tela clara explicando:
+"Treine como se fosse o concurso real."
+Pedir escolha da área.
+Pedir tempo de preparação.
+Levar direto para primeira sessão de treino.
+Nunca deixar dashboard vazio.
+6️⃣ MONETIZAÇÃO
+Free:
+10 questões por dia
+1 simulado por semana
+Premium:
+Ilimitado
+Plano automático ativo
+Estatísticas detalhadas
+Controle manual de ativação via admin.
+7️⃣ ENTREGA ESPERADA
+Gerar:
+Estrutura de pastas React organizada
+Arquivo database_setup.sql completo
+Modelo de integração Supabase
+Modelo de integração Gemini
+Lógica do sistema de domínio
+Lógica do plano automático
+Código base das principais páginas
+Estrutura do painel admin
+Organizar resposta em seções claras.
+meu contacto pra suporte whatapp e outros:
+244936793706
+cordenadas bacarias:
+express:
+928047010
+IBANs
+BAI:
+0040-0000-6719-8212-1017-0
+ALTANTICO
+0055-0000-1903-4290-1018-7
+BIC
+0051-0000-4332-6097-1014-5
+SOL
+0044-0000-3489-7416-1018-5
+NOME: JOSE SIMAO PEDRO
