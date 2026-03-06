@@ -1,0 +1,53 @@
+export type PremiumPlan = {
+  id: string;
+  name: string;
+  badge: string;
+  cadence: string;
+  headline: string;
+  description: string;
+  features: string[];
+  highlight?: boolean;
+};
+
+export const premiumPlans: PremiumPlan[] = [
+  {
+    id: 'starter',
+    name: 'Plano Gratuito',
+    badge: 'Entrada',
+    cadence: 'Sem custo',
+    headline: 'Bom para testar o ritmo da plataforma.',
+    description: 'Ideal para novos estudantes entrarem, responderem questoes e perceberem valor antes de subir.',
+    features: [
+      'Treinos e provas essenciais',
+      'Progresso base por topico',
+      'Acesso inicial ao ranking',
+    ],
+  },
+  {
+    id: 'focus',
+    name: 'Premium Focus',
+    badge: 'Mais estrategico',
+    cadence: 'Mensal',
+    headline: 'Pacote mais indicado para a maioria dos candidatos.',
+    description: 'Entrega consistencia sem assustar no preco. Deve ser o plano mais promovido na app.',
+    features: [
+      'Simulados completos sem limite apertado',
+      'Revisao guiada por dificuldade e tema',
+      'Historico detalhado de erros e acertos',
+    ],
+    highlight: true,
+  },
+  {
+    id: 'master',
+    name: 'Premium Intensivo',
+    badge: 'Maximo rendimento',
+    cadence: 'Mensal ou trimestral',
+    headline: 'Para quem quer preparar-se com acompanhamento total.',
+    description: 'Bom para upsell de candidatos em reta final ou perfis premium recorrentes.',
+    features: [
+      'Plano de estudo adaptativo',
+      'Simulados prioritarios e revisoes avancadas',
+      'Recursos exclusivos de desempenho e disciplina',
+    ],
+  },
+];

@@ -23,6 +23,45 @@ export default function Register() {
     fetchAreas();
   }, [fetchAreas]);
 
+  const ensureProfile = async (userId: string) => {
+    const profilePayload = {
+      id: userId,
+      full_name: fullName,
+      selected_area_id: areaId || null,
+      preparation_time_months: parseInt(prepTime, 10),
+    };
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (profile?.id) {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({
+            full_name: fullName,
+            selected_area_id: areaId || null,
+            preparation_time_months: parseInt(prepTime, 10),
+          })
+          .eq('id', userId);
+
+        if (updateError) throw updateError;
+        return;
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+    }
+
+    const { error: upsertError } = await supabase
+      .from('profiles')
+      .upsert(profilePayload, { onConflict: 'id' });
+
+    if (upsertError) throw upsertError;
+  };
+
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
 
@@ -48,22 +87,32 @@ export default function Register() {
       if (signUpError) throw signUpError;
 
       if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({
-            full_name: fullName,
-            selected_area_id: areaId || null,
-            preparation_time_months: parseInt(prepTime, 10),
-          })
-          .eq('id', data.user.id);
+        const sessionData = await supabase.auth.getSession();
 
-        if (profileError) throw profileError;
+        if (!sessionData.data.session) {
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          });
+
+          if (signInError) throw signInError;
+        }
+
+        await ensureProfile(data.user.id);
       }
 
       await checkSession();
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Erro ao criar conta');
+      const message = err?.message || 'Erro ao criar conta';
+
+      if (message.includes('Database error saving new user')) {
+        setError(
+          'O Supabase recusou criar o utilizador no trigger do banco. Execute o SQL atualizado de correção e tente novamente.'
+        );
+      } else {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }

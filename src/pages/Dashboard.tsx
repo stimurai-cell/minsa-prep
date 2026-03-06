@@ -9,8 +9,10 @@ import {
   Lock,
   PlayCircle,
   Target,
+  Crown,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { premiumPlans } from '../lib/premium';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import AreaLockCard from '../components/AreaLockCard';
@@ -249,6 +251,54 @@ export default function Dashboard() {
               ))
             )}
           </div>
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#fff8eb_40%,#f5fff7_100%)] p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)] md:p-6">
+        <div className="flex flex-col gap-3 border-b border-slate-100 pb-5 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Pacotes premium</p>
+            <h2 className="mt-2 text-2xl font-black text-slate-900">Estrutura comercial pronta para crescer</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+              A melhor distribuicao e manter um gratuito forte, um premium principal para conversao e um intensivo para upsell.
+            </p>
+          </div>
+          <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600">
+            Perfil atual: <span className="font-black text-slate-900">{profile?.role === 'premium' ? 'Premium' : 'Gratuito'}</span>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+          {premiumPlans.map((plan) => (
+            <div
+              key={plan.id}
+              className={`rounded-[1.7rem] border p-5 ${
+                plan.highlight
+                  ? 'border-amber-300 bg-amber-50 shadow-[0_18px_50px_-40px_rgba(245,158,11,0.5)]'
+                  : 'border-slate-200 bg-white'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${
+                  plan.highlight ? 'bg-amber-200 text-amber-900' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {plan.badge}
+                </span>
+                {plan.highlight && <Crown className="h-5 w-5 text-amber-600" />}
+              </div>
+              <h3 className="mt-4 text-xl font-black text-slate-900">{plan.name}</h3>
+              <p className="mt-1 text-sm font-semibold text-emerald-700">{plan.cadence}</p>
+              <p className="mt-4 text-sm font-semibold text-slate-800">{plan.headline}</p>
+              <p className="mt-3 text-sm leading-6 text-slate-600">{plan.description}</p>
+              <div className="mt-4 space-y-2">
+                {plan.features.map((feature) => (
+                  <p key={feature} className="rounded-xl bg-white/80 px-3 py-2 text-sm text-slate-700">
+                    {feature}
+                  </p>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </section>
     </div>

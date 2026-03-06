@@ -179,9 +179,6 @@ export default function Training() {
       xpEarned,
       durationSeconds,
     });
-
-    resetTrainingSession(true);
-    navigate('/training', { replace: true });
   };
 
   const startTraining = () => {
@@ -273,11 +270,17 @@ export default function Training() {
         accuracy={accuracy}
         durationSeconds={sessionSummary.durationSeconds}
         primaryActionLabel="Voltar ao treino"
-        onPrimaryAction={() => setSessionSummary(null)}
+        onPrimaryAction={() => {
+          resetTrainingSession();
+          setSessionSummary(null);
+          navigate('/training', { replace: true });
+        }}
         secondaryActionLabel="Treinar outro topico"
         onSecondaryAction={() => {
+          resetTrainingSession();
           setSelectedTopic('');
           setSessionSummary(null);
+          navigate('/training', { replace: true });
         }}
       />
     );

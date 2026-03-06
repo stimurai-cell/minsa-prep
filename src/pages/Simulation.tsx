@@ -49,7 +49,7 @@ export default function Simulation() {
   const [selectedAlt, setSelectedAlt] = useState<string | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
   const [showIntro, setShowIntro] = useState(true);
-  const [timeLeft, setTimeLeft] = useState(3600);
+  const [timeLeft, setTimeLeft] = useState(1800);
   const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null);
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
   const [resultHistory, setResultHistory] = useState<boolean[]>([]);
@@ -114,7 +114,7 @@ export default function Simulation() {
     setSelectedAlt(null);
     setIsAnswered(false);
     setShowIntro(true);
-    setTimeLeft(3600);
+    setTimeLeft(1800);
     setSessionStartedAt(null);
     setResultHistory([]);
 
@@ -246,9 +246,6 @@ export default function Simulation() {
       durationSeconds,
       score: finalScore,
     });
-
-    resetSimulationSession(true);
-    navigate('/simulation', { replace: true });
   };
 
   const startSimulation = () => {
@@ -305,9 +302,17 @@ export default function Simulation() {
         accuracy={sessionSummary.score}
         durationSeconds={sessionSummary.durationSeconds}
         primaryActionLabel="Voltar a prova"
-        onPrimaryAction={() => setSessionSummary(null)}
+        onPrimaryAction={() => {
+          resetSimulationSession();
+          setSessionSummary(null);
+          navigate('/simulation', { replace: true });
+        }}
         secondaryActionLabel="Nova simulacao de prova"
-        onSecondaryAction={() => setSessionSummary(null)}
+        onSecondaryAction={() => {
+          resetSimulationSession();
+          setSessionSummary(null);
+          navigate('/simulation', { replace: true });
+        }}
       />
     );
   }
@@ -366,7 +371,7 @@ export default function Simulation() {
                   </div>
                   <div className="rounded-2xl bg-white/10 px-4 py-4">
                     <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200">Tempo</p>
-                    <p className="mt-2 text-lg font-black">60 min</p>
+                    <p className="mt-2 text-lg font-black">30 min</p>
                   </div>
                   <div className="rounded-2xl bg-white/10 px-4 py-4">
                     <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200">Objetivo</p>
@@ -629,7 +634,7 @@ export default function Simulation() {
               <h3 className="font-bold">Como funciona agora</h3>
               <ul className="mt-3 space-y-2 text-sm leading-6">
                 <li>30 questoes, uma por ecran, para evitar scroll excessivo.</li>
-                <li>Tempo limite de 60 minutos com contador sempre no topo.</li>
+                <li>Tempo limite de 30 minutos, um minuto por questao.</li>
                 <li>Barra de progresso e contadores de certas e erradas durante toda a prova.</li>
               </ul>
             </div>

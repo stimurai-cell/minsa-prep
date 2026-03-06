@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   role user_role DEFAULT 'free',
   selected_area_id UUID,
   preparation_time_months INT DEFAULT 1,
+  total_xp INT DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
@@ -50,6 +51,14 @@ DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'fk_selected_area') THEN
         ALTER TABLE profiles ADD CONSTRAINT fk_selected_area FOREIGN KEY (selected_area_id) REFERENCES areas(id);
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'profiles'
+          AND column_name = 'total_xp'
+    ) THEN
+        ALTER TABLE profiles ADD COLUMN total_xp INT DEFAULT 0;
     END IF;
 END$$;
 
@@ -137,27 +146,67 @@ CREATE TABLE IF NOT EXISTS activity_logs (
 );
 
 -- INITIAL DATA SEEDING
-INSERT INTO areas (name, description) VALUES 
-('Farmácia', 'Área focada em medicamentos, farmacologia e assistência farmacêutica.'),
-('Enfermagem', 'Área focada em cuidados ao paciente, procedimentos e saúde pública.')
+INSERT INTO areas (name, description) VALUES
+(U&'Farm\00E1cia', U&'\00C1rea focada em medicamentos, farmacologia e assist\00EAncia farmac\00EAutica.'),
+('Enfermagem', U&'\00C1rea focada em cuidados ao paciente, procedimentos e sa\00FAde p\00FAblica.')
 ON CONFLICT (name) DO NOTHING;
 
--- Seed Topics for Farmácia
+DO $$
+DECLARE
+  canonical_farmacia UUID;
+BEGIN
+  SELECT id INTO canonical_farmacia
+  FROM areas
+  WHERE name = U&'Farm\00E1cia'
+  ORDER BY created_at
+  LIMIT 1;
+
+  IF canonical_farmacia IS NOT NULL THEN
+    UPDATE topics
+    SET area_id = canonical_farmacia
+    WHERE area_id IN (
+      SELECT id
+      FROM areas
+      WHERE id <> canonical_farmacia
+        AND name ILIKE 'Farm%'
+    );
+
+    UPDATE profiles
+    SET selected_area_id = canonical_farmacia
+    WHERE selected_area_id IN (
+      SELECT id
+      FROM areas
+      WHERE id <> canonical_farmacia
+        AND name ILIKE 'Farm%'
+    );
+
+    DELETE FROM areas
+    WHERE id <> canonical_farmacia
+      AND name ILIKE 'Farm%';
+  END IF;
+END$$;
+
+INSERT INTO areas (name, description) VALUES 
+(U&'Farm\00E1cia', U&'\00C1rea focada em medicamentos, farmacologia e assist\00EAncia farmac\00EAutica.'),
+('Enfermagem', U&'\00C1rea focada em cuidados ao paciente, procedimentos e sa\00FAde p\00FAblica.')
+ON CONFLICT (name) DO NOTHING;
+
+-- Seed Topics for Farmacia
 INSERT INTO topics (area_id, name) 
-SELECT id, 'Farmacologia Geral' FROM areas WHERE name = 'Farmácia'
+SELECT id, 'Farmacologia Geral' FROM areas WHERE name = U&'Farm\00E1cia'
 UNION ALL
-SELECT id, 'Legislação Farmacêutica' FROM areas WHERE name = 'Farmácia'
+SELECT id, U&'Legisla\00E7\00E3o Farmac\00EAutica' FROM areas WHERE name = U&'Farm\00E1cia'
 UNION ALL
-SELECT id, 'Farmácia Clínica' FROM areas WHERE name = 'Farmácia'
+SELECT id, U&'Farm\00E1cia Cl\00EDnica' FROM areas WHERE name = U&'Farm\00E1cia'
 ON CONFLICT (area_id, name) DO NOTHING;
 
 -- Seed Topics for Enfermagem
 INSERT INTO topics (area_id, name) 
 SELECT id, 'Anatomia e Fisiologia' FROM areas WHERE name = 'Enfermagem'
 UNION ALL
-SELECT id, 'Saúde da Mulher e da Criança' FROM areas WHERE name = 'Enfermagem'
+SELECT id, U&'Sa\00FAde da Mulher e da Crian\00E7a' FROM areas WHERE name = 'Enfermagem'
 UNION ALL
-SELECT id, 'Ética e Deontologia' FROM areas WHERE name = 'Enfermagem'
+SELECT id, U&'\00C9tica e Deontologia' FROM areas WHERE name = 'Enfermagem'
 ON CONFLICT (area_id, name) DO NOTHING;
 
 -- AUTO-PROFILE TRIGGER
@@ -167,7 +216,7 @@ BEGIN
   INSERT INTO public.profiles (id, full_name, role)
   VALUES (
     new.id, 
-    COALESCE(new.raw_user_meta_data->>'full_name', 'Usuário'), 
+    COALESCE(NULLIF(TRIM(new.raw_user_meta_data->>'full_name'), ''), SPLIT_PART(new.email, '@', 1), 'Usuario'), 
     CASE WHEN new.email = 'jossdemo@gmail.com' THEN 'admin'::user_role ELSE 'free'::user_role END
   )
   ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role WHERE profiles.id = EXCLUDED.id AND profiles.role != 'admin';
@@ -246,6 +295,7 @@ BEGIN
     DROP POLICY IF EXISTS "Public read alternatives" ON alternatives;
     DROP POLICY IF EXISTS "Public read explanations" ON question_explanations;
     DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
+    DROP POLICY IF EXISTS "Users can insert own profile" ON profiles;
     DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
     DROP POLICY IF EXISTS "Admins can view all profiles" ON profiles;
     DROP POLICY IF EXISTS "Admins can update all profiles" ON profiles;
@@ -274,6 +324,7 @@ CREATE POLICY "Public read alternatives" ON alternatives FOR SELECT USING (true)
 CREATE POLICY "Public read explanations" ON question_explanations FOR SELECT USING (true);
 
 CREATE POLICY "Users can view own profile" ON profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can insert own profile" ON profiles FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
 CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
 CREATE POLICY "Admins can view all profiles" ON profiles FOR SELECT USING (public.is_current_user_admin());
 CREATE POLICY "Admins can update all profiles" ON profiles FOR UPDATE USING (public.is_current_user_admin()) WITH CHECK (public.is_current_user_admin());

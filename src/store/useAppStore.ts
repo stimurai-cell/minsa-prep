@@ -22,6 +22,42 @@ interface AppState {
   fetchTopics: (areaId: string) => Promise<void>;
 }
 
+const canonicalAreaNames: Record<string, string> = {
+  farmacia: 'Farmácia',
+  enfermagem: 'Enfermagem',
+};
+
+const toAreaKey = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z]/g, '')
+    .toLowerCase();
+
+const normalizeArea = (area: Area): Area => {
+  const key = toAreaKey(area.name || '');
+
+  return {
+    ...area,
+    name: canonicalAreaNames[key] || area.name,
+  };
+};
+
+const dedupeAreas = (areas: Area[]) => {
+  const unique = new Map<string, Area>();
+
+  areas.forEach((area) => {
+    const normalized = normalizeArea(area);
+    const key = toAreaKey(normalized.name || normalized.id);
+
+    if (!unique.has(key)) {
+      unique.set(key, normalized);
+    }
+  });
+
+  return [...unique.values()];
+};
+
 export const useAppStore = create<AppState>((set) => ({
   areas: [],
   topics: [],
@@ -31,7 +67,7 @@ export const useAppStore = create<AppState>((set) => ({
     try {
       const { data, error } = await supabase.from('areas').select('*');
       if (error) throw error;
-      set({ areas: data || [] });
+      set({ areas: dedupeAreas(data || []) });
     } catch (error) {
       console.error('Error fetching areas:', error);
     } finally {
