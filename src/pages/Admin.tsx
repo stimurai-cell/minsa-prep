@@ -593,9 +593,7 @@ export default function Admin() {
 
       if (status === 'approved') {
         const startDate = new Date();
-        const endDate = new Date();
-        endDate.setMonth(endDate.getMonth() + (request.duration_months || 1));
-
+        // Para modelo de cobrança sem duracao, mantemos a subscription ativa sem end_date
         await supabase
           .from('subscriptions')
           .update({ is_active: false })
@@ -606,7 +604,7 @@ export default function Admin() {
           user_id: request.user_id,
           plan_type: request.plan_id,
           start_date: startDate.toISOString(),
-          end_date: endDate.toISOString(),
+          end_date: null,
           is_active: true,
         });
 

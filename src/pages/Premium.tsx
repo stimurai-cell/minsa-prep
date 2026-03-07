@@ -145,30 +145,42 @@ export default function Premium() {
               Premium MINSA Prep
             </div>
             <h1 className="mt-4 text-3xl font-black tracking-tight md:text-5xl">
-              Estrutura premium pronta para vender sem confundir o estudante.
+              Benefícios do Premium para acelerar seu estudo
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-200 md:text-base">
-              O foco comercial correto nao e encher a plataforma de planos. E criar uma escada simples:
-              gratuito para entrar, Premium Focus para converter e Intensivo para aumentar ticket.
+              O Premium entrega funcionalidades pensadas para otimizar seu tempo e resultado: escolha
+              livre de nível (Fácil, Normal, Difícil e Misto) para personalizar suas sessões, ranking
+              completo para acompanhar sua posição, relatórios de desempenho detalhados e filtros de
+              revisão avançados. Tudo para você estudar com mais foco e ver progresso real.
             </p>
 
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-6 flex flex-wrap gap-3 items-center">
               <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm">
                 Perfil atual: <span className="font-black">{isPremium ? 'Premium' : 'Gratuito'}</span>
               </div>
-              <div className="rounded-2xl bg-emerald-400/15 px-4 py-3 text-sm text-emerald-100">
-                {isPremium ? 'Recursos premium ativos' : 'Alguns recursos premium ainda estao bloqueados'}
+              <div className="rounded-2xl bg-emerald-400/15 px-4 py-3 text-sm text-emerald-100 flex items-center gap-3">
+                <span>{isPremium ? 'Recursos premium ativos' : 'Alguns recursos premium ainda estao bloqueados'}</span>
+                {isPremium && (
+                  <span className="inline-flex items-center rounded-full bg-amber-200/30 px-2 py-0.5 text-xs font-semibold text-amber-900">
+                    Premium
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
           <div className="rounded-[1.8rem] border border-white/10 bg-white/10 p-5 backdrop-blur">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">O que deve vender mais</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">Principais benefícios</p>
             <div className="mt-4 space-y-3">
               {premiumPerks.map((perk) => (
                 <div key={perk} className="flex items-start gap-3 rounded-2xl bg-white/10 px-4 py-3 text-sm text-slate-100">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
-                  <span>{perk}</span>
+                  <div className="flex w-full items-center justify-between">
+                    <span>{perk}</span>
+                    <span className="ml-3 inline-flex items-center rounded-full bg-amber-200/30 px-2 py-0.5 text-xs font-semibold text-amber-900">
+                      Incluído
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -176,26 +188,8 @@ export default function Premium() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        {premiumComparisons.map((item, index) => {
-          const Icon = index === 0 ? Rocket : index === 1 ? Star : ShieldCheck;
-
-          return (
-            <div
-              key={item.title}
-              className={`rounded-[1.8rem] border p-5 shadow-[0_24px_80px_-50px_rgba(15,23,42,0.35)] md:p-6 ${
-                index === 1 ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white'
-              }`}
-            >
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
-                <Icon className="h-5 w-5" />
-              </div>
-              <h2 className="mt-4 text-xl font-black text-slate-900">{item.title}</h2>
-              <p className="mt-3 text-sm leading-6 text-slate-600">{item.description}</p>
-            </div>
-          );
-        })}
-      </section>
+      {/* Seção removida: informações internas de estratégia comercial
+          Mantemos apenas benefícios, planos, formas de pagamento e suporte para os clientes */}
 
       <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.35)] md:p-6">
         <div className="flex flex-col gap-3 border-b border-slate-100 pb-5 md:flex-row md:items-end md:justify-between">
@@ -240,7 +234,12 @@ export default function Premium() {
                 {plan.features.map((feature) => (
                   <div key={feature} className="flex items-start gap-3 rounded-2xl bg-white/80 px-4 py-3 text-sm text-slate-700">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                    <span>{feature}</span>
+                    <span className="flex-1">{feature}</span>
+                    {plan.priceAmount > 0 && (
+                      <span className="ml-3 inline-flex items-center rounded-full bg-amber-200/30 px-2 py-0.5 text-xs font-semibold text-amber-900">
+                        Premium
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>

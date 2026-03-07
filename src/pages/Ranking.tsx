@@ -28,30 +28,32 @@ export default function Ranking() {
 
       setLoading(true);
       try {
-        const { data, error } = await supabase
+        // Buscamos as ultimas tentativas (limite razoavel) e calculamos a media dos ultimos 5 por utilizador
+        const { data: attempts, error } = await supabase
           .from('quiz_attempts')
-          .select(
-            `
-            score,
-            profiles (full_name)
-          `
-          )
+          .select('user_id, score, completed_at, profiles (full_name)')
           .eq('area_id', profile.selected_area_id)
           .eq('is_completed', true)
-          .order('score', { ascending: false })
-          .limit(10);
+          .order('completed_at', { ascending: false })
+          .limit(500);
 
         if (error) throw error;
 
-        const uniqueUsers = new Map<string, any>();
-        data?.forEach((attempt: any) => {
-          const name = attempt.profiles?.full_name;
-          if (!uniqueUsers.has(name) || uniqueUsers.get(name).score < attempt.score) {
-            uniqueUsers.set(name, attempt);
-          }
+        const map = new Map<string, { scores: number[]; name: string }>();
+        (attempts || []).forEach((a: any) => {
+          const uid = a.user_id;
+          const name = a.profiles?.full_name || 'Utilizador anonim0';
+          const entry = map.get(uid) || { scores: [], name };
+          if (entry.scores.length < 5) entry.scores.push(Number(a.score || 0));
+          map.set(uid, entry);
         });
 
-        setRanking(Array.from(uniqueUsers.values()).sort((a, b) => b.score - a.score));
+        const rankingArr = Array.from(map.entries()).map(([uid, val]) => {
+          const avg = val.scores.length > 0 ? Math.round(val.scores.reduce((s, v) => s + v, 0) / val.scores.length) : 0;
+          return { user_id: uid, name: val.name, score: avg };
+        });
+
+        setRanking(rankingArr.sort((a, b) => b.score - a.score).slice(0, 10));
       } catch (error) {
         console.error('Error fetching ranking:', error);
       } finally {

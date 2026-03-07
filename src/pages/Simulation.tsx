@@ -237,6 +237,25 @@ export default function Simulation() {
 
       await supabase.from('quiz_attempt_answers').insert(answerInserts);
       await awardXp(xpEarned);
+      // Registrar tentativa de simulacao para limites e ranking
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const { data: existing } = await supabase
+          .from('activity_logs')
+          .select('id,count')
+          .eq('user_id', profile.id)
+          .eq('activity_type', 'simulation_attempt')
+          .eq('activity_date', today)
+          .maybeSingle();
+
+        if (existing && existing.id) {
+          await supabase.from('activity_logs').update({ count: Number(existing.count || 0) + 1 }).eq('id', existing.id);
+        } else {
+          await supabase.from('activity_logs').insert({ user_id: profile.id, activity_type: 'simulation_attempt', activity_date: today, count: 1 });
+        }
+      } catch (logErr) {
+        console.error('Erro ao registar simulacao em activity_logs:', logErr);
+      }
     } catch (err) {
       console.error('Error saving simulation results:', err);
     }
@@ -252,6 +271,34 @@ export default function Simulation() {
 
   const startSimulation = () => {
     const difficulty = hasPremiumAccess ? selectedDifficulty : 'medium';
+
+    // Verificar limite de simulacoes para utilizadores free: 1 por semana
+    if (!hasPremiumAccess && profile?.id) {
+      void (async () => {
+        try {
+          const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+          const { data: recent, error } = await supabase
+            .from('quiz_attempts')
+            .select('id')
+            .eq('user_id', profile.id)
+            .gte('completed_at', sevenDaysAgo)
+            .eq('is_completed', true);
+
+          if (error) throw error;
+          if (recent && recent.length >= 1) {
+            alert('No gratuito, voce pode fazer 1 simulacao por semana. Suba para Premium para fazer mais.');
+            return;
+          }
+
+          navigate(`/simulation?session=1&difficulty=${difficulty}`);
+        } catch (err) {
+          console.error('Erro ao verificar limite de simulacoes:', err);
+          navigate(`/simulation?session=1&difficulty=${difficulty}`);
+        }
+      })();
+      return;
+    }
+
     navigate(`/simulation?session=1&difficulty=${difficulty}`);
   };
 

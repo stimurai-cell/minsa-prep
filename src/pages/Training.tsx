@@ -73,6 +73,13 @@ export default function Training() {
     }
   }, [sessionTopicId]);
 
+  // Se não houver tópico selecionado explicitamente, pré-seleciona o primeiro tópico disponível
+  useEffect(() => {
+    if (!selectedTopic && topics && topics.length > 0) {
+      setSelectedTopic(topics[0].id);
+    }
+  }, [topics, selectedTopic]);
+
   useEffect(() => {
     setSelectedDifficulty(hasPremiumAccess ? sessionDifficulty : 'medium');
   }, [hasPremiumAccess, sessionDifficulty]);
@@ -186,6 +193,36 @@ export default function Training() {
   const startTraining = () => {
     if (!selectedTopic) return;
     const difficulty = hasPremiumAccess ? selectedDifficulty : 'medium';
+
+    // Limite para utilizadores free: 20 questoes por dia
+    if (!hasPremiumAccess && profile?.id) {
+      const today = new Date().toISOString().slice(0, 10);
+      void (async () => {
+        try {
+          const { data: row, error } = await supabase
+            .from('activity_logs')
+            .select('count')
+            .eq('user_id', profile.id)
+            .eq('activity_type', 'training_question')
+            .eq('activity_date', today)
+            .maybeSingle();
+
+          if (error) throw error;
+          const answeredToday = row ? Number(row.count || 0) : 0;
+          if (answeredToday >= 20) {
+            alert('Limite diario de perguntas (20) atingido. Suba para Premium para treinar mais.');
+            return;
+          }
+
+          navigate(`/training?session=1&topic=${selectedTopic}&difficulty=${difficulty}`);
+        } catch (err) {
+          console.error('Erro ao verificar limite diario:', err);
+          navigate(`/training?session=1&topic=${selectedTopic}&difficulty=${difficulty}`);
+        }
+      })();
+      return;
+    }
+
     navigate(`/training?session=1&topic=${selectedTopic}&difficulty=${difficulty}`);
   };
 
@@ -239,6 +276,28 @@ export default function Training() {
         }
       } catch (err) {
         console.error('Error updating progress:', err);
+      }
+      // Registrar atividade diaria de treino (incrementar count)
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const { data: existing } = await supabase
+          .from('activity_logs')
+          .select('id,count')
+          .eq('user_id', profile.id)
+          .eq('activity_type', 'training_question')
+          .eq('activity_date', today)
+          .maybeSingle();
+
+        if (existing && existing.id) {
+          await supabase
+            .from('activity_logs')
+            .update({ count: Number(existing.count || 0) + 1 })
+            .eq('id', existing.id);
+        } else {
+          await supabase.from('activity_logs').insert({ user_id: profile.id, activity_type: 'training_question', activity_date: today, count: 1 });
+        }
+      } catch (logErr) {
+        console.error('Erro ao registar activity_logs:', logErr);
       }
     }
   };

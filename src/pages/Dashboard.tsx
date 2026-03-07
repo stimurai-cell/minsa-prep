@@ -12,6 +12,7 @@ import {
   Crown,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { createStudyPlanForUser } from '../lib/studyPlan';
 import { premiumPlans } from '../lib/premium';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
@@ -76,6 +77,18 @@ export default function Dashboard() {
     };
 
     fetchStats();
+    // Gerar plano inteligente de estudo se ainda nao existir
+    void (async () => {
+      try {
+        if (!profile?.id) return;
+        const { data: existing } = await supabase.from('study_plans').select('id').eq('user_id', profile.id).maybeSingle();
+        if (!existing) {
+          await createStudyPlanForUser(profile as any);
+        }
+      } catch (err) {
+        console.error('Erro ver/plano de estudo:', err);
+      }
+    })();
   }, [profile?.id]);
 
   const areaName = useMemo(

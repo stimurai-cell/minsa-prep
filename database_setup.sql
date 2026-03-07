@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
   plan_type TEXT NOT NULL,
   start_date TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
-  end_date TIMESTAMP WITH TIME ZONE NOT NULL,
+  end_date TIMESTAMP WITH TIME ZONE,
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
@@ -164,6 +164,14 @@ CREATE TABLE IF NOT EXISTS activity_logs (
   activity_date DATE DEFAULT CURRENT_DATE,
   count INT DEFAULT 1,
   UNIQUE(user_id, activity_type, activity_date)
+);
+
+-- 13. Study Plans (generated plans for users)
+CREATE TABLE IF NOT EXISTS study_plans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  plan_json JSONB NOT NULL,
+  generated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
 
 -- INITIAL DATA SEEDING
