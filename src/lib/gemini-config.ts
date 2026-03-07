@@ -19,13 +19,19 @@ export const buildQuestionsPrompt = ({
   Gere ${count} questoes de multipla escolha sobre o topico "${topic}" da area de "${area}".
 
   REGRAS CRITICAS:
-  1. Use portugues correto com todos os acentos e pontuacao.
-  2. Cada questao deve ter exatamente 4 alternativas.
-  3. Nao inclua letras como "a.", "b.", "c." ou "d." no texto das alternativas.
+  1. Use portugues correto (Angola) com todos os acentos e pontuacao.
+  2. Cada questao deve ter exatamente 5 alternativas (A, B, C, D, E).
+  3. Estilo de escrita: Use termos como "assinale a verdadeira", "assinale a falsa", "Excepto".
   4. O nivel de dificuldade deve ser "${difficulty}".
   5. Baseie-se no seguinte conteudo de referencia (se fornecido):
   ${rawContent}
-  6. Varie a posicao da alternativa correta entre as 4 opcoes.
+  
+  EXEMPLO DE ESTRUTURA REAL (SIGA ESTE PADRAO):
+  Pergunta: "Sao condicoes basicas de armazenamento de medicamentos, excepto:"
+  Alianea A: "Os medicamentos devem ser armazenados sobre estrados ou prateleiras;"
+  Alianea B: "Os medicamentos devem ser armazenados em locais secos e nao diretamente no chao;"
+  Alianea C: "Os medicamentos devem ser armazenados e encostados nas paredes para evitar que caiam;" (Correta pois e falsa)
+  ... e assim por diante ate a E.
 
   Retorne apenas um JSON valido seguindo estritamente este formato:
   {
@@ -33,12 +39,13 @@ export const buildQuestionsPrompt = ({
       {
         "question": "Texto da pergunta",
         "alternatives": [
-          {"text": "Texto da alternativa", "isCorrect": false},
-          {"text": "Texto da alternativa", "isCorrect": true},
-          {"text": "Texto da alternativa", "isCorrect": false},
-          {"text": "Texto da alternativa", "isCorrect": false}
+          {"text": "Opcao A", "isCorrect": false},
+          {"text": "Opcao B", "isCorrect": false},
+          {"text": "Opcao C", "isCorrect": true},
+          {"text": "Opcao D", "isCorrect": false},
+          {"text": "Opcao E", "isCorrect": false}
         ],
-        "explanation": "Explicacao detalhada de por que a alternativa correta e a certa e as outras estao erradas.",
+        "explanation": "Explicacao tecnica detalhada.",
         "difficulty": "${difficulty}"
       }
     ]

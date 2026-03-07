@@ -180,6 +180,21 @@ CREATE TABLE IF NOT EXISTS study_plans (
   generated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
 
+-- 14. Battle Matches (Modo Batalha XP Plus)
+CREATE TABLE IF NOT EXISTS battle_matches (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  challenger_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  opponent_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  area_id UUID REFERENCES areas(id) ON DELETE CASCADE,
+  status TEXT DEFAULT 'pending', -- pending, active, completed, expired
+  challenger_score INT DEFAULT 0,
+  opponent_score INT DEFAULT 0,
+  winner_id UUID REFERENCES profiles(id),
+  xp_stake INT DEFAULT 50,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
+  completed_at TIMESTAMP WITH TIME ZONE
+);
+
 -- INITIAL DATA SEEDING
 INSERT INTO areas (name, description) VALUES
 (U&'Farm\00E1cia', U&'\00C1rea focada em medicamentos, farmacologia e assist\00EAncia farmac\00EAutica.'),
@@ -709,7 +724,7 @@ BEGIN
     (q_id, 'Identificar fatores que possam levar ao aparecimento de reacoes adversas;', FALSE),
     (q_id, 'Melhorar a conduta terapeutica do medico;', FALSE),
     (q_id, 'Modificar as prescricoes medicas', TRUE),
-    (q_id, 'Identificar as Interacoes medicamentosa e incompatibilidades', FALSE)
+    (q_id, 'Identificar as Interacoes medicamentosa e incompatibilidades', FALSE),
     (q_id, 'Cooperar sempre com a equipe de enfermagem e medica', FALSE);
 
     -- Q26
