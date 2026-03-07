@@ -265,6 +265,8 @@ UNION ALL
 SELECT id, U&'Legisla\00E7\00E3o Farmac\00EAutica' FROM areas WHERE name = U&'Farm\00E1cia'
 UNION ALL
 SELECT id, U&'Farm\00E1cia Cl\00EDnica' FROM areas WHERE name = U&'Farm\00E1cia'
+UNION ALL
+SELECT id, U&'Gest\00E3o e Assist\00EAncia Farmac\00EAutica' FROM areas WHERE name = U&'Farm\00E1cia'
 ON CONFLICT (area_id, name) DO NOTHING;
 
 -- Seed Topics for Enfermagem
@@ -620,3 +622,138 @@ WITH CHECK (
   bucket_id = 'payment-proofs'
   AND (storage.foldername(name))[1] = auth.uid()::text
 );
+-- NEW QUESTIONS FROM REAL PHARMACY EXAM
+DO $$
+DECLARE
+    topic_id_geral UUID;
+    topic_id_gestao UUID;
+    topic_id_clinica UUID;
+    q_id UUID;
+BEGIN
+    SELECT id INTO topic_id_geral FROM topics WHERE name = 'Farmacologia Geral' LIMIT 1;
+    SELECT id INTO topic_id_gestao FROM topics WHERE name = U&'Gest\00E3o e Assist\00EAncia Farmac\00EAutica' LIMIT 1;
+    SELECT id INTO topic_id_clinica FROM topics WHERE name = U&'Farm\00E1cia Cl\00EDnica' LIMIT 1;
+
+    -- Q13
+    INSERT INTO questions (topic_id, content, difficulty, exam_year) 
+    VALUES (topic_id_geral, '...um efeito farmacologico de accao mais rapida, assinale a verdadeira:', 'easy', 2024)
+    RETURNING id INTO q_id;
+    INSERT INTO alternatives (question_id, content, is_correct) VALUES
+    (q_id, 'Nebulizadores', TRUE),
+    (q_id, 'Capsulas', FALSE),
+    (q_id, 'Comprimidos', FALSE),
+    (q_id, 'Pomadas', FALSE),
+    (q_id, 'Supositorios', FALSE);
+    INSERT INTO question_explanations (question_id, content) VALUES (q_id, 'Nebulizadores permitem a absorcao direta pelos alveolos pulmonares, garantindo um efeito sistemico ou local muito mais rapido que a via oral ou topica.');
+
+    -- Q14
+    INSERT INTO questions (topic_id, content, difficulty, exam_year) 
+    VALUES (topic_id_geral, 'Sao formas farmaceuticas, as seguintes afirmacoes, Excepto:', 'easy', 2024)
+    RETURNING id INTO q_id;
+    INSERT INTO alternatives (question_id, content, is_correct) VALUES
+    (q_id, 'Termometros', TRUE),
+    (q_id, 'Comprimidos', FALSE),
+    (q_id, 'Suspensoes', FALSE),
+    (q_id, 'Supositorios', FALSE),
+    (q_id, 'Ampolas', FALSE);
+
+    -- Q15
+    INSERT INTO questions (topic_id, content, difficulty, exam_year) 
+    VALUES (topic_id_gestao, 'O Processo de selecao de medicamentos deve ser, Assinale a falsa:', 'medium', 2024)
+    RETURNING id INTO q_id;
+    INSERT INTO alternatives (question_id, content, is_correct) VALUES
+    (q_id, 'Dinamico', FALSE),
+    (q_id, 'Continuo', FALSE),
+    (q_id, 'Multidisciplinar', FALSE),
+    (q_id, 'Exclusivo dos farmaceuticos', TRUE),
+    (q_id, 'Exclusivo dos medicos', FALSE);
+
+    -- Q16
+    INSERT INTO questions (topic_id, content, difficulty, exam_year) 
+    VALUES (topic_id_gestao, 'Sao condicoes basicas de armazenamento de medicamentos, excepto:', 'medium', 2024)
+    RETURNING id INTO q_id;
+    INSERT INTO alternatives (question_id, content, is_correct) VALUES
+    (q_id, 'Os medicamentos devem ser armazenados sobre estrados ou prateleiras;', FALSE),
+    (q_id, 'Os medicamentos devem ser armazenados em locais secos e nao diretamente no chao;', FALSE),
+    (q_id, 'Os medicamentos devem ser armazenados e encostados nas paredes para evitar que caiam;', TRUE),
+    (q_id, 'Os medicamentos devem ser armazenados em locais que nao receba luz direta do sol;', FALSE),
+    (q_id, 'Os medicamentos devem ser armazenados na farmacia central', FALSE);
+
+    -- Q17
+    INSERT INTO questions (topic_id, content, difficulty, exam_year) 
+    VALUES (topic_id_gestao, 'Sao os elementos e previsao de stock, assinale a falsa:', 'medium', 2024)
+    RETURNING id INTO q_id;
+    INSERT INTO alternatives (question_id, content, is_correct) VALUES
+    (q_id, 'Consumo medio mensal', FALSE),
+    (q_id, 'Stock minimo ou de seguranca', FALSE),
+    (q_id, 'Tempo de abastecimento ou reposicao', FALSE),
+    (q_id, 'Tempo de validade', TRUE),
+    (q_id, 'Data de validade', FALSE);
+
+    -- Q18
+    INSERT INTO questions (topic_id, content, difficulty, exam_year) 
+    VALUES (topic_id_clinica, 'Na gestao farmaceutica tera aprendido o atendimento aos servicos enfermagem em unidose, assinale a verdadeira:', 'medium', 2024)
+    RETURNING id INTO q_id;
+    INSERT INTO alternatives (question_id, content, is_correct) VALUES
+    (q_id, 'Entrega da medicacao para o doente de cada vez que a enfermaria precise', FALSE),
+    (q_id, 'Entrega da medicacao para o doente de uma vez a enfermaria', FALSE),
+    (q_id, 'Entrega da medicacao para o doente de forma faseada a enfermaria garantir maior eficacia terapeutica', FALSE),
+    (q_id, 'Entrega da medicacao para o doente a enfermaria em cada turno nas 24h', TRUE),
+    (q_id, 'Criar farmacia satelite nos servicos', FALSE);
+
+    -- Q25
+    INSERT INTO questions (topic_id, content, difficulty, exam_year) 
+    VALUES (topic_id_clinica, 'Sao objetivos de analise das prescricoes medicas por parte do farmaceutico, excepto:', 'medium', 2024)
+    RETURNING id INTO q_id;
+    INSERT INTO alternatives (question_id, content, is_correct) VALUES
+    (q_id, 'Identificar fatores que possam levar ao aparecimento de reacoes adversas;', FALSE),
+    (q_id, 'Melhorar a conduta terapeutica do medico;', FALSE),
+    (q_id, 'Modificar as prescricoes medicas', TRUE),
+    (q_id, 'Identificar as Interacoes medicamentosa e incompatibilidades', FALSE)
+    (q_id, 'Cooperar sempre com a equipe de enfermagem e medica', FALSE);
+
+    -- Q26
+    INSERT INTO questions (topic_id, content, difficulty, exam_year) 
+    VALUES (topic_id_gestao, 'Criterio a ter em conta para selecionar os medicamentos padronizados de um Hospital, assinale a verdadeira:', 'medium', 2024)
+    RETURNING id INTO q_id;
+    INSERT INTO alternatives (question_id, content, is_correct) VALUES
+    (q_id, 'Selecionar entre medicamentos, os de menor seguranca obtidos nos ensaios clinicos;', FALSE),
+    (q_id, 'Entre medicamentos da mesma eficacia, selecionar os de menor indice terapeutica;', FALSE),
+    (q_id, 'Entre medicamentos do mesmo grupo selecionar todos de elevada potencia;', FALSE),
+    (q_id, 'Selecionar preferentemente medicamentos existentes no mercado internacional.', FALSE),
+    (q_id, 'Selecionar os medicamentos tendo em conta o principio ativo', TRUE);
+
+    -- Q27
+    INSERT INTO questions (topic_id, content, difficulty, exam_year) 
+    VALUES (topic_id_clinica, 'Fatores fundamentais causadores de problemas na farmacoterapia dum hospital, assinale a falsa:', 'medium', 2024)
+    RETURNING id INTO q_id;
+    INSERT INTO alternatives (question_id, content, is_correct) VALUES
+    (q_id, 'Sistemas deficientes de distribuicao e de administracao de medicamentos', FALSE),
+    (q_id, 'Aplicacao adequada da informacao do produto no que se refere a sua preparacao e administracao', TRUE),
+    (q_id, 'Informacao inadequada do medico prescritor', FALSE),
+    (q_id, 'Consumo excessivo do tempo da enfermagem em atividades relacionadas aos medicamentos', FALSE),
+    (q_id, 'Qualidade dos profissionais', FALSE);
+
+    -- Q28
+    INSERT INTO questions (topic_id, content, difficulty, exam_year) 
+    VALUES (topic_id_geral, 'Fatores que influenciam na escolha da via de administracao dos farmacos, assinale a falsa:', 'easy', 2024)
+    RETURNING id INTO q_id;
+    INSERT INTO alternatives (question_id, content, is_correct) VALUES
+    (q_id, 'Estado do paciente', FALSE),
+    (q_id, 'Tipo de efeito que se pretende', FALSE),
+    (q_id, 'Diminuir a toxicidade', TRUE),
+    (q_id, 'Caracteristicas fisico-quimicas do farmaco', FALSE),
+    (q_id, 'Diagnostico do doente', FALSE);
+
+    -- Q29
+    INSERT INTO questions (topic_id, content, difficulty, exam_year) 
+    VALUES (topic_id_gestao, 'O prazo de validade dos medicamentos e um parametro muito importante controlar. Assinale a verdadeira:', 'easy', 2024)
+    RETURNING id INTO q_id;
+    INSERT INTO alternatives (question_id, content, is_correct) VALUES
+    (q_id, 'A data de expiracao indica 5% do principio ativo', FALSE),
+    (q_id, 'Apos esta data, o medicamento pode ser utilizado por mais 3 meses', FALSE),
+    (q_id, 'Apos esta data, o medicamento pode ser utilizado por mais 1 mes', FALSE),
+    (q_id, 'Apos esta data, o medicamento pode ser utilizado com autorizacao do Laboratorio de controlo de qualidade', FALSE),
+    (q_id, 'Apos essa data deve-se notificar as inspecoes de saude.', TRUE);
+
+END$$;

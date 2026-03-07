@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { supabase } from '../lib/supabase';
+import { playSuccessSound, playErrorSound } from '../lib/sounds';
 import { getDifficultyLabel } from '../lib/labels';
 import {
   calculateTrainingXp,
@@ -241,6 +242,12 @@ export default function Training() {
 
     const selectedAlternative = currentQ?.alternatives?.find((alt: any) => alt.id === pendingAlt);
     const isCorrect = Boolean(selectedAlternative?.is_correct);
+
+    if (isCorrect) {
+      playSuccessSound();
+    } else {
+      playErrorSound();
+    }
 
     setSelectedAlt(pendingAlt);
     setIsAnswered(true);
@@ -665,10 +672,10 @@ export default function Training() {
                     }}
                     disabled={!hasPremiumAccess && difficulty === 'hard'}
                     className={`relative rounded-2xl px-3 py-3 text-sm font-semibold transition ${selectedDifficulty === difficulty
-                        ? 'bg-emerald-600 text-white'
-                        : !hasPremiumAccess && difficulty === 'hard'
-                          ? 'cursor-pointer border border-slate-200 bg-slate-100 text-slate-400'
-                          : 'border border-slate-200 bg-slate-50 text-slate-700'
+                      ? 'bg-emerald-600 text-white'
+                      : !hasPremiumAccess && difficulty === 'hard'
+                        ? 'cursor-pointer border border-slate-200 bg-slate-100 text-slate-400'
+                        : 'border border-slate-200 bg-slate-50 text-slate-700'
                       }`}
                   >
                     <span className="inline-flex items-center gap-2">

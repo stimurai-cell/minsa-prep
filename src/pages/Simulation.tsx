@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { supabase } from '../lib/supabase';
+import { playSuccessSound, playErrorSound } from '../lib/sounds';
 import {
   calculateSimulationXp,
   getAlternativeLabel,
@@ -317,6 +318,12 @@ export default function Simulation() {
 
     const selectedAlternative = currentQ.alternatives.find((alt: any) => alt.id === pendingAlt);
     const isCorrect = Boolean(selectedAlternative?.is_correct);
+
+    if (isCorrect) {
+      playSuccessSound();
+    } else {
+      playErrorSound();
+    }
 
     setAnswers((prev) => ({ ...prev, [currentQ.id]: pendingAlt }));
     setSelectedAlt(pendingAlt);
