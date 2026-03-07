@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Crown, Lock, Rocket, ShieldCheck, Star, Upload, Wallet } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { CheckCircle2, Crown, Lock, Rocket, ShieldCheck, Star, Upload, Wallet, Copy } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { premiumPlans } from '../lib/premium';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
@@ -36,6 +36,8 @@ const paymentMethods = [
   { bank: 'Atlantico', value: '0055-0000-1903-4290-1018-7' },
   { bank: 'BIC', value: '0051-0000-4332-6097-1014-5' },
   { bank: 'SOL', value: '0044-0000-3489-7416-1018-5' },
+  // IBAN example (incluir caso precise pagamento internacional)
+  { bank: 'IBAN (EUR)', value: 'AO06 0000 0000 0000 0000 0000 0' },
 ];
 
 type PaymentRequest = {
@@ -66,12 +68,32 @@ export default function Premium() {
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [latestRequest, setLatestRequest] = useState<PaymentRequest | null>(null);
+  const [copiedBank, setCopiedBank] = useState<string | null>(null);
+  const copyToClipboard = async (val: string) => {
+    try {
+      await navigator.clipboard.writeText(val);
+      setCopiedBank(val);
+      setTimeout(() => setCopiedBank(null), 2500);
+    } catch (err) {
+      alert('Não foi possível copiar para a área de transferência.');
+    }
+  };
+  const [searchParams] = useSearchParams();
 
   const selectedPlan = paidPlans.find((plan) => plan.id === selectedPlanId) || paidPlans[0];
 
   useEffect(() => {
     setPayerName(profile?.full_name || '');
   }, [profile?.full_name]);
+
+  useEffect(() => {
+    // If someone links to /premium?plan=focus, preselect and scroll to payment
+    const planFromQuery = searchParams.get('plan');
+    if (planFromQuery) {
+      // small delay to allow DOM to render
+      setTimeout(() => selectPlanAndScroll(planFromQuery), 200);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const fetchLatestRequest = async () => {
@@ -294,6 +316,31 @@ export default function Premium() {
               </p>
             </div>
 
+            <div className="mt-4 rounded-[1.6rem] border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-700">Formas de pagamento</p>
+              <p className="mt-2 text-sm text-slate-600">Transferência bancária (copie o número / IBAN desejado e cole no seu app bancário).</p>
+              <div className="mt-3 space-y-2">
+                {paymentMethods.map((m) => (
+                  <div key={m.bank} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-800">{m.bank}</div>
+                      <div className="text-xs text-slate-600">{m.value}</div>
+                    </div>
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(m.value)}
+                        className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white"
+                      >
+                        <Copy className="h-3 w-3" />
+                        {copiedBank === m.value ? 'Copiado' : 'Copiar'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {latestRequest && (
               <div className="mt-4 rounded-[1.4rem] border border-slate-200 bg-slate-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ultimo pedido</p>
@@ -394,7 +441,26 @@ export default function Premium() {
                 {paymentMethods.map((method) => (
                   <div key={method.bank} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{method.bank}</p>
-                    <p className="mt-1 break-all text-sm font-bold text-slate-900">{method.value}</p>
+                      <div className="mt-1 flex items-center justify-between gap-3">
+                        <p className="break-all text-sm font-bold text-slate-900">{method.value}</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            try {
+                              navigator.clipboard.writeText(method.value);
+                              setCopiedBank(method.bank);
+                              setTimeout(() => setCopiedBank(null), 2500);
+                            } catch (e) {
+                              // fallback alert
+                              alert('Copiar nao funciona no seu navegador. Copie manualmente: ' + method.value);
+                            }
+                          }}
+                          className="ml-2 inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                        >
+                          <Copy className="h-4 w-4" />
+                          {copiedBank === method.bank ? 'Copiado' : 'Copiar'}
+                        </button>
+                      </div>
                   </div>
                 ))}
               </div>

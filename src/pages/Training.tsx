@@ -600,9 +600,6 @@ export default function Training() {
               Modo treino
             </div>
             <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-900 md:text-4xl">Pratique, ganhe XP e avance</h1>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              Agora o treino entra num modo focado: sem menu inferior, uma questão por vez, correção imediata e barra de evolução no topo.
-            </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -656,17 +653,35 @@ export default function Training() {
                   <button
                     key={difficulty}
                     type="button"
-                    onClick={() => hasPremiumAccess && setSelectedDifficulty(difficulty)}
+                    onClick={() => {
+                      if (hasPremiumAccess) {
+                        setSelectedDifficulty(difficulty);
+                        return;
+                      }
+                      // non-premium: only medium is allowed; clicking other difficulties goes to payment
+                      if (difficulty !== 'medium') {
+                        // recommend the main paid plan (focus)
+                        navigate(`/premium?plan=focus#payment-section`);
+                        return;
+                      }
+                    }}
                     disabled={!hasPremiumAccess && difficulty !== 'medium'}
-                    className={`rounded-2xl px-3 py-3 text-sm font-semibold transition ${
+                    className={`relative rounded-2xl px-3 py-3 text-sm font-semibold transition ${
                       selectedDifficulty === difficulty
                         ? 'bg-emerald-600 text-white'
                         : !hasPremiumAccess && difficulty !== 'medium'
-                          ? 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400'
+                          ? 'cursor-pointer border border-slate-200 bg-slate-100 text-slate-400'
                           : 'border border-slate-200 bg-slate-50 text-slate-700'
                     }`}
                   >
-                    {getDifficultyLabel(difficulty)}
+                    <span className="inline-flex items-center gap-2">
+                      {getDifficultyLabel(difficulty)}
+                      {!hasPremiumAccess && difficulty !== 'medium' && (
+                        <span className="ml-2 inline-flex items-center rounded-full bg-amber-200/40 px-2 py-0.5 text-xs font-semibold text-amber-900">
+                          Premium
+                        </span>
+                      )}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -696,20 +711,7 @@ export default function Training() {
           </div>
         </div>
 
-          <div className="grid gap-4">
-          <div className="rounded-[1.7rem] border border-lime-200 bg-lime-50 p-5">
-            <p className="text-sm font-bold text-lime-700">Fluxo focado</p>
-            <p className="mt-2 text-sm leading-6 text-slate-700">Sem menu inferior durante a resolução e com CTA sempre visível no fim da tela.</p>
-          </div>
-          <div className="rounded-[1.7rem] border border-sky-200 bg-sky-50 p-5">
-            <p className="text-sm font-bold text-sky-700">Correção imediata</p>
-            <p className="mt-2 text-sm leading-6 text-slate-700">A resposta certa e errada aparece logo na mesma página, antes da próxima questão.</p>
-          </div>
-          <div className="rounded-[1.7rem] border border-amber-200 bg-amber-50 p-5">
-            <p className="text-sm font-bold text-amber-700">Progresso em tempo real</p>
-            <p className="mt-2 text-sm leading-6 text-slate-700">Barra superior com andamento da sessão e contadores de certas e erradas.</p>
-          </div>
-        </div>
+          {/* painel secundário removido para deixar a página menos carregada (fluxo focado, correção imediata e progresso removidos) */}
       </section>
     </div>
   );

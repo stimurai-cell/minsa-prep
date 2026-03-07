@@ -685,15 +685,7 @@ export default function Simulation() {
           </div>
         </div>
 
-        <div className="rounded-[1.75rem] border border-blue-100 bg-blue-50 p-5 text-blue-900 shadow-[0_18px_50px_-40px_rgba(59,130,246,0.45)]">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="mt-1 h-5 w-5" />
-            <div>
-              <h3 className="font-bold">Resumo</h3>
-              <p className="mt-2 text-sm leading-6">30 questões com tempo e progresso visíveis — formato pensado para treinar desempenho em condições reais.</p>
-            </div>
-          </div>
-        </div>
+        {/* resumo removido para simplificar a página de prova */}
       </section>
     </div>
   );

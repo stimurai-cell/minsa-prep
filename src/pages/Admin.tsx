@@ -61,6 +61,7 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'dashboard');
   const [stats, setStats] = useState({ users: 0, questions: 0, premium: 0, pendingPayments: 0 });
   const [userList, setUserList] = useState<any[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [contentCatalog, setContentCatalog] = useState<any[]>([]);
@@ -103,13 +104,23 @@ export default function Admin() {
     setLoadingUsers(true);
     const { data, error } = await supabase
       .from('profiles')
-      .select('*, areas(name)')
+      .select('*, areas(name), student_number, last_active')
       .order('created_at', { ascending: false });
     
     if (!error && data) {
       setUserList(data);
     }
     setLoadingUsers(false);
+  };
+
+  const fetchOnlineUsers = async () => {
+    try {
+      // Assume we have a last_active or is_online flag in profiles or activity table
+      const { data } = await supabase.from('profiles').select('id, full_name, student_number, last_active').order('last_active', { ascending: false }).limit(50);
+      setOnlineUsers(data || []);
+    } catch (err) {
+      console.error('Error fetching online users', err);
+    }
   };
 
   const [geminiModel, setGeminiModel] = useState('');
@@ -271,6 +282,12 @@ export default function Admin() {
   }, [activeTab]);
 
   useEffect(() => {
+    if (activeTab === 'dashboard') {
+      void fetchOnlineUsers();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
     if (activeTab === 'payments' || activeTab === 'dashboard') {
       void fetchPaymentRequests();
     }
@@ -294,6 +311,7 @@ export default function Admin() {
       void fetchStats();
       if (activeTab === 'payments' || activeTab === 'dashboard') {
         void fetchPaymentRequests();
+        void fetchOnlineUsers();
       }
     }, 30000);
 
@@ -306,6 +324,22 @@ export default function Admin() {
         <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center">
           <Settings className="w-8 h-8" />
         </div>
+        {onlineUsers && onlineUsers.length > 0 && (
+          <div className="rounded-[1.6rem] border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-sm font-semibold text-gray-700">Usuários recentes (últimos 50)</p>
+            <div className="mt-3 grid gap-2">
+              {onlineUsers.map((u: any) => (
+                <div key={u.id} className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{u.full_name}</div>
+                    <div className="text-xs text-gray-500">{u.student_number || '—'}</div>
+                  </div>
+                  <div className="text-xs text-gray-500">{u.last_active ? new Date(u.last_active).toLocaleString() : '—'}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <h2 className="text-2xl font-bold text-gray-900">Acesso Negado</h2>
         <p className="text-gray-500">Você não tem permissão para acessar esta área.</p>
         <p className="text-xs text-gray-400 max-w-xs">
@@ -1098,20 +1132,27 @@ export default function Admin() {
                 <tr>
                   <th className="px-6 py-3 font-medium">Nome</th>
                   <th className="px-6 py-3 font-medium">Cargo</th>
+                  <th className="px-6 py-3 font-medium">Nº Estudante</th>
                   <th className="px-6 py-3 font-medium">Área Atual</th>
+                  <th className="px-6 py-3 font-medium">Últ. ativo</th>
                   <th className="px-6 py-3 font-medium">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loadingUsers ? (
-                  <tr><td colSpan={4} className="px-6 py-12 text-center text-gray-500">Carregando...</td></tr>
+                  <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">Carregando...</td></tr>
                 ) : userList.length === 0 ? (
-                  <tr><td colSpan={4} className="px-6 py-12 text-center text-gray-500">Nenhum usuário encontrado.</td></tr>
+                  <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">Nenhum usuário encontrado.</td></tr>
                 ) : (
                   userList.map((u) => (
                     <tr key={u.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
-                        <p className="text-sm font-medium text-gray-900">{u.full_name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-gray-900">{u.full_name}</p>
+                          {u.last_active && (Date.now() - new Date(u.last_active).getTime() < 5 * 60 * 1000) && (
+                            <span className="h-2 w-2 rounded-full bg-emerald-500" title="Ativo agora" />
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500">{u.id.substring(0, 8)}...</p>
                       </td>
                       <td className="px-6 py-4">
@@ -1126,7 +1167,13 @@ export default function Admin() {
                         </select>
                       </td>
                       <td className="px-6 py-4">
+                        <span className="text-sm text-gray-700">{u.student_number || '—'}</span>
+                      </td>
+                      <td className="px-6 py-4">
                         <span className="text-sm text-gray-700">{u.areas?.name || 'Não selecionada'}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm text-gray-600">{u.last_active ? new Date(u.last_active).toLocaleString() : '—'}</span>
                       </td>
                       <td className="px-6 py-4">
                         <select 
@@ -1137,6 +1184,22 @@ export default function Admin() {
                           <option value="">Nenhuma</option>
                           {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                         </select>
+                        <div className="mt-2">
+                          <button type="button" onClick={async () => {
+                            try {
+                              const { data } = await supabase.from('activity_logs').select('*').eq('user_id', u.id).order('activity_date', { ascending: false }).limit(20);
+                              if (!data || data.length === 0) {
+                                alert('Sem atividade recente para este usuário.');
+                                return;
+                              }
+                              const lines = (data || []).map((r: any) => `${r.activity_date} - ${r.activity_type} (${r.count || 1})`).join('\n');
+                              alert(lines);
+                            } catch (err) {
+                              console.error(err);
+                              alert('Erro ao buscar atividade. Veja console.');
+                            }
+                          }} className="mt-2 text-xs text-emerald-600 hover:underline">Ver atividade</button>
+                        </div>
                       </td>
                     </tr>
                   ))

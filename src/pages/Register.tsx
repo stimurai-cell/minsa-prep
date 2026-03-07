@@ -12,6 +12,7 @@ export default function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [areaId, setAreaId] = useState('');
   const [prepTime, setPrepTime] = useState('1');
+  const [studentNumber, setStudentNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -27,6 +28,7 @@ export default function Register() {
     const profilePayload = {
       id: userId,
       full_name: fullName,
+      student_number: studentNumber || null,
       selected_area_id: areaId || null,
       preparation_time_months: parseInt(prepTime, 10),
     };
@@ -218,6 +220,16 @@ export default function Register() {
                   Nenhuma area encontrada. Execute o script SQL no Supabase para configurar o banco.
                 </p>
               )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Número do estudante (opcional)</label>
+              <input
+                type="text"
+                value={studentNumber}
+                onChange={(e) => setStudentNumber(e.target.value)}
+                className="mt-1 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+              />
             </div>
 
             <div>
