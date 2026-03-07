@@ -96,13 +96,13 @@ export default function Simulation() {
   }, [answers, questions.length, sessionActive, sessionStartedAt]);
 
   const selectedAreaName = useMemo(
-    () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Area nao definida',
+    () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Área não definida',
     [areas, profile?.selected_area_id]
   );
 
   const currentQ = questions[currentQIndex];
   const currentExplanation =
-    currentQ?.question_explanations?.[0]?.content || 'Continue firme. A resposta correta ja ficou destacada.';
+    currentQ?.question_explanations?.[0]?.content || 'Continue firme. A resposta correta já ficou destacada.';
   const correctAnswers = resultHistory.filter(Boolean).length;
   const wrongAnswers = resultHistory.length - correctAnswers;
   const progressPercent =
@@ -145,7 +145,7 @@ export default function Simulation() {
         .eq('area_id', profile.selected_area_id);
 
       if (!topics || topics.length === 0) {
-        alert('Ainda nao existem topicos cadastrados para a sua area.');
+        alert('Ainda não existem tópicos cadastrados para a sua área.');
         navigate('/simulation', { replace: true });
         return;
       }
@@ -177,7 +177,7 @@ export default function Simulation() {
         setSessionStartedAt(Date.now());
         setShowIntro(true);
       } else {
-        alert('Nao ha questoes suficientes para esta simulacao de prova.');
+        alert('Não há questões suficientes para esta simulação de prova.');
         navigate('/simulation', { replace: true });
       }
     } catch (error) {
@@ -286,7 +286,7 @@ export default function Simulation() {
 
           if (error) throw error;
           if (recent && recent.length >= 1) {
-            alert('No gratuito, voce pode fazer 1 simulacao por semana. Suba para Premium para fazer mais.');
+            alert('No gratuito, você pode fazer 1 simulação por semana. Faça upgrade para Premium para fazer mais.');
             return;
           }
 
@@ -303,7 +303,7 @@ export default function Simulation() {
   };
 
   const leaveSimulationSession = () => {
-    if (window.confirm('Deseja sair desta prova agora? O progresso desta sessao sera perdido.')) {
+    if (window.confirm('Deseja sair desta prova agora? O progresso desta sessão será perdido.')) {
       resetSimulationSession();
       navigate('/simulation', { replace: true });
     }

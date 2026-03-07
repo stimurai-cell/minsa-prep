@@ -121,10 +121,10 @@ export default function Dashboard() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">Painel do estudante</p>
             <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-900 md:text-4xl">
-              Ola, {profile?.full_name?.split(' ')[0]}
+              Olá, {profile?.full_name?.split(' ')[0]}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 md:text-base">
-              Entre, continue o seu ritmo, ganhe XP e acompanhe o progresso da sua area.
+              Entre, continue o seu ritmo, ganhe XP e acompanhe o progresso da sua área.
             </p>
 
             <div className="mt-5 inline-flex max-w-full items-center gap-2 rounded-full border border-emerald-200 bg-white/80 px-4 py-2 text-sm font-semibold text-emerald-800">
@@ -138,7 +138,7 @@ export default function Dashboard() {
               <p className="text-sm font-medium text-slate-500">Plano</p>
               <p className="mt-2 flex items-center gap-2 text-2xl font-black text-slate-900">
                 <Target className="h-5 w-5 text-emerald-600" />
-                {profile?.preparation_time_months} {profile?.preparation_time_months === 1 ? 'mes' : 'meses'}
+                {profile?.preparation_time_months} {profile?.preparation_time_months === 1 ? 'mês' : 'meses'}
               </p>
             </div>
             <div className="rounded-[1.6rem] border border-white/60 bg-white/90 p-4 md:p-5">
@@ -190,7 +190,7 @@ export default function Dashboard() {
               <BookOpen className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-500">Area ativa</p>
+              <p className="text-sm font-medium text-slate-500">Área ativa</p>
               <p className="text-xl font-black text-slate-900">{areaName}</p>
             </div>
           </div>
@@ -201,9 +201,9 @@ export default function Dashboard() {
         <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)] md:p-6">
           <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-5">
             <div>
-              <h2 className="text-xl font-black text-slate-900">Sessao recomendada</h2>
+              <h2 className="text-xl font-black text-slate-900">Sessão recomendada</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Conteudo filtrado automaticamente para a sua area de estudo.
+                Conteúdo filtrado automaticamente para a sua área de estudo.
               </p>
             </div>
             <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-orange-700">
@@ -216,7 +216,7 @@ export default function Dashboard() {
             preparamos um percurso de treino centrado na area {areaName}.
           </p>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
             <Link
               to="/training"
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 text-sm font-semibold text-white transition hover:bg-emerald-700"
@@ -225,11 +225,18 @@ export default function Dashboard() {
               Iniciar treino
             </Link>
             <Link
+              to="/onboarding-quiz"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-600 bg-white px-6 py-4 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+            >
+              <PlayCircle className="h-5 w-5" />
+              Quiz rápido
+            </Link>
+            <Link
               to="/simulation"
               className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-6 py-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
             >
               <Clock3 className="h-5 w-5" />
-              Fazer simulacao de prova
+              Fazer simulação de prova
             </Link>
           </div>
         </div>

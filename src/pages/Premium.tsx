@@ -51,6 +51,14 @@ export default function Premium() {
   const isPremium = profile?.role === 'premium' || profile?.role === 'admin';
   const paidPlans = useMemo(() => premiumPlans.filter((plan) => plan.priceAmount > 0), []);
   const [selectedPlanId, setSelectedPlanId] = useState(paidPlans[0]?.id || 'focus');
+  
+  const selectPlanAndScroll = (planId: string) => {
+    setSelectedPlanId(planId);
+    setTimeout(() => {
+      const el = document.getElementById('payment-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 200);
+  };
   const [payerName, setPayerName] = useState(profile?.full_name || '');
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentNote, setPaymentNote] = useState('');
@@ -87,7 +95,7 @@ export default function Premium() {
 
   const handleSubmitPaymentRequest = async () => {
     if (!profile?.id || !selectedPlan || !payerName.trim() || !paymentReference.trim() || !proofFile) {
-      alert('Preencha o nome, a referencia e anexe o comprovativo.');
+      alert('Preencha o nome, a referência e anexe o comprovativo.');
       return;
     }
 
@@ -126,7 +134,7 @@ export default function Premium() {
       setPaymentNote('');
       setProofFile(null);
       setSuccessMessage(
-        'Comprovativo enviado. O pedido vai ser revisto o mais rapido possivel e, logo em seguida, o plano escolhido sera ativado.'
+        'Comprovativo enviado. O pedido será revisto o mais rápido possível e, logo em seguida, o plano escolhido será ativado.'
       );
     } catch (error: any) {
       alert(error?.message || 'Erro ao enviar comprovativo.');
@@ -200,7 +208,7 @@ export default function Premium() {
           {!isPremium && (
             <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800">
               <Lock className="h-4 w-4" />
-              O foco comercial deve empurrar o plano do meio
+              Plano recomendado
             </div>
           )}
         </div>
@@ -246,7 +254,7 @@ export default function Premium() {
 
               <button
                 type="button"
-                onClick={() => plan.priceAmount > 0 && setSelectedPlanId(plan.id)}
+                onClick={() => plan.priceAmount > 0 && selectPlanAndScroll(plan.id)}
                 className={`mt-5 w-full rounded-2xl px-4 py-4 text-sm font-black uppercase tracking-[0.12em] transition ${
                   plan.highlight
                     ? 'bg-[linear-gradient(90deg,#facc15_0%,#34d399_100%)] text-slate-950'
@@ -256,8 +264,8 @@ export default function Premium() {
                 {plan.id === 'starter'
                   ? 'Plano atual de entrada'
                   : isPremium
-                    ? 'Plano pronto para ativacao comercial'
-                    : 'Pedir activacao premium'}
+                    ? 'Plano pronto para ativação'
+                    : 'Pedir ativação Premium'}
               </button>
             </div>
           ))}
@@ -265,7 +273,7 @@ export default function Premium() {
       </section>
 
       {!isPremium && selectedPlan && (
-        <section className="grid gap-5 xl:grid-cols-[1fr_0.95fr]">
+        <section id="payment-section" className="grid gap-5 xl:grid-cols-[1fr_0.95fr]">
           <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.35)] md:p-6">
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600">
@@ -279,7 +287,10 @@ export default function Premium() {
 
             <div className="mt-5 rounded-[1.6rem] border border-amber-200 bg-amber-50 p-4">
               <p className="text-sm font-semibold text-amber-900">
-                Depois de fazer o pagamento, envie o comprovativo aqui. O pedido sera revisto o mais rapido que for possivel e, logo em seguida, tera o plano escolhido ativo.
+                Depois de fazer o pagamento, envie o comprovativo aqui. O pedido será revisto o mais rápido possível e, logo em seguida, o plano escolhido será ativado.
+              </p>
+                  <p className="mt-3 text-sm text-amber-900">
+                Dica: Escolha o plano acima e clique em "Pedir ativação Premium" para ir diretamente a este formulário.
               </p>
             </div>
 
@@ -326,17 +337,17 @@ export default function Premium() {
                 />
               </div>
               <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">Referencia da transferencia</label>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">Referência da transferência</label>
                 <input
                   type="text"
                   value={paymentReference}
                   onChange={(e) => setPaymentReference(e.target.value)}
-                  placeholder="Ex.: referencia, terminal ou numero da operacao"
+                  placeholder="Ex.: referência, terminal ou número da operação"
                   className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
                 />
               </div>
               <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">Comprovativo</label>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">Comprovativo</label>
                 <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-600">
                   <Upload className="h-4 w-4" />
                   {proofFile ? proofFile.name : 'Selecionar imagem ou PDF do comprovativo'}
@@ -349,7 +360,7 @@ export default function Premium() {
                 </label>
               </div>
               <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">Observacao opcional</label>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">Observação opcional</label>
                 <textarea
                   rows={3}
                   value={paymentNote}
@@ -393,7 +404,7 @@ export default function Premium() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Suporte</p>
               <p className="mt-2 text-lg font-black text-slate-900">WhatsApp: 244936793706</p>
               <p className="mt-3 text-sm leading-6 text-slate-700">
-                Se o comprovativo demorar a carregar ou se a internet estiver fraca, o estudante pode pedir apoio por WhatsApp enquanto o pedido continua registado no sistema para revisao do admin.
+                Se o comprovativo demorar a carregar ou se a internet estiver fraca, o estudante pode pedir apoio por WhatsApp enquanto o pedido continua registado no sistema para revisão do admin.
               </p>
             </div>
           </div>

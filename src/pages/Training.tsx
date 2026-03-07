@@ -93,16 +93,16 @@ export default function Training() {
   }, [effectiveDifficulty, loading, questions.length, sessionActive, sessionTopicId]);
 
   const selectedAreaName = useMemo(
-    () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Area nao definida',
+    () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Área não definida',
     [areas, profile?.selected_area_id]
   );
 
   const selectedTopicName =
-    topics.find((topic) => topic.id === selectedTopic)?.name || 'Topico nao definido';
+    topics.find((topic) => topic.id === selectedTopic)?.name || 'Tópico não definido';
 
   const currentQ = questions[currentQIndex];
   const currentExplanation =
-    currentQ?.question_explanations?.[0]?.content || 'Nenhuma explicacao disponivel para esta questao.';
+    currentQ?.question_explanations?.[0]?.content || 'Nenhuma explicação disponível para esta questão.';
   const correctAnswers = resultHistory.filter(Boolean).length;
   const wrongAnswers = resultHistory.length - correctAnswers;
   const progressPercent =
@@ -161,7 +161,7 @@ export default function Training() {
         setSessionStartedAt(Date.now());
         setShowIntro(true);
       } else {
-        alert('Nenhuma questao encontrada para este topico.');
+          alert('Nenhuma questão encontrada para este tópico.');
         navigate('/training', { replace: true });
       }
     } catch (error) {
@@ -191,10 +191,10 @@ export default function Training() {
   };
 
   const startTraining = () => {
-    if (!selectedTopic) return;
+  if (!selectedTopic) return;
     const difficulty = hasPremiumAccess ? selectedDifficulty : 'medium';
 
-    // Limite para utilizadores free: 20 questoes por dia
+  // Limite para utilizadores free: 20 questões por dia
     if (!hasPremiumAccess && profile?.id) {
       const today = new Date().toISOString().slice(0, 10);
       void (async () => {
@@ -210,13 +210,13 @@ export default function Training() {
           if (error) throw error;
           const answeredToday = row ? Number(row.count || 0) : 0;
           if (answeredToday >= 20) {
-            alert('Limite diario de perguntas (20) atingido. Suba para Premium para treinar mais.');
+            alert('Limite diário de perguntas (20) atingido. Faça upgrade para Premium para treinar mais.');
             return;
           }
 
           navigate(`/training?session=1&topic=${selectedTopic}&difficulty=${difficulty}`);
         } catch (err) {
-          console.error('Erro ao verificar limite diario:', err);
+          console.error('Erro ao verificar limite diário:', err);
           navigate(`/training?session=1&topic=${selectedTopic}&difficulty=${difficulty}`);
         }
       })();
@@ -227,7 +227,7 @@ export default function Training() {
   };
 
   const leaveTrainingSession = () => {
-    if (window.confirm('Deseja sair deste treino agora? O progresso desta sessao sera perdido.')) {
+  if (window.confirm('Deseja sair deste treino agora? O progresso desta sessão será perdido.')) {
       resetTrainingSession();
       navigate('/training', { replace: true });
     }
@@ -326,8 +326,8 @@ export default function Training() {
 
     return (
       <SessionCelebration
-        title="Treino concluido!"
-        subtitle={`Voce terminou ${selectedTopicName} com ${sessionSummary.correctAnswers} acertos. O seu XP ja entrou no perfil.`}
+        title="Treino concluído!"
+        subtitle={`Você terminou ${selectedTopicName} com ${sessionSummary.correctAnswers} acertos. O seu XP já entrou no perfil.`}
         xpEarned={sessionSummary.xpEarned}
         accuracy={accuracy}
         durationSeconds={sessionSummary.durationSeconds}
@@ -337,7 +337,7 @@ export default function Training() {
           setSessionSummary(null);
           navigate('/training', { replace: true });
         }}
-        secondaryActionLabel="Treinar outro topico"
+        secondaryActionLabel="Treinar outro tópico"
         onSecondaryAction={() => {
           resetTrainingSession();
           setSelectedTopic('');
@@ -355,7 +355,7 @@ export default function Training() {
           <div className="w-full max-w-sm rounded-[2rem] border border-white/80 bg-white px-6 py-10 text-center shadow-[0_26px_70px_-42px_rgba(15,23,42,0.35)]">
             <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-500" />
             <p className="mt-5 text-lg font-black text-slate-900">A montar o seu treino</p>
-            <p className="mt-2 text-sm text-slate-500">As questoes estao a ser organizadas para caberem num fluxo rapido.</p>
+            <p className="mt-2 text-sm text-slate-500">As questões estão a ser organizadas para caberem num fluxo rápido.</p>
           </div>
         </div>
       );
@@ -402,10 +402,10 @@ export default function Training() {
                 >
                   <p className="text-3xl font-black leading-tight text-slate-800">Vamos entrar em ritmo.</p>
                   <p className="mt-3 text-lg leading-8 text-slate-600">
-                    Voce vai responder <span className="font-black text-cyan-500">{questions.length} questoes</span> de {selectedTopicName} em modo {getDifficultyLabel(selectedDifficulty).toLowerCase()}.
+                    Você vai responder <span className="font-black text-cyan-500">{questions.length} questões</span> de {selectedTopicName} em modo {getDifficultyLabel(selectedDifficulty).toLowerCase()}.
                   </p>
                   <p className="mt-2 text-base text-slate-500">
-                    Toque, confirme e receba a correcao na mesma tela antes de seguir.
+                    Toque, confirme e receba a correção na mesma tela antes de seguir.
                   </p>
                 </motion.div>
               </motion.div>

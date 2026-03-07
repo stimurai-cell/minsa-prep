@@ -11,6 +11,7 @@ import Simulation from './pages/Simulation';
 import Ranking from './pages/Ranking';
 import Admin from './pages/Admin';
 import Premium from './pages/Premium';
+import OnboardingQuiz from './pages/OnboardingQuiz';
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuthStore();
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<RootRedirect />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="onboarding-quiz" element={<OnboardingQuiz />} />
           <Route path="training" element={<Training />} />
           <Route path="simulation" element={<Simulation />} />
           <Route path="ranking" element={<Ranking />} />

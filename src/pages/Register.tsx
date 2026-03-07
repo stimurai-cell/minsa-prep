@@ -102,7 +102,8 @@ export default function Register() {
       }
 
       await checkSession();
-      navigate('/dashboard');
+      // Depois do registo, direcionar para um quiz rapido de onboarding
+      navigate('/onboarding-quiz');
     } catch (err: any) {
       const message = err?.message || 'Erro ao criar conta';
 
@@ -190,7 +191,7 @@ export default function Register() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700">Area de estudo</label>
+              <label className="block text-sm font-medium text-slate-700">Área de estudo</label>
               <select
                 required={areas.length > 0}
                 value={areaId}
@@ -198,7 +199,7 @@ export default function Register() {
                 className="mt-1 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
               >
                 <option value="" disabled>
-                  Selecione uma area
+                  Selecione uma área
                 </option>
                 {areas.length > 0 ? (
                   areas.map((area) => (
@@ -207,8 +208,8 @@ export default function Register() {
                     </option>
                   ))
                 ) : (
-                  <option value="" disabled>
-                    Carregando areas...
+                    <option value="" disabled>
+                    Carregando áreas...
                   </option>
                 )}
               </select>
@@ -220,14 +221,14 @@ export default function Register() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700">Tempo de preparacao</label>
+              <label className="block text-sm font-medium text-slate-700">Tempo de preparação</label>
               <select
                 required
                 value={prepTime}
                 onChange={(e) => setPrepTime(e.target.value)}
                 className="mt-1 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
               >
-                <option value="1">1 Mes (Intensivo)</option>
+                <option value="1">1 Mês (Intensivo)</option>
                 <option value="2">2 Meses (Moderado)</option>
                 <option value="3">3 Meses (Completo)</option>
               </select>
@@ -238,15 +239,15 @@ export default function Register() {
               disabled={loading}
               className="flex w-full justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
             >
-              {loading ? 'Criando conta...' : 'Comecar a treinar'}
+              {loading ? 'Criando conta...' : 'Começar a treinar'}
             </button>
           </form>
 
           <div className="mt-6 text-center">
             <p className="text-sm text-slate-600">
-              Ja tem uma conta?{' '}
+              Já tem uma conta?{' '}
               <Link to="/login" className="font-semibold text-emerald-600 hover:text-emerald-500">
-                Faca login
+                Faça login
               </Link>
             </p>
           </div>

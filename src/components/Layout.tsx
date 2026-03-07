@@ -41,7 +41,7 @@ export default function Layout() {
   };
 
   const areaName =
-    areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Area ainda nao definida';
+    areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Área ainda não definida';
 
   const adminLinks = [
     { to: '/admin?tab=dashboard', label: 'Visao geral', icon: LayoutDashboard, key: 'dashboard' },
@@ -96,7 +96,7 @@ export default function Layout() {
               <div>
                 <h1 className="text-3xl font-black tracking-tight text-emerald-700">MINSA Prep</h1>
                 <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">
-                  Concursos da saude
+                  Estudando com inteligência
                 </p>
               </div>
             </div>
@@ -132,7 +132,7 @@ export default function Layout() {
                 <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-3">
                   <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">
                     <ShieldCheck className="h-4 w-4" />
-                    Area ativa
+                    Área ativa
                   </div>
                   <p className="mt-2 text-sm font-bold text-slate-900">{areaName}</p>
                   <div className="mt-3 rounded-xl bg-white px-3 py-2">
@@ -157,17 +157,17 @@ export default function Layout() {
               {accountOpen && (
                 <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                    Sessao
+                    Sessão
                   </p>
                   <p className="mt-2 text-sm text-slate-600">
-                    A sua conta permanece ativa neste dispositivo ate sair manualmente.
+                    A sua conta permanece ativa neste dispositivo até sair manualmente.
                   </p>
                   <button
                     onClick={handleSignOut}
                     className="mt-4 flex w-full items-center justify-center gap-3 rounded-2xl bg-red-50 px-4 py-3 font-semibold text-red-600 transition hover:bg-red-100"
                   >
                     <LogOut className="h-5 w-5" />
-                    <span>Terminar sessao</span>
+                    <span>Terminar sessão</span>
                   </button>
                 </div>
               )}
@@ -186,7 +186,7 @@ export default function Layout() {
                   <div className="min-w-0">
                     <p className="truncate text-xl font-black tracking-tight text-emerald-700">MINSA Prep</p>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
-                      {profile?.role === 'admin' ? 'Ambiente admin' : 'Concursos da saude'}
+                      {profile?.role === 'admin' ? 'Ambiente admin' : 'Estudando com inteligência'}
                     </p>
                   </div>
                 </div>
@@ -232,7 +232,7 @@ export default function Layout() {
                 <div className="mt-3 rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-[0_20px_50px_-40px_rgba(15,23,42,0.35)]">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Conta</p>
                   <p className="mt-2 text-sm text-slate-600">
-                    A sessao fica guardada no dispositivo ate terminar manualmente.
+                    A sessão fica guardada no dispositivo até terminar manualmente.
                   </p>
                   <button
                     type="button"
@@ -240,7 +240,7 @@ export default function Layout() {
                     className="mt-4 flex w-full items-center justify-center gap-3 rounded-2xl bg-red-50 px-4 py-3 font-semibold text-red-600 transition hover:bg-red-100"
                   >
                     <LogOut className="h-5 w-5" />
-                    <span>Terminar sessao</span>
+                    <span>Terminar sessão</span>
                   </button>
                 </div>
               )}
