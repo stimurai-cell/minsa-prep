@@ -4,7 +4,7 @@
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
-        CREATE TYPE user_role AS ENUM ('free', 'premium', 'admin');
+        CREATE TYPE user_role AS ENUM ('free', 'basic', 'premium', 'elite', 'admin');
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'difficulty_level') THEN
         CREATE TYPE difficulty_level AS ENUM ('easy', 'medium', 'hard');
@@ -13,6 +13,11 @@ BEGIN
         CREATE TYPE payment_request_status AS ENUM ('pending', 'approved', 'rejected');
     END IF;
 END$$;
+
+-- Adicionar novos roles se o tipo já existir (safe updates para Supabase)
+-- (Pode causar warning se já existirem, mas é seguro ignorar)
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'basic';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'elite';
 
 -- 2. Areas (e.g., Pharmacy, Nursing)
 CREATE TABLE IF NOT EXISTS areas (
@@ -114,7 +119,8 @@ CREATE TABLE IF NOT EXISTS quiz_attempts (
   correct_answers INT DEFAULT 0,
   started_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
   completed_at TIMESTAMP WITH TIME ZONE,
-  is_completed BOOLEAN DEFAULT FALSE
+  is_completed BOOLEAN DEFAULT FALSE,
+  package TEXT DEFAULT 'free'
 );
 
 -- 10. Quiz Attempt Answers

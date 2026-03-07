@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 interface UserProfile {
   id: string;
   full_name: string;
-  role: 'free' | 'premium' | 'admin';
+  role: 'free' | 'basic' | 'premium' | 'elite' | 'admin';
   selected_area_id: string | null;
   preparation_time_months: number;
   total_xp?: number;

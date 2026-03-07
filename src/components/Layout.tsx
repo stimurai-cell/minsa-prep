@@ -14,6 +14,7 @@ import {
   Users,
   Menu,
   UserRound,
+  Swords,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
@@ -45,8 +46,7 @@ export default function Layout() {
 
   const adminLinks = [
     { to: '/admin?tab=dashboard', label: 'Visao geral', icon: LayoutDashboard, key: 'dashboard' },
-    { to: '/admin?tab=content', label: 'Conteudo', icon: FolderTree, key: 'content' },
-    { to: '/admin?tab=generator', label: 'Gerador', icon: Sparkles, key: 'generator' },
+    { to: '/admin?tab=content', label: 'Conteudo e IA', icon: FolderTree, key: 'content' },
     { to: '/admin?tab=users', label: 'Utilizadores', icon: Users, key: 'users' },
   ];
 
@@ -54,6 +54,7 @@ export default function Layout() {
     { to: '/dashboard', label: 'Painel', icon: LayoutDashboard },
     { to: '/training', label: 'Treino', icon: BookOpen },
     { to: '/simulation', label: 'Prova', icon: Compass },
+    { to: '/battle', label: 'Batalha', icon: Swords },
     { to: '/ranking', label: 'Ranking', icon: Award },
     { to: '/premium', label: 'Premium', icon: Crown },
   ];
@@ -254,7 +255,7 @@ export default function Layout() {
       </div>
 
       <nav className={`fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur xl:hidden ${isImmersiveSession ? 'hidden' : ''}`}>
-        <div className={`mx-auto grid max-w-xl gap-2 ${profile?.role === 'admin' ? 'grid-cols-4' : 'grid-cols-5'}`}>
+        <div className={`mx-auto grid max-w-xl gap-2 ${profile?.role === 'admin' ? 'grid-cols-4' : 'grid-cols-6'}`}>
           {links.map((link) => {
             const Icon = link.icon;
             const isActive = getLinkActive(link);
@@ -263,15 +264,14 @@ export default function Layout() {
               <NavLink
                 key={link.to}
                 to={link.to}
-                className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-semibold transition ${
-                  profile?.role === 'admin'
-                    ? isActive
-                      ? 'bg-slate-900 text-white'
-                      : 'text-slate-500'
-                    : isActive
-                      ? 'bg-emerald-600 text-white'
-                      : 'text-slate-500'
-                }`}
+                className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-semibold transition ${profile?.role === 'admin'
+                  ? isActive
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-500'
+                  : isActive
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-slate-500'
+                  }`}
               >
                 <Icon className="h-4 w-4" />
                 <span className="truncate">{link.label}</span>

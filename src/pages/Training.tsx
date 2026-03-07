@@ -50,12 +50,14 @@ export default function Training() {
   const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null);
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
   const [resultHistory, setResultHistory] = useState<boolean[]>([]);
-  const hasPremiumAccess = profile?.role === 'premium' || profile?.role === 'admin';
+  const hasPremiumAccess = ['premium', 'elite', 'admin'].includes(profile?.role || '');
+  const hasBasicAccess = ['basic', 'premium', 'elite', 'admin'].includes(profile?.role || '');
 
   const sessionActive = searchParams.get('session') === '1';
   const sessionTopicId = searchParams.get('topic') || '';
   const sessionDifficulty = (searchParams.get('difficulty') as DifficultyPreference) || 'mixed';
-  const effectiveDifficulty = hasPremiumAccess ? sessionDifficulty : 'medium';
+  // Allow all difficulties for non-premium except 'hard' (difícil) which remains premium-only
+  const effectiveDifficulty = hasPremiumAccess ? sessionDifficulty : (sessionDifficulty === 'hard' ? 'medium' : sessionDifficulty);
 
   useEffect(() => {
     fetchAreas();
@@ -81,7 +83,7 @@ export default function Training() {
   }, [topics, selectedTopic]);
 
   useEffect(() => {
-    setSelectedDifficulty(hasPremiumAccess ? sessionDifficulty : 'medium');
+    setSelectedDifficulty(hasPremiumAccess ? sessionDifficulty : (sessionDifficulty === 'hard' ? 'medium' : sessionDifficulty));
   }, [hasPremiumAccess, sessionDifficulty]);
 
   useEffect(() => {
@@ -161,7 +163,7 @@ export default function Training() {
         setSessionStartedAt(Date.now());
         setShowIntro(true);
       } else {
-          alert('Nenhuma questão encontrada para este tópico.');
+        alert('Nenhuma questão encontrada para este tópico.');
         navigate('/training', { replace: true });
       }
     } catch (error) {
@@ -191,11 +193,12 @@ export default function Training() {
   };
 
   const startTraining = () => {
-  if (!selectedTopic) return;
-    const difficulty = hasPremiumAccess ? selectedDifficulty : 'medium';
+    if (!selectedTopic) return;
+    // Non-premium users can use mixed, easy or medium, but not hard.
+    const difficulty = hasPremiumAccess ? selectedDifficulty : (selectedDifficulty === 'hard' ? 'medium' : selectedDifficulty);
 
-  // Limite para utilizadores free: 20 questões por dia
-    if (!hasPremiumAccess && profile?.id) {
+    // Limite para utilizadores free: 30 questões por dia
+    if (!hasBasicAccess && profile?.id) {
       const today = new Date().toISOString().slice(0, 10);
       void (async () => {
         try {
@@ -209,8 +212,8 @@ export default function Training() {
 
           if (error) throw error;
           const answeredToday = row ? Number(row.count || 0) : 0;
-          if (answeredToday >= 20) {
-            alert('Limite diário de perguntas (20) atingido. Faça upgrade para Premium para treinar mais.');
+          if (answeredToday >= 30) {
+            alert('Limite diário de perguntas (30) atingido. Faça upgrade para um plano pago para treinar sem limites.');
             return;
           }
 
@@ -227,7 +230,7 @@ export default function Training() {
   };
 
   const leaveTrainingSession = () => {
-  if (window.confirm('Deseja sair deste treino agora? O progresso desta sessão será perdido.')) {
+    if (window.confirm('Deseja sair deste treino agora? O progresso desta sessão será perdido.')) {
       resetTrainingSession();
       navigate('/training', { replace: true });
     }
@@ -471,72 +474,72 @@ export default function Training() {
                 transition={{ duration: 0.24, ease: 'easeOut' }}
                 className="flex h-full min-h-0 flex-col rounded-[2rem] bg-white px-4 py-4 shadow-[0_28px_90px_-50px_rgba(15,23,42,0.3)]"
               >
-              <div className="flex items-center justify-between gap-3">
-                <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  {selectedTopicName}
-                </span>
-                <span className="rounded-full bg-cyan-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-600">
-                  {getDifficultyLabel(currentQ.difficulty)}
-                </span>
-              </div>
-
-              <h1 className="mt-3 text-lg font-black leading-7 text-slate-900 md:text-[1.45rem] md:leading-9">
-                {currentQ.content}
-              </h1>
-
-              <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
-                <div className="grid gap-2.5">
-                {currentQ.alternatives.map((alt: any, index: number) => {
-                  const isSelected = pendingAlt === alt.id || selectedAlt === alt.id;
-                  const isCorrect = Boolean(alt.is_correct);
-                  const isWrongSelection = isAnswered && selectedAlt === alt.id && !isCorrect;
-
-                  let classes =
-                    'flex w-full items-start gap-3 rounded-[1.35rem] border-2 px-3 py-3 text-left transition-all ';
-
-                  if (!isAnswered) {
-                    classes += isSelected
-                      ? 'border-cyan-400 bg-cyan-50'
-                      : 'border-slate-200 bg-white hover:border-cyan-200 hover:bg-cyan-50/50';
-                  } else if (isCorrect) {
-                    classes += 'border-emerald-400 bg-emerald-50';
-                  } else if (isWrongSelection) {
-                    classes += 'border-rose-300 bg-rose-50';
-                  } else {
-                    classes += 'border-slate-200 bg-slate-50 opacity-75';
-                  }
-
-                  return (
-                    <button
-                      key={alt.id}
-                      type="button"
-                      onClick={() => !isAnswered && setPendingAlt(alt.id)}
-                      disabled={isAnswered}
-                      className={classes}
-                    >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-sm font-black uppercase text-slate-600">
-                        {getAlternativeLabel(index)}
-                      </div>
-                      <div className="flex min-w-0 flex-1 items-start gap-3">
-                        <div className="pt-0.5">
-                          {!isAnswered &&
-                            (isSelected ? (
-                              <CheckCircle2 className="h-5 w-5 text-cyan-500" />
-                            ) : (
-                              <Circle className="h-5 w-5 text-slate-300" />
-                            ))}
-                          {isAnswered && isCorrect && <CheckCircle2 className="h-5 w-5 text-emerald-500" />}
-                          {isAnswered && isWrongSelection && <CircleX className="h-5 w-5 text-rose-500" />}
-                          {isAnswered && !isCorrect && !isWrongSelection && <Circle className="h-5 w-5 text-slate-300" />}
-                        </div>
-                        <span className="text-sm leading-5 text-slate-800">{alt.content}</span>
-                      </div>
-                    </button>
-                  );
-                })}
+                <div className="flex items-center justify-between gap-3">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {selectedTopicName}
+                  </span>
+                  <span className="rounded-full bg-cyan-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-600">
+                    {getDifficultyLabel(currentQ.difficulty)}
+                  </span>
                 </div>
-              </div>
+
+                <h1 className="mt-3 text-lg font-black leading-7 text-slate-900 md:text-[1.45rem] md:leading-9">
+                  {currentQ.content}
+                </h1>
+
+                <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
+                  <div className="grid gap-2.5">
+                    {currentQ.alternatives.map((alt: any, index: number) => {
+                      const isSelected = pendingAlt === alt.id || selectedAlt === alt.id;
+                      const isCorrect = Boolean(alt.is_correct);
+                      const isWrongSelection = isAnswered && selectedAlt === alt.id && !isCorrect;
+
+                      let classes =
+                        'flex w-full items-start gap-3 rounded-[1.35rem] border-2 px-3 py-3 text-left transition-all ';
+
+                      if (!isAnswered) {
+                        classes += isSelected
+                          ? 'border-cyan-400 bg-cyan-50'
+                          : 'border-slate-200 bg-white hover:border-cyan-200 hover:bg-cyan-50/50';
+                      } else if (isCorrect) {
+                        classes += 'border-emerald-400 bg-emerald-50';
+                      } else if (isWrongSelection) {
+                        classes += 'border-rose-300 bg-rose-50';
+                      } else {
+                        classes += 'border-slate-200 bg-slate-50 opacity-75';
+                      }
+
+                      return (
+                        <button
+                          key={alt.id}
+                          type="button"
+                          onClick={() => !isAnswered && setPendingAlt(alt.id)}
+                          disabled={isAnswered}
+                          className={classes}
+                        >
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-sm font-black uppercase text-slate-600">
+                            {getAlternativeLabel(index)}
+                          </div>
+                          <div className="flex min-w-0 flex-1 items-start gap-3">
+                            <div className="pt-0.5">
+                              {!isAnswered &&
+                                (isSelected ? (
+                                  <CheckCircle2 className="h-5 w-5 text-cyan-500" />
+                                ) : (
+                                  <Circle className="h-5 w-5 text-slate-300" />
+                                ))}
+                              {isAnswered && isCorrect && <CheckCircle2 className="h-5 w-5 text-emerald-500" />}
+                              {isAnswered && isWrongSelection && <CircleX className="h-5 w-5 text-rose-500" />}
+                              {isAnswered && !isCorrect && !isWrongSelection && <Circle className="h-5 w-5 text-slate-300" />}
+                            </div>
+                            <span className="text-sm leading-5 text-slate-800">{alt.content}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </motion.div>
             </AnimatePresence>
           </div>
@@ -546,9 +549,8 @@ export default function Training() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.22, ease: 'easeOut' }}
-            className={`mt-3 rounded-[1.6rem] border px-4 py-4 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.35)] ${
-              isAnswered ? 'border-lime-200 bg-lime-100' : 'border-white/80 bg-white'
-            }`}
+            className={`mt-3 rounded-[1.6rem] border px-4 py-4 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.35)] ${isAnswered ? 'border-lime-200 bg-lime-100' : 'border-white/80 bg-white'
+              }`}
           >
             {!isAnswered ? (
               <>
@@ -654,29 +656,24 @@ export default function Training() {
                     key={difficulty}
                     type="button"
                     onClick={() => {
-                      if (hasPremiumAccess) {
-                        setSelectedDifficulty(difficulty);
-                        return;
-                      }
-                      // non-premium: only medium is allowed; clicking other difficulties goes to payment
-                      if (difficulty !== 'medium') {
-                        // recommend the main paid plan (focus)
+                      // allow mixed, easy and medium for all users; hard remains premium-only
+                      if (!hasPremiumAccess && difficulty === 'hard') {
                         navigate(`/premium?plan=focus#payment-section`);
                         return;
                       }
+                      setSelectedDifficulty(difficulty);
                     }}
-                    disabled={!hasPremiumAccess && difficulty !== 'medium'}
-                    className={`relative rounded-2xl px-3 py-3 text-sm font-semibold transition ${
-                      selectedDifficulty === difficulty
+                    disabled={!hasPremiumAccess && difficulty === 'hard'}
+                    className={`relative rounded-2xl px-3 py-3 text-sm font-semibold transition ${selectedDifficulty === difficulty
                         ? 'bg-emerald-600 text-white'
-                        : !hasPremiumAccess && difficulty !== 'medium'
+                        : !hasPremiumAccess && difficulty === 'hard'
                           ? 'cursor-pointer border border-slate-200 bg-slate-100 text-slate-400'
                           : 'border border-slate-200 bg-slate-50 text-slate-700'
-                    }`}
+                      }`}
                   >
                     <span className="inline-flex items-center gap-2">
                       {getDifficultyLabel(difficulty)}
-                      {!hasPremiumAccess && difficulty !== 'medium' && (
+                      {!hasPremiumAccess && difficulty === 'hard' && (
                         <span className="ml-2 inline-flex items-center rounded-full bg-amber-200/40 px-2 py-0.5 text-xs font-semibold text-amber-900">
                           Premium
                         </span>
@@ -691,8 +688,8 @@ export default function Training() {
                 </p>
               ) : (
                 <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
-                  O plano gratuito usa <span className="font-black">Normal</span> por padrão.
-                  Para escolher <span className="font-black">Fácil</span>, <span className="font-black">Difícil</span> ou <span className="font-black">Misto</span>, suba para o premium.
+                  No plano gratuito você pode usar <span className="font-black">Fácil</span>, <span className="font-black">Médio</span> e <span className="font-black">Misto</span>.
+                  O modo <span className="font-black">Difícil</span> continua reservado ao Premium.
                   <Link to="/premium" className="ml-1 font-black underline">
                     Ver premium
                   </Link>
@@ -711,7 +708,7 @@ export default function Training() {
           </div>
         </div>
 
-          {/* painel secundário removido para deixar a página menos carregada (fluxo focado, correção imediata e progresso removidos) */}
+        {/* painel secundário removido para deixar a página menos carregada (fluxo focado, correção imediata e progresso removidos) */}
       </section>
     </div>
   );

@@ -210,7 +210,7 @@ export default function Register() {
                     </option>
                   ))
                 ) : (
-                    <option value="" disabled>
+                  <option value="" disabled>
                     Carregando áreas...
                   </option>
                 )}
@@ -240,9 +240,9 @@ export default function Register() {
                 onChange={(e) => setPrepTime(e.target.value)}
                 className="mt-1 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
               >
-                <option value="1">1 Mês (Intensivo)</option>
-                <option value="2">2 Meses (Moderado)</option>
-                <option value="3">3 Meses (Completo)</option>
+                <option value="1">1 Mês (Mensal - Intensivo)</option>
+                <option value="3">3 Meses (Trimestral - Recomendado)</option>
+                <option value="6">6 Meses (Semestral - Completo)</option>
               </select>
             </div>
 

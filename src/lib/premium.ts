@@ -1,65 +1,133 @@
+export type PlanPeriod = 'monthly' | 'quarterly' | 'semiannual';
+
 export type PremiumPlan = {
   id: string;
   name: string;
   badge: string;
-  cadence: string;
-  priceLabel: string;
-  priceAmount: number;
-  durationMonths: number;
   headline: string;
   description: string;
   features: string[];
   highlight?: boolean;
+  role: 'free' | 'basic' | 'premium' | 'elite';
+  prices: {
+    monthly: { amount: number; label: string };
+    quarterly: { amount: number; label: string };
+    semiannual: { amount: number; label: string };
+  };
 };
 
 export const premiumPlans: PremiumPlan[] = [
   {
-    id: 'starter',
+    id: 'free',
     name: 'Plano Gratuito',
     badge: 'Entrada',
-    cadence: 'Sem custo',
-    priceLabel: '0 Kz',
-    priceAmount: 0,
-    durationMonths: 0,
-    headline: 'Bom para testar o ritmo da plataforma.',
-    description: 'Ideal para novos estudantes entrarem, responderem questoes e perceberem valor antes de subir.',
+    headline: 'Para conhecer a plataforma.',
+    description: 'Comece a treinar e veja como a nossa plataforma pode guiar o seu estudo.',
+    role: 'free',
     features: [
-      'Treinos e provas essenciais',
-      'Progresso base por topico',
-      'Ritmo inicial sem compromisso financeiro',
+      'Treino livre (Facil, Medio, Misto)',
+      '30 questoes por dia',
+      '1 simulacao de prova por semana',
+      'Ranking basico',
     ],
+    prices: {
+      monthly: { amount: 0, label: '0 Kz' },
+      quarterly: { amount: 0, label: '0 Kz' },
+      semiannual: { amount: 0, label: '0 Kz' },
+    },
   },
   {
-    id: 'focus',
-    name: 'Premium Focus',
-    badge: 'Mais estrategico',
-  cadence: 'Plano',
-  priceLabel: '2.000 Kz',
-    priceAmount: 2000,
-    durationMonths: 1,
-    headline: 'Pacote mais indicado para a maioria dos candidatos.',
-    description: 'Entrega consistencia sem assustar no preco. Deve ser o plano mais promovido na app.',
+    id: 'basic',
+    name: 'Basic (Estudante)',
+    badge: 'Essencial',
+    headline: 'Para quem precisa de preparacao consistente.',
+    description: 'Liberte simulacoes ilimitadas e acompanhe as suas estatisticas e desempenho.',
+    role: 'basic',
     features: [
-      'Simulados completos sem limite apertado',
-      'Revisao guiada por dificuldade e tema',
-      'Historico detalhado de erros e acertos',
+      'Simulacoes de prova ilimitadas',
+      'Treino diário sem limites (Exceto Dificil)',
+      'Ranking completo',
+      'Historico de provas',
     ],
+    prices: {
+      monthly: { amount: 1500, label: '1.500 Kz' },
+      quarterly: { amount: 3900, label: '3.900 Kz' },
+      semiannual: { amount: 7000, label: '7.000 Kz' },
+    },
+  },
+  {
+    id: 'premium',
+    name: 'Premium (Preparacao Real)',
+    badge: 'Mais vendido',
+    headline: 'O padrao ideal para candidatos serios.',
+    description: 'Acesso total as ferramentas avancadas para maximizar a sua retencao.',
+    role: 'premium',
     highlight: true,
+    features: [
+      'Tudo do Basic +',
+      'Modo Dificil desbloqueado',
+      'Banco completo de questoes',
+      'Radar de Fraquezas (Insights Inteligentes)',
+    ],
+    prices: {
+      monthly: { amount: 4000, label: '4.000 Kz' },
+      quarterly: { amount: 10000, label: '10.000 Kz' },
+      semiannual: { amount: 18000, label: '18.000 Kz' },
+    },
   },
   {
-    id: 'master',
-    name: 'Premium Intensivo',
-    badge: 'Maximo rendimento',
-  cadence: 'Plano',
-  priceLabel: '5.000 Kz',
-    priceAmount: 5000,
-    durationMonths: 3,
-    headline: 'Para quem quer preparar-se com acompanhamento total.',
-    description: 'Bom para upsell de candidatos em reta final ou perfis premium recorrentes.',
+    id: 'elite',
+    name: 'Elite (Aprovacao)',
+    badge: 'Maximo Foco',
+    headline: 'Para quem nao aceita menos que a aprovacao.',
+    description: 'A experiencia definitiva para candidatos altamente comprometidos.',
+    role: 'elite',
     features: [
-      'Plano de estudo adaptativo',
-      'Simulados prioritarios e revisoes avancadas',
-      'Recursos exclusivos de desempenho e disciplina',
+      'Tudo do Premium +',
+      'Simulacao Nacional (Prova de Evento)',
+      'Estatisticas profundas em PDF',
+      'Modo Batalha XP Plus',
     ],
+    prices: {
+      monthly: { amount: 8000, label: '8.000 Kz' },
+      quarterly: { amount: 21000, label: '21.000 Kz' },
+      semiannual: { amount: 38000, label: '38.000 Kz' },
+    },
+  },
+];
+
+export type ExtraPackage = {
+  id: string;
+  name: string;
+  description: string;
+  priceAmount: number;
+  priceLabel: string;
+  features: string[];
+};
+
+export const extraPackages: ExtraPackage[] = [
+  {
+    id: 'intensivo_farmacia',
+    name: 'Pacote Intensivo Farmácia',
+    description: 'Reforce o seu estudo focado apenas em Farmácia.',
+    priceAmount: 3000,
+    priceLabel: '3.000 Kz',
+    features: ['500 questoes extras de farmacologia', 'Simulacoes especificas de alto nivel'],
+  },
+  {
+    id: 'intensivo_enfermagem',
+    name: 'Pacote Intensivo Enfermagem',
+    description: 'Reforce o seu estudo focado apenas em Enfermagem.',
+    priceAmount: 3000,
+    priceLabel: '3.000 Kz',
+    features: ['500 questoes extras de saude publica e anatomia', 'Simulacoes especificas de alto nivel'],
+  },
+  {
+    id: 'simulacao_oficial_extra',
+    name: 'Simulacao Oficial Extra',
+    description: 'Desbloqueie uma prova especial oficial exclusiva.',
+    priceAmount: 1000,
+    priceLabel: '1.000 Kz',
+    features: ['Acesso a uma simulacao restrita com ranking oficial'],
   },
 ];

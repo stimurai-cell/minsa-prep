@@ -53,18 +53,20 @@ export default function Simulation() {
   const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null);
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
   const [resultHistory, setResultHistory] = useState<boolean[]>([]);
-  const hasPremiumAccess = profile?.role === 'premium' || profile?.role === 'admin';
+  const hasPremiumAccess = ['premium', 'elite', 'admin'].includes(profile?.role || '');
+  const hasBasicAccess = ['basic', 'premium', 'elite', 'admin'].includes(profile?.role || '');
 
   const sessionActive = searchParams.get('session') === '1';
   const sessionDifficulty = (searchParams.get('difficulty') as DifficultyPreference) || 'mixed';
-  const effectiveDifficulty = hasPremiumAccess ? sessionDifficulty : 'medium';
+  // Non-premium users: allow mixed/easy/medium, but keep hard reserved for premium
+  const effectiveDifficulty = hasPremiumAccess ? sessionDifficulty : (sessionDifficulty === 'hard' ? 'medium' : sessionDifficulty);
 
   useEffect(() => {
     fetchAreas();
   }, [fetchAreas]);
 
   useEffect(() => {
-    setSelectedDifficulty(hasPremiumAccess ? sessionDifficulty : 'medium');
+    setSelectedDifficulty(hasPremiumAccess ? sessionDifficulty : (sessionDifficulty === 'hard' ? 'medium' : sessionDifficulty));
   }, [hasPremiumAccess, sessionDifficulty]);
 
   useEffect(() => {
@@ -218,6 +220,7 @@ export default function Simulation() {
           correct_answers: correctCount,
           is_completed: true,
           completed_at: new Date().toISOString(),
+          package: profile.role || 'free',
         })
         .select()
         .single();
@@ -270,10 +273,10 @@ export default function Simulation() {
   };
 
   const startSimulation = () => {
-    const difficulty = hasPremiumAccess ? selectedDifficulty : 'medium';
+    const difficulty = hasPremiumAccess ? selectedDifficulty : (selectedDifficulty === 'hard' ? 'medium' : selectedDifficulty);
 
     // Verificar limite de simulacoes para utilizadores free: 1 por semana
-    if (!hasPremiumAccess && profile?.id) {
+    if (!hasBasicAccess && profile?.id) {
       void (async () => {
         try {
           const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -286,7 +289,7 @@ export default function Simulation() {
 
           if (error) throw error;
           if (recent && recent.length >= 1) {
-            alert('No gratuito, você pode fazer 1 simulação por semana. Faça upgrade para Premium para fazer mais.');
+            alert('No gratuito, você pode fazer 1 simulação de prova por semana. Faça upgrade para um plano pago para fazer mais.');
             return;
           }
 
@@ -495,72 +498,72 @@ export default function Simulation() {
                 transition={{ duration: 0.24, ease: 'easeOut' }}
                 className="flex h-full min-h-0 flex-col rounded-[2rem] bg-white px-4 py-4 shadow-[0_28px_90px_-50px_rgba(15,23,42,0.3)]"
               >
-              <div className="flex items-center justify-between gap-3">
-                <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                  <AlertCircle className="h-3.5 w-3.5" />
-                  Prova completa
-                </span>
-                <span className="rounded-full bg-cyan-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-600">
-                  {selectedAreaName}
-                </span>
-              </div>
-
-              <h1 className="mt-3 text-lg font-black leading-7 text-slate-900 md:text-[1.45rem] md:leading-9">
-                {currentQ.content}
-              </h1>
-
-              <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
-                <div className="grid gap-2.5">
-                {currentQ.alternatives.map((alt: any, index: number) => {
-                  const isSelected = pendingAlt === alt.id || selectedAlt === alt.id;
-                  const isCorrect = Boolean(alt.is_correct);
-                  const isWrongSelection = isAnswered && selectedAlt === alt.id && !isCorrect;
-
-                  let classes =
-                    'flex w-full items-start gap-3 rounded-[1.35rem] border-2 px-3 py-3 text-left transition-all ';
-
-                  if (!isAnswered) {
-                    classes += isSelected
-                      ? 'border-cyan-400 bg-cyan-50'
-                      : 'border-slate-200 bg-white hover:border-cyan-200 hover:bg-cyan-50/50';
-                  } else if (isCorrect) {
-                    classes += 'border-emerald-400 bg-emerald-50';
-                  } else if (isWrongSelection) {
-                    classes += 'border-rose-300 bg-rose-50';
-                  } else {
-                    classes += 'border-slate-200 bg-slate-50 opacity-75';
-                  }
-
-                  return (
-                    <button
-                      key={alt.id}
-                      type="button"
-                      onClick={() => !isAnswered && setPendingAlt(alt.id)}
-                      disabled={isAnswered}
-                      className={classes}
-                    >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-sm font-black uppercase text-slate-600">
-                        {getAlternativeLabel(index)}
-                      </div>
-                      <div className="flex min-w-0 flex-1 items-start gap-3">
-                        <div className="pt-0.5">
-                          {!isAnswered &&
-                            (isSelected ? (
-                              <CheckCircle2 className="h-5 w-5 text-cyan-500" />
-                            ) : (
-                              <Circle className="h-5 w-5 text-slate-300" />
-                            ))}
-                          {isAnswered && isCorrect && <CheckCircle2 className="h-5 w-5 text-emerald-500" />}
-                          {isAnswered && isWrongSelection && <CircleX className="h-5 w-5 text-rose-500" />}
-                          {isAnswered && !isCorrect && !isWrongSelection && <Circle className="h-5 w-5 text-slate-300" />}
-                        </div>
-                        <span className="text-sm leading-5 text-slate-800">{alt.content}</span>
-                      </div>
-                    </button>
-                  );
-                })}
+                <div className="flex items-center justify-between gap-3">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    Prova completa
+                  </span>
+                  <span className="rounded-full bg-cyan-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-600">
+                    {selectedAreaName}
+                  </span>
                 </div>
-              </div>
+
+                <h1 className="mt-3 text-lg font-black leading-7 text-slate-900 md:text-[1.45rem] md:leading-9">
+                  {currentQ.content}
+                </h1>
+
+                <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
+                  <div className="grid gap-2.5">
+                    {currentQ.alternatives.map((alt: any, index: number) => {
+                      const isSelected = pendingAlt === alt.id || selectedAlt === alt.id;
+                      const isCorrect = Boolean(alt.is_correct);
+                      const isWrongSelection = isAnswered && selectedAlt === alt.id && !isCorrect;
+
+                      let classes =
+                        'flex w-full items-start gap-3 rounded-[1.35rem] border-2 px-3 py-3 text-left transition-all ';
+
+                      if (!isAnswered) {
+                        classes += isSelected
+                          ? 'border-cyan-400 bg-cyan-50'
+                          : 'border-slate-200 bg-white hover:border-cyan-200 hover:bg-cyan-50/50';
+                      } else if (isCorrect) {
+                        classes += 'border-emerald-400 bg-emerald-50';
+                      } else if (isWrongSelection) {
+                        classes += 'border-rose-300 bg-rose-50';
+                      } else {
+                        classes += 'border-slate-200 bg-slate-50 opacity-75';
+                      }
+
+                      return (
+                        <button
+                          key={alt.id}
+                          type="button"
+                          onClick={() => !isAnswered && setPendingAlt(alt.id)}
+                          disabled={isAnswered}
+                          className={classes}
+                        >
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-sm font-black uppercase text-slate-600">
+                            {getAlternativeLabel(index)}
+                          </div>
+                          <div className="flex min-w-0 flex-1 items-start gap-3">
+                            <div className="pt-0.5">
+                              {!isAnswered &&
+                                (isSelected ? (
+                                  <CheckCircle2 className="h-5 w-5 text-cyan-500" />
+                                ) : (
+                                  <Circle className="h-5 w-5 text-slate-300" />
+                                ))}
+                              {isAnswered && isCorrect && <CheckCircle2 className="h-5 w-5 text-emerald-500" />}
+                              {isAnswered && isWrongSelection && <CircleX className="h-5 w-5 text-rose-500" />}
+                              {isAnswered && !isCorrect && !isWrongSelection && <Circle className="h-5 w-5 text-slate-300" />}
+                            </div>
+                            <span className="text-sm leading-5 text-slate-800">{alt.content}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </motion.div>
             </AnimatePresence>
           </div>
@@ -570,9 +573,8 @@ export default function Simulation() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.22, ease: 'easeOut' }}
-            className={`mt-3 rounded-[1.6rem] border px-4 py-4 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.35)] ${
-              isAnswered ? 'border-lime-200 bg-lime-100' : 'border-white/80 bg-white'
-            }`}
+            className={`mt-3 rounded-[1.6rem] border px-4 py-4 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.35)] ${isAnswered ? 'border-lime-200 bg-lime-100' : 'border-white/80 bg-white'
+              }`}
           >
             {!isAnswered ? (
               <>
@@ -656,15 +658,17 @@ export default function Simulation() {
                 <button
                   key={difficulty}
                   type="button"
-                  onClick={() => hasPremiumAccess && setSelectedDifficulty(difficulty)}
-                  disabled={!hasPremiumAccess && difficulty !== 'medium'}
-                  className={`rounded-2xl px-3 py-3 text-sm font-semibold transition ${
-                    selectedDifficulty === difficulty
-                      ? 'bg-emerald-600 text-white'
-                      : !hasPremiumAccess && difficulty !== 'medium'
-                        ? 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400'
-                        : 'border border-slate-200 bg-slate-50 text-slate-700'
-                  }`}
+                  onClick={() => {
+                    if (!hasPremiumAccess && difficulty === 'hard') return; // hard blocked
+                    setSelectedDifficulty(difficulty);
+                  }}
+                  disabled={!hasPremiumAccess && difficulty === 'hard'}
+                  className={`rounded-2xl px-3 py-3 text-sm font-semibold transition ${selectedDifficulty === difficulty
+                    ? 'bg-emerald-600 text-white'
+                    : !hasPremiumAccess && difficulty === 'hard'
+                      ? 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400'
+                      : 'border border-slate-200 bg-slate-50 text-slate-700'
+                    }`}
                 >
                   {getDifficultyLabel(difficulty)}
                 </button>
@@ -672,11 +676,12 @@ export default function Simulation() {
             </div>
             {hasPremiumAccess ? (
               <p className="mt-2 text-xs text-slate-500">
-                Em modo misto, a prova tenta distribuir questoes entre facil, normal e dificil antes de completar as 30.
+                Em modo misto, a prova tenta distribuir questões entre fácil, médio e difícil antes de completar as 30.
               </p>
             ) : (
               <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
-                No gratuito, a prova corre em <span className="font-black">Normal</span>. A escolha livre de dificuldade fica reservada ao premium.
+                No plano gratuito você pode usar <span className="font-black">Fácil</span>, <span className="font-black">Médio</span> e <span className="font-black">Misto</span>.
+                O modo <span className="font-black">Difícil</span> está reservado ao Premium.
                 <Link to="/premium" className="ml-1 font-black underline">
                   Ver premium
                 </Link>

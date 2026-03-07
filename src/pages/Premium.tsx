@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Crown, Lock, Rocket, ShieldCheck, Star, Upload, Wallet, Copy } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { premiumPlans } from '../lib/premium';
+import { premiumPlans, extraPackages, PlanPeriod } from '../lib/premium';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 
@@ -50,10 +50,11 @@ type PaymentRequest = {
 
 export default function Premium() {
   const { profile } = useAuthStore();
-  const isPremium = profile?.role === 'premium' || profile?.role === 'admin';
-  const paidPlans = useMemo(() => premiumPlans.filter((plan) => plan.priceAmount > 0), []);
-  const [selectedPlanId, setSelectedPlanId] = useState(paidPlans[0]?.id || 'focus');
-  
+  const isPremium = ['premium', 'elite', 'admin'].includes(profile?.role || '');
+  const paidPlans = useMemo(() => premiumPlans.filter((plan) => plan.id !== 'free'), []);
+  const [selectedPeriod, setSelectedPeriod] = useState<PlanPeriod>('monthly');
+  const [selectedPlanId, setSelectedPlanId] = useState(paidPlans.find(p => p.id === 'premium')?.id || paidPlans[0]?.id || 'premium');
+
   const selectPlanAndScroll = (planId: string) => {
     setSelectedPlanId(planId);
     setTimeout(() => {
@@ -140,9 +141,9 @@ export default function Premium() {
         user_id: profile.id,
         payer_name: payerName.trim(),
         plan_id: selectedPlan.id,
-        plan_name: selectedPlan.name,
-        amount_kwanza: selectedPlan.priceAmount,
-        duration_months: selectedPlan.durationMonths,
+        plan_name: `${selectedPlan.name} (${selectedPeriod})`,
+        amount_kwanza: selectedPlan.prices[selectedPeriod].amount,
+        duration_months: selectedPeriod === 'monthly' ? 1 : selectedPeriod === 'quarterly' ? 3 : 6,
         payment_reference: paymentReference.trim(),
         proof_url: publicUrlData.publicUrl,
         proof_storage_path: filePath,
@@ -225,39 +226,43 @@ export default function Premium() {
         <div className="flex flex-col gap-3 border-b border-slate-100 pb-5 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">Planos</p>
-            <h2 className="mt-2 text-2xl font-black text-slate-900">Nossos planos</h2>
+            <h2 className="mt-2 text-2xl font-black text-slate-900">Escolha o seu ciclo de estudo</h2>
           </div>
-          {!isPremium && (
-            <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800">
-              <Lock className="h-4 w-4" />
-              Plano recomendado
-            </div>
-          )}
+          <div className="flex bg-slate-100 p-1 rounded-full">
+            {(['monthly', 'quarterly', 'semiannual'] as PlanPeriod[]).map((period) => (
+              <button
+                key={period}
+                onClick={() => setSelectedPeriod(period)}
+                className={`px-4 py-2 text-sm font-bold uppercase rounded-full transition-colors ${selectedPeriod === period ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+              >
+                {period === 'monthly' ? 'Mensal' : period === 'quarterly' ? 'Trimestral' : 'Semestral'}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="mt-6 grid gap-4 xl:grid-cols-3">
-          {premiumPlans.map((plan) => (
+          {paidPlans.map((plan) => (
             <div
               key={plan.id}
-              className={`rounded-[1.8rem] border p-5 ${
-                plan.highlight
+              className={`rounded-[1.8rem] border p-5 ${plan.highlight
                   ? 'border-amber-300 bg-[linear-gradient(180deg,#fff4d6_0%,#ffffff_100%)] shadow-[0_24px_70px_-44px_rgba(245,158,11,0.45)]'
                   : 'border-slate-200 bg-slate-50'
-              }`}
+                }`}
             >
               <div className="flex items-center justify-between gap-3">
                 <span
-                  className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${
-                    plan.highlight ? 'bg-amber-200 text-amber-900' : 'bg-white text-slate-600'
-                  }`}
+                  className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${plan.highlight ? 'bg-amber-200 text-amber-900' : 'bg-white text-slate-600'
+                    }`}
                 >
                   {plan.badge}
                 </span>
                 {plan.highlight && <Crown className="h-5 w-5 text-amber-600" />}
               </div>
               <h3 className="mt-4 text-2xl font-black text-slate-900">{plan.name}</h3>
-              <p className="mt-1 text-sm font-semibold text-emerald-700">{plan.cadence}</p>
-              <p className="mt-1 text-2xl font-black text-slate-900">{plan.priceLabel}</p>
+              <p className="mt-1 text-2xl font-black text-slate-900">{plan.prices[selectedPeriod].label}</p>
+              <p className="mt-1 text-sm font-semibold text-emerald-700">por {selectedPeriod === 'monthly' ? 'mês' : selectedPeriod === 'quarterly' ? '3 meses' : '6 meses'}</p>
               <p className="mt-4 text-sm font-semibold text-slate-800">{plan.headline}</p>
               <p className="mt-3 text-sm leading-6 text-slate-600">{plan.description}</p>
               <div className="mt-5 space-y-2">
@@ -265,29 +270,47 @@ export default function Premium() {
                   <div key={feature} className="flex items-start gap-3 rounded-2xl bg-white/80 px-4 py-3 text-sm text-slate-700">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
                     <span className="flex-1">{feature}</span>
-                    {plan.priceAmount > 0 && (
-                      <span className="ml-3 inline-flex items-center rounded-full bg-amber-200/30 px-2 py-0.5 text-xs font-semibold text-amber-900">
-                        Premium
-                      </span>
-                    )}
                   </div>
                 ))}
               </div>
 
               <button
                 type="button"
-                onClick={() => plan.priceAmount > 0 && selectPlanAndScroll(plan.id)}
-                className={`mt-5 w-full rounded-2xl px-4 py-4 text-sm font-black uppercase tracking-[0.12em] transition ${
-                  plan.highlight
-                    ? 'bg-[linear-gradient(90deg,#facc15_0%,#34d399_100%)] text-slate-950'
-                    : 'border border-slate-200 bg-white text-slate-700'
-                }`}
+                onClick={() => selectPlanAndScroll(plan.id)}
+                className={`mt-5 w-full rounded-2xl px-4 py-4 text-sm font-black uppercase tracking-[0.12em] transition ${plan.highlight
+                    ? 'bg-[linear-gradient(90deg,#facc15_0%,#34d399_100%)] text-slate-950 hover:opacity-90'
+                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+                  }`}
               >
-                {plan.id === 'starter'
-                  ? 'Plano atual de entrada'
-                  : isPremium
-                    ? 'Plano pronto para ativação'
-                    : 'Pedir ativação Premium'}
+                Pedir ativação deste plano
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-6 mt-8">
+        <h2 className="text-2xl font-black text-slate-900 mb-2">Pacotes Extras Intensivos</h2>
+        <p className="text-sm text-slate-600 mb-6">Se você já é Basic ou Premium mas precisa daquele foco final, adicione ao seu plano.</p>
+        <div className="grid gap-4 md:grid-cols-3">
+          {extraPackages.map((pkg) => (
+            <div key={pkg.id} className="rounded-2xl border border-sky-200 bg-sky-50/50 p-5">
+              <h3 className="font-bold text-slate-900">{pkg.name}</h3>
+              <p className="text-lg font-black text-sky-700 mt-1">{pkg.priceLabel}</p>
+              <p className="text-sm text-slate-600 mt-2 mb-4">{pkg.description}</p>
+              <ul className="space-y-2 mb-5">
+                {pkg.features.map((feat, i) => (
+                  <li key={i} className="text-xs text-slate-700 flex items-start gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-sky-500 shrink-0 mt-0.5" />
+                    <span>{feat}</span>
+                  </li>
+                ))}
+              </ul>
+              <button
+                onClick={() => alert('Entrar em contacto com admin para adicionar pacotes adicionais ou aguardar a próxima atualização que automatizará esto.')}
+                className="w-full rounded-xl bg-white border border-sky-200 py-2 text-sm font-bold text-sky-700 hover:bg-sky-100 transition"
+              >
+                Solicitar Pacote
               </button>
             </div>
           ))}
@@ -311,7 +334,7 @@ export default function Premium() {
               <p className="text-sm font-semibold text-amber-900">
                 Depois de fazer o pagamento, envie o comprovativo aqui. O pedido será revisto o mais rápido possível e, logo em seguida, o plano escolhido será ativado.
               </p>
-                  <p className="mt-3 text-sm text-amber-900">
+              <p className="mt-3 text-sm text-amber-900">
                 Dica: Escolha o plano acima e clique em "Pedir ativação Premium" para ir diretamente a este formulário.
               </p>
             </div>
@@ -360,14 +383,13 @@ export default function Premium() {
                   key={plan.id}
                   type="button"
                   onClick={() => setSelectedPlanId(plan.id)}
-                  className={`rounded-[1.4rem] border px-4 py-4 text-left transition ${
-                    selectedPlanId === plan.id
+                  className={`rounded-[1.4rem] border px-4 py-4 text-left transition ${selectedPlanId === plan.id
                       ? 'border-emerald-500 bg-emerald-50'
                       : 'border-slate-200 bg-slate-50'
-                  }`}
+                    }`}
                 >
                   <p className="text-lg font-black text-slate-900">{plan.name}</p>
-                  <p className="mt-1 text-sm font-semibold text-emerald-700">{plan.priceLabel}</p>
+                  <p className="mt-1 text-sm font-semibold text-emerald-700">{plan.prices[selectedPeriod].label}</p>
                   <p className="mt-2 text-sm text-slate-600">{plan.headline}</p>
                 </button>
               ))}
@@ -394,7 +416,7 @@ export default function Premium() {
                 />
               </div>
               <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">Comprovativo</label>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">Comprovativo</label>
                 <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-600">
                   <Upload className="h-4 w-4" />
                   {proofFile ? proofFile.name : 'Selecionar imagem ou PDF do comprovativo'}
@@ -441,26 +463,26 @@ export default function Premium() {
                 {paymentMethods.map((method) => (
                   <div key={method.bank} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{method.bank}</p>
-                      <div className="mt-1 flex items-center justify-between gap-3">
-                        <p className="break-all text-sm font-bold text-slate-900">{method.value}</p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            try {
-                              navigator.clipboard.writeText(method.value);
-                              setCopiedBank(method.bank);
-                              setTimeout(() => setCopiedBank(null), 2500);
-                            } catch (e) {
-                              // fallback alert
-                              alert('Copiar nao funciona no seu navegador. Copie manualmente: ' + method.value);
-                            }
-                          }}
-                          className="ml-2 inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
-                        >
-                          <Copy className="h-4 w-4" />
-                          {copiedBank === method.bank ? 'Copiado' : 'Copiar'}
-                        </button>
-                      </div>
+                    <div className="mt-1 flex items-center justify-between gap-3">
+                      <p className="break-all text-sm font-bold text-slate-900">{method.value}</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          try {
+                            navigator.clipboard.writeText(method.value);
+                            setCopiedBank(method.bank);
+                            setTimeout(() => setCopiedBank(null), 2500);
+                          } catch (e) {
+                            // fallback alert
+                            alert('Copiar nao funciona no seu navegador. Copie manualmente: ' + method.value);
+                          }
+                        }}
+                        className="ml-2 inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                      >
+                        <Copy className="h-4 w-4" />
+                        {copiedBank === method.bank ? 'Copiado' : 'Copiar'}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

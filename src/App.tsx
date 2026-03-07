@@ -12,19 +12,20 @@ import Ranking from './pages/Ranking';
 import Admin from './pages/Admin';
 import Premium from './pages/Premium';
 import OnboardingQuiz from './pages/OnboardingQuiz';
+import Battle from './pages/Battle';
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuthStore();
-  
+
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div></div>;
   if (!user) return <Navigate to="/login" replace />;
-  
+
   return <>{children}</>;
 }
 
 function RootRedirect() {
   const { profile, loading } = useAuthStore();
-  
+
   if (loading) return null;
   if (profile?.role === 'admin') return <Navigate to="/admin" replace />;
   return <Navigate to="/dashboard" replace />;
@@ -42,13 +43,14 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        
+
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<RootRedirect />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="onboarding-quiz" element={<OnboardingQuiz />} />
           <Route path="training" element={<Training />} />
           <Route path="simulation" element={<Simulation />} />
+          <Route path="battle" element={<Battle />} />
           <Route path="ranking" element={<Ranking />} />
           <Route path="premium" element={<Premium />} />
           <Route path="admin" element={<Admin />} />

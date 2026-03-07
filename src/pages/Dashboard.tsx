@@ -212,11 +212,11 @@ export default function Dashboard() {
           </div>
 
           <p className="mt-5 text-sm leading-6 text-slate-600">
-                  Baseado no seu plano de {profile?.preparation_time_months} {profile?.preparation_time_months === 1 ? 'mês' : 'meses'},
-                  preparamos um percurso de treino centrado na área {areaName}.
-                </p>
+            Baseado no seu plano de {profile?.preparation_time_months} {profile?.preparation_time_months === 1 ? 'mês' : 'meses'},
+            preparamos um percurso de treino centrado na área {areaName}.
+          </p>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
             <Link
               to="/training"
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 text-sm font-semibold text-white transition hover:bg-emerald-700"
@@ -257,13 +257,12 @@ export default function Dashboard() {
                   </div>
                   <div className="h-2.5 w-full rounded-full bg-slate-200">
                     <div
-                      className={`h-2.5 rounded-full ${
-                        progress.domain_score >= 80
+                      className={`h-2.5 rounded-full ${progress.domain_score >= 80
                           ? 'bg-emerald-500'
                           : progress.domain_score >= 50
                             ? 'bg-orange-500'
                             : 'bg-red-500'
-                      }`}
+                        }`}
                       style={{ width: `${progress.domain_score}%` }}
                     ></div>
                   </div>
@@ -292,22 +291,20 @@ export default function Dashboard() {
           {premiumPlans.map((plan) => (
             <div
               key={plan.id}
-              className={`rounded-[1.7rem] border p-5 ${
-                plan.highlight
+              className={`rounded-[1.7rem] border p-5 ${plan.highlight
                   ? 'border-amber-300 bg-amber-50 shadow-[0_18px_50px_-40px_rgba(245,158,11,0.5)]'
                   : 'border-slate-200 bg-white'
-              }`}
+                }`}
             >
               <div className="flex items-center justify-between gap-3">
-                <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${
-                  plan.highlight ? 'bg-amber-200 text-amber-900' : 'bg-slate-100 text-slate-600'
-                }`}>
+                <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${plan.highlight ? 'bg-amber-200 text-amber-900' : 'bg-slate-100 text-slate-600'
+                  }`}>
                   {plan.badge}
                 </span>
                 {plan.highlight && <Crown className="h-5 w-5 text-amber-600" />}
               </div>
               <h3 className="mt-4 text-xl font-black text-slate-900">{plan.name}</h3>
-              <p className="mt-1 text-sm font-semibold text-emerald-700">{plan.cadence}</p>
+              <p className="mt-1 text-sm font-semibold text-emerald-700">A partir de {plan.prices.monthly.label}/mês</p>
               <p className="mt-4 text-sm font-semibold text-slate-800">{plan.headline}</p>
               <p className="mt-3 text-sm leading-6 text-slate-600">{plan.description}</p>
               <div className="mt-4 space-y-2">

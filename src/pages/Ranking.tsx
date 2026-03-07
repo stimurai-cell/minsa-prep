@@ -4,14 +4,12 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import AreaLockCard from '../components/AreaLockCard';
-import PremiumGate from '../components/PremiumGate';
 
 export default function Ranking() {
   const { profile } = useAuthStore();
   const { areas, fetchAreas } = useAppStore();
   const [ranking, setRanking] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const hasPremiumAccess = profile?.role === 'premium' || profile?.role === 'admin';
 
   useEffect(() => {
     fetchAreas();
@@ -25,35 +23,18 @@ export default function Ranking() {
   useEffect(() => {
     const fetchRanking = async () => {
       if (!profile?.selected_area_id) return;
-
       setLoading(true);
       try {
-        // Buscamos as ultimas tentativas (limite razoavel) e calculamos a media dos ultimos 5 por utilizador
-        const { data: attempts, error } = await supabase
-          .from('quiz_attempts')
-          .select('user_id, score, completed_at, profiles (full_name)')
-          .eq('area_id', profile.selected_area_id)
-          .eq('is_completed', true)
-          .order('completed_at', { ascending: false })
-          .limit(500);
+        const { data: profilesData, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, total_xp, role')
+          .eq('selected_area_id', profile.selected_area_id)
+          .order('total_xp', { ascending: false })
+          .limit(10);
 
         if (error) throw error;
 
-        const map = new Map<string, { scores: number[]; name: string }>();
-        (attempts || []).forEach((a: any) => {
-          const uid = a.user_id;
-          const name = a.profiles?.full_name || 'Utilizador anonim0';
-          const entry = map.get(uid) || { scores: [], name };
-          if (entry.scores.length < 5) entry.scores.push(Number(a.score || 0));
-          map.set(uid, entry);
-        });
-
-        const rankingArr = Array.from(map.entries()).map(([uid, val]) => {
-          const avg = val.scores.length > 0 ? Math.round(val.scores.reduce((s, v) => s + v, 0) / val.scores.length) : 0;
-          return { user_id: uid, name: val.name, score: avg };
-        });
-
-        setRanking(rankingArr.sort((a, b) => b.score - a.score).slice(0, 10));
+        setRanking(profilesData || []);
       } catch (error) {
         console.error('Error fetching ranking:', error);
       } finally {
@@ -68,35 +49,21 @@ export default function Ranking() {
     return <AreaLockCard areas={areas} />;
   }
 
-  if (!hasPremiumAccess) {
-    return (
-      <PremiumGate
-        title="Ranking completo da area"
-        description="O ranking tem forte valor percebido porque mostra posicao, concorrencia e performance relativa. Por isso faz mais sentido deixá-lo como recurso premium."
-        featureList={[
-          'Top 10 da sua area com comparacao real',
-          'Leitura mais clara da competitividade',
-          'Melhor incentivo para manter consistencia nas provas',
-          'Upgrade natural para estudantes mais comprometidos',
-        ]}
-        ctaLabel="Desbloquear ranking"
-      />
-    );
-  }
-
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-black text-slate-900">
             <Award className="h-6 w-6 text-emerald-600" />
-            Ranking da sua area
+            Top 10 - Ranking Nacional
           </h1>
-          <p className="text-slate-500">Comparacao entre estudantes da area {selectedAreaName}.</p>
+          <p className="text-slate-500">Os estudantes com mais destaque em {selectedAreaName}.</p>
         </div>
 
-        <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">
-          {selectedAreaName}
+        <div className="flex items-center gap-3">
+          <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">
+            {selectedAreaName}
+          </div>
         </div>
       </div>
 
@@ -107,7 +74,7 @@ export default function Ranking() {
           </div>
         ) : ranking.length === 0 ? (
           <div className="p-12 text-center text-slate-500">
-            Nenhuma simulacao de prova realizada nesta area ainda.
+            Nenhum estudante registado nesta área ainda.
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
@@ -124,22 +91,34 @@ export default function Ranking() {
                   ) : index === 2 ? (
                     <Medal className="h-7 w-7 text-amber-600" />
                   ) : (
-                    <span className="text-xl font-black text-slate-400">{index + 1}o</span>
+                    <span className="text-xl font-black text-slate-400">{index + 1}º</span>
                   )}
                 </div>
 
                 <div className="ml-4 flex flex-1 items-center gap-4">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 font-bold text-slate-600">
-                    {item.profiles?.full_name?.charAt(0) || 'U'}
+                    {(item.full_name || 'U').charAt(0) || 'U'}
                   </div>
                   <div>
-                    <p className="font-black text-slate-900">{item.profiles?.full_name || 'Utilizador anonimo'}</p>
-                    <p className="text-xs text-slate-500">Media das ultimas simulacoes de prova</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-black text-slate-900">{item.full_name || 'Estudante anónimo'}</p>
+                      {item.role && item.role !== 'admin' && (
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${item.role === 'elite' ? 'bg-purple-100 text-purple-700' :
+                            item.role === 'premium' ? 'bg-amber-100 text-amber-700' :
+                              item.role === 'basic' ? 'bg-sky-100 text-sky-700' :
+                                'bg-slate-100 text-slate-500'
+                          }`}>
+                          {item.role === 'free' ? 'Gratuito' : item.role}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500">{selectedAreaName}</p>
                   </div>
                 </div>
 
                 <div className="text-right">
-                  <p className="text-2xl font-black text-emerald-600">{item.score}%</p>
+                  <p className="text-sm font-semibold uppercase tracking-widest text-slate-400 mb-0.5">XP</p>
+                  <p className="text-2xl font-black text-emerald-600">{item.total_xp || 0}</p>
                 </div>
               </div>
             ))}

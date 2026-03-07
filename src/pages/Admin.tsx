@@ -57,7 +57,7 @@ export default function Admin() {
   const { profile } = useAuthStore();
   const { areas, topics, fetchAreas, fetchTopics } = useAppStore();
   const [searchParams, setSearchParams] = useSearchParams();
-  
+
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'dashboard');
   const [stats, setStats] = useState({ users: 0, questions: 0, premium: 0, pendingPayments: 0 });
   const [userList, setUserList] = useState<any[]>([]);
@@ -78,7 +78,7 @@ export default function Admin() {
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [paymentFilter, setPaymentFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
   const [adminPaymentNotes, setAdminPaymentNotes] = useState<Record<string, string>>({});
-  
+
   // Generator State
   const [genArea, setGenArea] = useState('');
   const [genTopic, setGenTopic] = useState('');
@@ -106,7 +106,7 @@ export default function Admin() {
       .from('profiles')
       .select('*, areas(name), student_number, last_active')
       .order('created_at', { ascending: false });
-    
+
     if (!error && data) {
       setUserList(data);
     }
@@ -354,7 +354,7 @@ export default function Admin() {
       .from('profiles')
       .update({ selected_area_id: areaId })
       .eq('id', userId);
-    
+
     if (error) alert('Erro ao atualizar área.');
     else fetchUsers();
   };
@@ -364,7 +364,7 @@ export default function Admin() {
       .from('profiles')
       .update({ role })
       .eq('id', userId);
-    
+
     if (error) alert('Erro ao atualizar cargo.');
     else fetchUsers();
   };
@@ -375,11 +375,11 @@ export default function Admin() {
     }
     setGenerating(true);
     setGenResult(null);
-    
+
     try {
       const areaName = areas.find(a => a.id === genArea)?.name || '';
       const topicName = isCustomTopic ? customTopic : (topics.find(t => t.id === genTopic)?.name || '');
-      
+
       const result = await generateQuestions(areaName, topicName, genCount, genDiff, genContent);
       setGenResult(result);
     } catch (error: any) {
@@ -397,7 +397,7 @@ export default function Admin() {
 
     setGenerating(true);
     console.log('Starting save process...');
-    
+
     try {
       let finalTopicId = genTopic;
 
@@ -412,7 +412,7 @@ export default function Admin() {
           })
           .select()
           .single();
-        
+
         if (topicError) {
           console.error('Error creating topic:', topicError);
           throw new Error(`Erro ao criar tópico: ${topicError.message}`);
@@ -434,25 +434,25 @@ export default function Admin() {
           })
           .select()
           .single();
-          
+
         if (qError) {
           console.error('Error inserting question:', qError);
           throw new Error(`Erro ao inserir questão: ${qError.message}`);
         }
-        
+
         // 3. Insert Alternatives
         const alts = q.alternatives.map((a: any) => ({
           question_id: qData.id,
           content: stripAlternativePrefix(a.text),
           is_correct: a.isCorrect
         }));
-        
+
         const { error: altsError } = await supabase.from('alternatives').insert(alts);
         if (altsError) {
           console.error('Error inserting alternatives:', altsError);
           throw new Error(`Erro ao inserir alternativas: ${altsError.message}`);
         }
-        
+
         // 4. Insert Explanation
         if (q.explanation) {
           const { error: expError } = await supabase.from('question_explanations').insert({
@@ -465,7 +465,7 @@ export default function Admin() {
           }
         }
       }
-      
+
       alert('Questões salvas com sucesso!');
       await fetchStats();
       await fetchContentCatalog(genArea);
@@ -690,13 +690,7 @@ export default function Admin() {
           onClick={() => changeTab('content')}
           className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'content' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
         >
-          Conteudo
-        </button>
-        <button
-          onClick={() => changeTab('generator')}
-          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'generator' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
-        >
-          Gerador IA
+          Conteudo e IA
         </button>
         <button
           onClick={() => changeTab('users')}
@@ -724,44 +718,44 @@ export default function Admin() {
             </div>
           )}
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-          <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
-              <Users className="w-6 h-6" />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+                <Users className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Total Usuários</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.users}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Total Usuários</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.users}</p>
+            <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+                <Database className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Total Questões</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.questions}</p>
+              </div>
+            </div>
+            <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-purple-50 flex items-center justify-center text-purple-600">
+                <Zap className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Usuários Premium</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.premium}</p>
+              </div>
+            </div>
+            <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
+                <BellRing className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Pagamentos Pendentes</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.pendingPayments}</p>
+              </div>
             </div>
           </div>
-          <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
-              <Database className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Total Questões</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.questions}</p>
-            </div>
-          </div>
-          <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-purple-50 flex items-center justify-center text-purple-600">
-              <Zap className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Usuários Premium</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.premium}</p>
-            </div>
-          </div>
-          <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
-              <BellRing className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Pagamentos Pendentes</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.pendingPayments}</p>
-            </div>
-          </div>
-        </div>
         </div>
       )}
 
@@ -779,9 +773,8 @@ export default function Admin() {
                     key={filter}
                     type="button"
                     onClick={() => setPaymentFilter(filter)}
-                    className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                      paymentFilter === filter ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
-                    }`}
+                    className={`rounded-full px-4 py-2 text-sm font-semibold ${paymentFilter === filter ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
+                      }`}
                   >
                     {filter === 'pending'
                       ? 'Pendentes'
@@ -1080,11 +1073,10 @@ export default function Admin() {
                                       {question.alternatives.map((alternative) => (
                                         <div
                                           key={alternative.id}
-                                          className={`rounded-lg px-3 py-2 text-sm ${
-                                            alternative.is_correct
-                                              ? 'bg-emerald-50 text-emerald-800'
-                                              : 'bg-slate-50 text-slate-600'
-                                          }`}
+                                          className={`rounded-lg px-3 py-2 text-sm ${alternative.is_correct
+                                            ? 'bg-emerald-50 text-emerald-800'
+                                            : 'bg-slate-50 text-slate-600'
+                                            }`}
                                         >
                                           {alternative.content}
                                         </div>
@@ -1156,8 +1148,8 @@ export default function Admin() {
                         <p className="text-xs text-gray-500">{u.id.substring(0, 8)}...</p>
                       </td>
                       <td className="px-6 py-4">
-                        <select 
-                          value={u.role} 
+                        <select
+                          value={u.role}
                           onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
                           className="text-xs border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
                         >
@@ -1176,8 +1168,8 @@ export default function Admin() {
                         <span className="text-sm text-gray-600">{u.last_active ? new Date(u.last_active).toLocaleString() : '—'}</span>
                       </td>
                       <td className="px-6 py-4">
-                        <select 
-                          value={u.selected_area_id || ''} 
+                        <select
+                          value={u.selected_area_id || ''}
                           onChange={(e) => handleUpdateUserArea(u.id, e.target.value)}
                           className="text-xs border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
                         >
@@ -1210,196 +1202,199 @@ export default function Admin() {
         </div>
       )}
 
-      {activeTab === 'generator' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Form */}
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-            <div className="bg-blue-50 border border-blue-200 text-blue-700 p-4 rounded-xl text-sm mb-4">
-              Modo Gemini: <code>{geminiMode}</code> | Modelo preferencial: <code>{geminiModel}</code>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
-                <p className="text-xs uppercase tracking-wider text-emerald-700 font-semibold">Questoes</p>
-                <p className="text-2xl font-bold text-emerald-900 mt-1">{stats.questions}</p>
+      {activeTab === 'content' && (
+        <div className="pt-8 mt-10 border-t border-slate-200">
+          <h2 className="text-2xl font-black text-slate-900 mb-6">Gerador de Questões com IA</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Form */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+              <div className="bg-blue-50 border border-blue-200 text-blue-700 p-4 rounded-xl text-sm mb-4">
+                Modo Gemini: <code>{geminiMode}</code> | Modelo preferencial: <code>{geminiModel}</code>
               </div>
-              <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
-                <p className="text-xs uppercase tracking-wider text-blue-700 font-semibold">Topicos da area</p>
-                <p className="text-2xl font-bold text-blue-900 mt-1">{contentCatalog.length}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                  <p className="text-xs uppercase tracking-wider text-emerald-700 font-semibold">Questoes</p>
+                  <p className="text-2xl font-bold text-emerald-900 mt-1">{stats.questions}</p>
+                </div>
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                  <p className="text-xs uppercase tracking-wider text-blue-700 font-semibold">Topicos da area</p>
+                  <p className="text-2xl font-bold text-blue-900 mt-1">{contentCatalog.length}</p>
+                </div>
+                <div className="rounded-xl border border-purple-100 bg-purple-50 p-4">
+                  <p className="text-xs uppercase tracking-wider text-purple-700 font-semibold">Preview atual</p>
+                  <p className="text-2xl font-bold text-purple-900 mt-1">{genResult?.questions?.length || 0}</p>
+                </div>
               </div>
-              <div className="rounded-xl border border-purple-100 bg-purple-50 p-4">
-                <p className="text-xs uppercase tracking-wider text-purple-700 font-semibold">Preview atual</p>
-                <p className="text-2xl font-bold text-purple-900 mt-1">{genResult?.questions?.length || 0}</p>
-              </div>
-            </div>
-            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <Zap className="w-5 h-5 text-emerald-600" />
-              Gerador Inteligente (Gemini)
-            </h2>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Área</label>
-                <select
-                  value={genArea}
-                  onChange={(e) => { setGenArea(e.target.value); setGenTopic(''); setIsCustomTopic(false); }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                >
-                  <option value="" disabled>Selecione</option>
-                  {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tópico</label>
-                <div className="space-y-2">
+              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <Zap className="w-5 h-5 text-emerald-600" />
+                Gerador Inteligente (Gemini)
+              </h2>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Área</label>
                   <select
-                    value={isCustomTopic ? 'custom' : genTopic}
-                    onChange={(e) => {
-                      if (e.target.value === 'custom') {
-                        setIsCustomTopic(true);
-                        setGenTopic('');
-                      } else {
-                        setIsCustomTopic(false);
-                        setGenTopic(e.target.value);
-                      }
-                    }}
+                    value={genArea}
+                    onChange={(e) => { setGenArea(e.target.value); setGenTopic(''); setIsCustomTopic(false); }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                    disabled={!genArea}
                   >
                     <option value="" disabled>Selecione</option>
-                    {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    <option value="custom">+ Criar Novo Tópico</option>
+                    {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
-                  
-                  {isCustomTopic && (
-                    <input
-                      type="text"
-                      placeholder="Nome do novo tópico..."
-                      value={customTopic}
-                      onChange={(e) => setCustomTopic(e.target.value)}
-                      className="w-full px-3 py-2 border border-emerald-300 bg-emerald-50 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                      autoFocus
-                    />
-                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tópico</label>
+                  <div className="space-y-2">
+                    <select
+                      value={isCustomTopic ? 'custom' : genTopic}
+                      onChange={(e) => {
+                        if (e.target.value === 'custom') {
+                          setIsCustomTopic(true);
+                          setGenTopic('');
+                        } else {
+                          setIsCustomTopic(false);
+                          setGenTopic(e.target.value);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                      disabled={!genArea}
+                    >
+                      <option value="" disabled>Selecione</option>
+                      {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      <option value="custom">+ Criar Novo Tópico</option>
+                    </select>
+
+                    {isCustomTopic && (
+                      <input
+                        type="text"
+                        placeholder="Nome do novo tópico..."
+                        value={customTopic}
+                        onChange={(e) => setCustomTopic(e.target.value)}
+                        className="w-full px-3 py-2 border border-emerald-300 bg-emerald-50 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                        autoFocus
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade</label>
+                  <input
+                    type="number"
+                    min="1" max="20"
+                    value={genCount}
+                    onChange={(e) => setGenCount(parseInt(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Dificuldade</label>
+                  <select
+                    value={genDiff}
+                    onChange={(e) => setGenDiff(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                  >
+                    <option value="easy">Fácil</option>
+                    <option value="medium">Média</option>
+                    <option value="hard">Difícil</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade</label>
-                <input
-                  type="number"
-                  min="1" max="20"
-                  value={genCount}
-                  onChange={(e) => setGenCount(parseInt(e.target.value))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                <label className="block text-sm font-medium text-gray-700 mb-1">Conteúdo Base (Opcional)</label>
+                <textarea
+                  rows={5}
+                  value={genContent}
+                  onChange={(e) => setGenContent(e.target.value)}
+                  placeholder="Cole aqui o texto base para a IA gerar as questões..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm font-mono"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Dificuldade</label>
-                <select
-                  value={genDiff}
-                  onChange={(e) => setGenDiff(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                >
-                  <option value="easy">Fácil</option>
-                  <option value="medium">Média</option>
-                  <option value="hard">Difícil</option>
-                </select>
-              </div>
+
+              <button
+                onClick={handleGenerate}
+                disabled={generating || !genArea || (!genTopic && !isCustomTopic) || (isCustomTopic && !customTopic)}
+                className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+              >
+                {generating && !genResult ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-5 h-5" />}
+                {generating && !genResult ? 'Gerando...' : 'Gerar Questões'}
+              </button>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Conteúdo Base (Opcional)</label>
-              <textarea
-                rows={5}
-                value={genContent}
-                onChange={(e) => setGenContent(e.target.value)}
-                placeholder="Cole aqui o texto base para a IA gerar as questões..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm font-mono"
-              />
-            </div>
+            {/* Preview */}
+            <div className="bg-gray-50 p-6 rounded-2xl shadow-inner border border-gray-200 overflow-y-auto max-h-[600px]">
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Pré-visualização</h2>
 
-            <button
-              onClick={handleGenerate}
-              disabled={generating || !genArea || (!genTopic && !isCustomTopic) || (isCustomTopic && !customTopic)}
-              className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-            >
-              {generating && !genResult ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-5 h-5" />}
-              {generating && !genResult ? 'Gerando...' : 'Gerar Questões'}
-            </button>
-          </div>
-
-          {/* Preview */}
-          <div className="bg-gray-50 p-6 rounded-2xl shadow-inner border border-gray-200 overflow-y-auto max-h-[600px]">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Pré-visualização</h2>
-            
-            <div className="mb-4 space-y-4">
-              <div className="rounded-xl border border-gray-200 bg-white p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-wider text-gray-500 font-semibold">Mapa de conteudo</p>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {genArea ? 'Veja abaixo os topicos da area e quantas questoes ja existem em cada um.' : 'Selecione uma area para ver o catalogo.'}
-                    </p>
+              <div className="mb-4 space-y-4">
+                <div className="rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-wider text-gray-500 font-semibold">Mapa de conteudo</p>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {genArea ? 'Veja abaixo os topicos da area e quantas questoes ja existem em cada um.' : 'Selecione uma area para ver o catalogo.'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => fetchContentCatalog(genArea)}
+                      disabled={!genArea || loadingCatalog}
+                      className="text-sm font-medium text-emerald-600 disabled:opacity-50"
+                    >
+                      {loadingCatalog ? 'Atualizando...' : 'Atualizar'}
+                    </button>
                   </div>
+                  <div className="mt-4 space-y-2 max-h-44 overflow-y-auto pr-1">
+                    {!genArea ? (
+                      <p className="text-sm text-gray-500">Nenhuma area selecionada.</p>
+                    ) : contentCatalog.length === 0 ? (
+                      <p className="text-sm text-gray-500">Nenhum topico encontrado para esta area.</p>
+                    ) : (
+                      contentCatalog.map((item) => (
+                        <div key={item.id} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                          <span className="text-sm text-gray-700">{item.name}</span>
+                          <span className="text-xs font-semibold text-gray-500">{item.questionsCount} questoes</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {!genResult ? (
+                <div className="text-center text-gray-500 py-12">
+                  Nenhuma questão gerada ainda.
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {genResult.questions.map((q: any, i: number) => (
+                    <div key={i} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                      <p className="font-medium text-gray-900 mb-3 text-sm">{i + 1}. {q.question}</p>
+                      <div className="space-y-2 pl-4">
+                        {q.alternatives.map((a: any, j: number) => (
+                          <div key={j} className={`text-sm p-2 rounded ${a.isCorrect ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-gray-600'}`}>
+                            {a.text}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
+                        <strong>Explicação:</strong> {q.explanation}
+                      </div>
+                    </div>
+                  ))}
+
                   <button
-                    onClick={() => fetchContentCatalog(genArea)}
-                    disabled={!genArea || loadingCatalog}
-                    className="text-sm font-medium text-emerald-600 disabled:opacity-50"
+                    onClick={handleSaveGenerated}
+                    disabled={generating}
+                    className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors sticky bottom-0"
                   >
-                    {loadingCatalog ? 'Atualizando...' : 'Atualizar'}
+                    {generating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+                    Salvar {genResult.questions.length} Questões no Banco
                   </button>
                 </div>
-                <div className="mt-4 space-y-2 max-h-44 overflow-y-auto pr-1">
-                  {!genArea ? (
-                    <p className="text-sm text-gray-500">Nenhuma area selecionada.</p>
-                  ) : contentCatalog.length === 0 ? (
-                    <p className="text-sm text-gray-500">Nenhum topico encontrado para esta area.</p>
-                  ) : (
-                    contentCatalog.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                        <span className="text-sm text-gray-700">{item.name}</span>
-                        <span className="text-xs font-semibold text-gray-500">{item.questionsCount} questoes</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
+              )}
             </div>
-
-            {!genResult ? (
-              <div className="text-center text-gray-500 py-12">
-                Nenhuma questão gerada ainda.
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {genResult.questions.map((q: any, i: number) => (
-                  <div key={i} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                    <p className="font-medium text-gray-900 mb-3 text-sm">{i + 1}. {q.question}</p>
-                    <div className="space-y-2 pl-4">
-                      {q.alternatives.map((a: any, j: number) => (
-                        <div key={j} className={`text-sm p-2 rounded ${a.isCorrect ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-gray-600'}`}>
-                          {a.text}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
-                      <strong>Explicação:</strong> {q.explanation}
-                    </div>
-                  </div>
-                ))}
-                
-                <button
-                  onClick={handleSaveGenerated}
-                  disabled={generating}
-                  className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors sticky bottom-0"
-                >
-                  {generating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-                  Salvar {genResult.questions.length} Questões no Banco
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}
