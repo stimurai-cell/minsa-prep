@@ -619,10 +619,8 @@ export default function Simulation() {
               <Sparkles className="h-4 w-4" />
               Simulacao de prova
             </div>
-            <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-900 md:text-4xl">Prova completa com fluxo focado</h1>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              A prova agora abre num modo proprio, sem menu inferior, com contagem de certas e erradas, barra de progresso e temporizador sempre visivel.
-            </p>
+            <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-900 md:text-4xl">Simulação de prova</h1>
+            <p className="mt-3 text-sm leading-6 text-slate-600">Modo focado: temporizador, progresso e contadores visíveis.</p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -640,10 +638,8 @@ export default function Simulation() {
 
       <section className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.35)] md:p-6">
-          <h2 className="text-2xl font-black text-slate-900">Pronto para a simulacao de prova?</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            O sistema monta 30 questoes da sua area e leva voce para um modo de resolucao linear e interativo.
-          </p>
+          <h2 className="text-2xl font-black text-slate-900">Pronto para a simulação?</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Prova de 30 questões no modo focado.</p>
 
           <button
             type="button"
@@ -693,12 +689,8 @@ export default function Simulation() {
           <div className="flex items-start gap-3">
             <AlertCircle className="mt-1 h-5 w-5" />
             <div>
-              <h3 className="font-bold">Como funciona agora</h3>
-              <ul className="mt-3 space-y-2 text-sm leading-6">
-                <li>30 questoes, uma por ecran, para evitar scroll excessivo.</li>
-                <li>Tempo limite de 30 minutos, um minuto por questao.</li>
-                <li>Barra de progresso e contadores de certas e erradas durante toda a prova.</li>
-              </ul>
+              <h3 className="font-bold">Resumo</h3>
+              <p className="mt-2 text-sm leading-6">30 questões com tempo e progresso visíveis — formato pensado para treinar desempenho em condições reais.</p>
             </div>
           </div>
         </div>

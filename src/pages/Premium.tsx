@@ -413,12 +413,10 @@ export default function Premium() {
 
       <section className="grid gap-4 lg:grid-cols-[1fr_auto]">
         <div className="rounded-[1.8rem] border border-emerald-200 bg-emerald-50 p-5">
-          <h2 className="text-xl font-black text-slate-900">Posicionamento estrategico recomendado</h2>
-          <div className="mt-4 space-y-3 text-sm leading-6 text-slate-700">
-            <p>Deixa o gratuito entregar valor real, mas limita o que tem maior valor percebido e recorrencia.</p>
-            <p>O ranking, o controlo de dificuldade e os relatórios mais densos devem puxar o estudante para o Premium Focus.</p>
-            <p>Guarda o Intensivo para campanhas, reta final e perfis que ja deram sinais claros de compromisso.</p>
-          </div>
+          <h2 className="text-xl font-black text-slate-900">Precisa de ajuda?</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-700">
+            Dúvidas sobre planos ou pagamentos? Fale com o suporte pelo WhatsApp: <span className="font-black">+244936793706</span>.
+          </p>
         </div>
 
         <Link

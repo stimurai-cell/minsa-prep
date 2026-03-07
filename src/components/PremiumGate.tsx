@@ -47,15 +47,15 @@ export default function PremiumGate({
               <Crown className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-lg font-black">Premium Focus</p>
-              <p className="text-sm text-slate-300">Plano principal para conversao</p>
+              <p className="text-lg font-black">Plano Premium</p>
+              <p className="text-sm text-slate-300">Desbloqueie recursos para estudar com mais foco</p>
             </div>
           </div>
           <p className="mt-4 text-sm leading-6 text-slate-300">
-            Desbloqueia os recursos mais procurados sem obrigar o estudante a saltar logo para o plano intensivo.
+            Tenha acesso a filtros, ranking e ferramentas de revisão para acelerar seu progresso.
           </p>
           <Link
-            to="/premium"
+            to="/premium#payment-section"
             className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(90deg,#facc15_0%,#34d399_100%)] px-5 py-4 text-sm font-black uppercase tracking-[0.14em] text-slate-950 transition hover:opacity-95"
           >
             {ctaLabel}
