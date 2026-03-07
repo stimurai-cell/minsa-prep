@@ -601,7 +601,7 @@ export default function Training() {
             </div>
             <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-900 md:text-4xl">Pratique, ganhe XP e avance</h1>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              Agora o treino entra num modo imersivo: sem menu inferior, com uma questao por vez, correcao imediata e barra de evolucao no topo.
+              Agora o treino entra num modo focado: sem menu inferior, uma questão por vez, correção imediata e barra de evolução no topo.
             </p>
           </div>
 
@@ -611,7 +611,7 @@ export default function Training() {
               <p className="mt-2 text-3xl font-black text-yellow-600">{profile.total_xp || 0}</p>
             </div>
             <div className="rounded-[1.6rem] border border-emerald-200 bg-emerald-50 px-5 py-4">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Area</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Área</p>
               <p className="mt-2 text-xl font-black text-slate-900">{selectedAreaName}</p>
             </div>
           </div>
@@ -620,9 +620,9 @@ export default function Training() {
 
       <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.35)] md:p-6">
-          <h2 className="text-2xl font-black text-slate-900">Escolha um topico</h2>
+          <h2 className="text-2xl font-black text-slate-900">Escolha um tópico</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            A sessao abre numa tela dedicada ao exercicio para manter foco total.
+            A sessão abre numa tela dedicada ao exercício para manter foco total.
           </p>
 
           <div className="mt-6 space-y-5">
@@ -632,14 +632,14 @@ export default function Training() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Topico</label>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Tópico</label>
               <select
                 value={selectedTopic}
                 onChange={(e) => setSelectedTopic(e.target.value)}
                 className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-800 outline-none transition focus:border-emerald-500"
               >
                 <option value="" disabled>
-                  Selecione um topico
+                  Selecione um tópico
                 </option>
                 {topics.map((topic) => (
                   <option key={topic.id} value={topic.id}>
@@ -650,7 +650,7 @@ export default function Training() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Nivel</label>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Nível</label>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {(['mixed', 'easy', 'medium', 'hard'] as DifficultyPreference[]).map((difficulty) => (
                   <button
@@ -672,12 +672,12 @@ export default function Training() {
               </div>
               {hasPremiumAccess ? (
                 <p className="mt-2 text-xs text-slate-500">
-                  Em modo misto, o sistema tenta equilibrar facil, normal e dificil antes de completar a sessao.
+                  Em modo misto, o sistema tenta equilibrar Fácil, Normal e Difícil antes de completar a sessão.
                 </p>
               ) : (
                 <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
-                  O plano gratuito usa <span className="font-black">Normal</span> por defeito.
-                  Para escolher <span className="font-black">Facil</span>, <span className="font-black">Dificil</span> ou <span className="font-black">Misto</span>, suba para o premium.
+                  O plano gratuito usa <span className="font-black">Normal</span> por padrão.
+                  Para escolher <span className="font-black">Fácil</span>, <span className="font-black">Difícil</span> ou <span className="font-black">Misto</span>, suba para o premium.
                   <Link to="/premium" className="ml-1 font-black underline">
                     Ver premium
                   </Link>
@@ -696,18 +696,18 @@ export default function Training() {
           </div>
         </div>
 
-        <div className="grid gap-4">
+          <div className="grid gap-4">
           <div className="rounded-[1.7rem] border border-lime-200 bg-lime-50 p-5">
             <p className="text-sm font-bold text-lime-700">Fluxo focado</p>
-            <p className="mt-2 text-sm leading-6 text-slate-700">Sem menu inferior durante a resolucao e com CTA sempre visivel no fim da tela.</p>
+            <p className="mt-2 text-sm leading-6 text-slate-700">Sem menu inferior durante a resolução e com CTA sempre visível no fim da tela.</p>
           </div>
           <div className="rounded-[1.7rem] border border-sky-200 bg-sky-50 p-5">
-            <p className="text-sm font-bold text-sky-700">Correcao imediata</p>
-            <p className="mt-2 text-sm leading-6 text-slate-700">A resposta certa e errada aparece logo na mesma pagina, antes da proxima questao.</p>
+            <p className="text-sm font-bold text-sky-700">Correção imediata</p>
+            <p className="mt-2 text-sm leading-6 text-slate-700">A resposta certa e errada aparece logo na mesma página, antes da próxima questão.</p>
           </div>
           <div className="rounded-[1.7rem] border border-amber-200 bg-amber-50 p-5">
-            <p className="text-sm font-bold text-amber-700">Progresso vivo</p>
-            <p className="mt-2 text-sm leading-6 text-slate-700">Barra superior com andamento da sessao e contadores de certas e erradas.</p>
+            <p className="text-sm font-bold text-amber-700">Progresso em tempo real</p>
+            <p className="mt-2 text-sm leading-6 text-slate-700">Barra superior com andamento da sessão e contadores de certas e erradas.</p>
           </div>
         </div>
       </section>

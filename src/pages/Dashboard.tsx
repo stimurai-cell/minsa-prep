@@ -92,7 +92,7 @@ export default function Dashboard() {
   }, [profile?.id]);
 
   const areaName = useMemo(
-    () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Area ainda nao definida',
+    () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Área ainda não definida',
     [areas, profile?.selected_area_id]
   );
 
@@ -212,9 +212,9 @@ export default function Dashboard() {
           </div>
 
           <p className="mt-5 text-sm leading-6 text-slate-600">
-            Baseado no seu plano de {profile?.preparation_time_months} {profile?.preparation_time_months === 1 ? 'mes' : 'meses'},
-            preparamos um percurso de treino centrado na area {areaName}.
-          </p>
+                  Baseado no seu plano de {profile?.preparation_time_months} {profile?.preparation_time_months === 1 ? 'mês' : 'meses'},
+                  preparamos um percurso de treino centrado na área {areaName}.
+                </p>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
             <Link
@@ -278,9 +278,9 @@ export default function Dashboard() {
         <div className="flex flex-col gap-3 border-b border-slate-100 pb-5 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Pacotes premium</p>
-            <h2 className="mt-2 text-2xl font-black text-slate-900">Estrutura comercial pronta para crescer</h2>
+            <h2 className="mt-2 text-2xl font-black text-slate-900">Planos premium</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              A melhor distribuicao e manter um gratuito forte, um premium principal para conversao e um intensivo para upsell.
+              Escolha o plano que melhor se adequa ao seu objetivo de estudo.
             </p>
           </div>
           <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600">

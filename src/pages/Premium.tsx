@@ -27,7 +27,7 @@ const premiumPerks = [
   'Escolha livre de nivel no treino e na prova',
   'Ranking completo da area',
   'Leitura mais profunda do historico de desempenho',
-  'Melhor argumento comercial dentro do proprio app',
+  'Relatórios e filtros avançados para revisão',
 ];
 
 const paymentMethods = [
@@ -203,7 +203,7 @@ export default function Premium() {
         <div className="flex flex-col gap-3 border-b border-slate-100 pb-5 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">Planos</p>
-            <h2 className="mt-2 text-2xl font-black text-slate-900">Oferta organizada para conversao</h2>
+            <h2 className="mt-2 text-2xl font-black text-slate-900">Nossos planos</h2>
           </div>
           {!isPremium && (
             <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800">

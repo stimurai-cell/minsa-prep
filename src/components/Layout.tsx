@@ -232,7 +232,7 @@ export default function Layout() {
                 <div className="mt-3 rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-[0_20px_50px_-40px_rgba(15,23,42,0.35)]">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Conta</p>
                   <p className="mt-2 text-sm text-slate-600">
-                    A sessão fica guardada no dispositivo até terminar manualmente.
+                    A sessão é salva localmente até ser encerrada manualmente.
                   </p>
                   <button
                     type="button"
