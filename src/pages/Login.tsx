@@ -50,6 +50,7 @@ export default function Login() {
       }
 
       await checkSession();
+      await useAuthStore.getState().updateLastActive();
       if (profile?.role === 'admin') {
         navigate('/admin');
       } else {

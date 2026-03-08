@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 // This matches the version in version.json
-const CURRENT_VERSION = '1.0.1';
+const CURRENT_VERSION = '1.0.2';
 
 export function useVersionCheck() {
     const [needsUpdate, setNeedsUpdate] = useState(false);

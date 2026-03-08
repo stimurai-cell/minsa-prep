@@ -37,7 +37,7 @@ function RootRedirect() {
 }
 
 export default function App() {
-  const { checkSession } = useAuthStore();
+  const { user, loading, checkSession, updateLastActive } = useAuthStore();
   const { needsUpdate } = useVersionCheck();
 
   useEffect(() => {
@@ -45,13 +45,12 @@ export default function App() {
   }, [checkSession]);
 
   useEffect(() => {
-    const { updateLastActive, user } = useAuthStore.getState();
-    if (user) {
+    if (user && !loading) {
       updateLastActive();
-      const interval = setInterval(updateLastActive, 120000); // Update every 2 mins
+      const interval = setInterval(updateLastActive, 120000); // 2 mins
       return () => clearInterval(interval);
     }
-  }, [checkSession]); // Refresh when session changes
+  }, [user, loading, updateLastActive]);
 
   return (
     <BrowserRouter>
