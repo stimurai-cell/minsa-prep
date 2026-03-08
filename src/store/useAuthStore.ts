@@ -18,6 +18,7 @@ interface AuthState {
   setProfile: (profile: UserProfile | null) => void;
   signOut: () => Promise<void>;
   refreshProfile: (userId?: string) => Promise<UserProfile | null>;
+  updateLastActive: () => Promise<void>;
   checkSession: () => Promise<void>;
 }
 
@@ -74,6 +75,19 @@ export const useAuthStore = create<AuthState>((set) => ({
       console.error('Session check error:', error);
     } finally {
       set({ loading: false });
+    }
+  },
+  updateLastActive: async () => {
+    const { user } = useAuthStore.getState();
+    if (!user) return;
+
+    try {
+      await supabase
+        .from('profiles')
+        .update({ last_active: new Date().toISOString() })
+        .eq('id', user.id);
+    } catch (error) {
+      console.error('Error updating last_active:', error);
     }
   },
 }));

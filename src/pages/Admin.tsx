@@ -14,6 +14,7 @@ import {
   Loader2,
   Monitor,
   Plus,
+  RefreshCw,
   Search,
   Settings,
   Trash2,
@@ -61,7 +62,13 @@ export default function Admin() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'dashboard');
-  const [stats, setStats] = useState({ users: 0, questions: 0, premium: 0, pendingPayments: 0 });
+  const [dbError, setDbError] = useState<string | null>(null);
+  const [stats, setStats] = useState({
+    users: 0,
+    questions: 0,
+    premium: 0,
+    pendingPayments: 0,
+  });
   const [userList, setUserList] = useState<any[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -107,25 +114,41 @@ export default function Admin() {
   const changeTab = (tab: string) => {
     setActiveTab(tab);
     setSearchParams({ tab });
+    if (tab === 'monitor') {
+      fetchUsers();
+    }
   };
 
   const fetchUsers = async () => {
     setLoadingUsers(true);
+    console.log('Fetching users from profiles table...');
     const { data, error } = await supabase
       .from('profiles')
-      .select('*, areas(name), student_number, last_active')
+      .select('*, areas(name), student_number, last_active, total_xp')
       .order('created_at', { ascending: false });
 
+    if (error) {
+      console.error('CRITICAL: Error fetching users:', error);
+      // alert(`Erro ao carregar usuários: ${error.message}\nVerifique se rodou o script SQL das colunas student_number e last_active.`);
+    }
     if (!error && data) {
+      console.log('Users fetched successfully. Count:', data.length);
       setUserList(data);
+    } else if (!error && !data) {
+      console.log('No users found in database (data is null or empty).');
     }
     setLoadingUsers(false);
   };
 
   const fetchOnlineUsers = async () => {
     try {
-      // Assume we have a last_active or is_online flag in profiles or activity table
-      const { data } = await supabase.from('profiles').select('id, full_name, student_number, last_active').order('last_active', { ascending: false }).limit(50);
+      // Threshold: 5 minutes from now
+      const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, student_number, last_active')
+        .gte('last_active', fiveMinsAgo)
+        .order('last_active', { ascending: false });
       setOnlineUsers(data || []);
     } catch (err) {
       console.error('Error fetching online users', err);
@@ -136,13 +159,25 @@ export default function Admin() {
   const [geminiMode, setGeminiMode] = useState('');
 
   const fetchStats = async () => {
-    const { count: usersCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
-    const { count: qCount } = await supabase.from('questions').select('*', { count: 'exact', head: true });
-    const { count: premCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'premium');
-    const { count: pendingPaymentsCount } = await supabase
+    console.log('Fetching platform statistics...');
+    setDbError(null);
+    const { count: usersCount, error: usersErr } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
+    const { count: qCount, error: qErr } = await supabase.from('questions').select('*', { count: 'exact', head: true });
+    const { count: premCount, error: premErr } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'premium');
+    const { count: pendingPaymentsCount, error: payErr } = await supabase
       .from('payment_requests')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'pending');
+
+    if (usersErr || qErr || premErr || payErr) {
+      console.error('Error fetching stats:', { usersErr, qErr, premErr, payErr });
+      if (usersErr) {
+        console.error('Profiles count error:', usersErr.message);
+        setDbError(usersErr.message);
+      }
+    }
+
+    console.log('Stats Result:', { usersCount, qCount, premCount, pendingPaymentsCount });
 
     setStats({
       users: usersCount || 0,
@@ -282,10 +317,13 @@ export default function Admin() {
   useEffect(() => {
     fetchAreas();
     fetchStats();
-  }, [fetchAreas]);
+    if (activeTab === 'monitor') {
+      fetchUsers();
+    }
+  }, [fetchAreas, activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'users') {
+    if (activeTab === 'monitor') {
       fetchUsers();
     }
   }, [activeTab]);
@@ -323,8 +361,8 @@ export default function Admin() {
       const { data: activities } = await supabase
         .from('activity_logs')
         .select('*, profiles(full_name, student_number)')
-        .order('activity_date', { ascending: false })
-        .limit(20);
+        .order('created_at', { ascending: false })
+        .limit(30);
 
       setRecentAttempts(attempts || []);
       setRecentActivities(activities || []);
@@ -736,12 +774,6 @@ export default function Admin() {
           Conteudo e IA
         </button>
         <button
-          onClick={() => changeTab('users')}
-          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'users' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
-        >
-          Gerenciar Usuários
-        </button>
-        <button
           onClick={() => changeTab('monitor')}
           className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'monitor' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
         >
@@ -749,571 +781,487 @@ export default function Admin() {
         </button>
       </div>
 
-      {activeTab === 'dashboard' && (
-        <div className="space-y-4">
-          {stats.pendingPayments > 0 && (
-            <div className="rounded-[1.8rem] border border-amber-200 bg-amber-50 p-5">
-              <div className="flex items-start gap-3">
-                <BellRing className="mt-1 h-5 w-5 text-amber-700" />
-                <div>
-                  <p className="text-lg font-black text-slate-900">
-                    Há {stats.pendingPayments} pagamento{stats.pendingPayments > 1 ? 's' : ''} pendente{stats.pendingPayments > 1 ? 's' : ''}
+      <main className="space-y-6">
+        {dbError && (
+          <div className="rounded-[1.8rem] border border-red-200 bg-red-50 p-6 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-600">
+                <XCircle className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-red-900">Erro Crítico de Banco de Dados</h3>
+                <p className="mt-1 text-sm text-red-700">
+                  O sistema não conseguiu carregar os usuários. Isto geralmente significa que as colunas novas não foram criadas no Supabase.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <code className="rounded-lg bg-red-100 px-2 py-1 text-xs font-mono text-red-800">
+                    Erro: {dbError}
+                  </code>
+                </div>
+                <p className="mt-3 text-sm font-medium text-red-800">
+                  Ação: Vá ao Supabase SQL Editor e execute o arquivo "fix_profiles_schema.sql".
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {stats.users === 0 && !dbError && (
+          <div className="rounded-[1.8rem] border border-blue-200 bg-blue-50 p-6 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-600">
+                <Database className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-blue-900">Diagnóstico de Dados</h3>
+                <p className="mt-1 text-sm text-blue-700">
+                  O banco de dados retornou **0 usuários**. Se existem usuários registrados, a política de segurança (RLS) pode estar a bloquear o seu acesso.
+                </p>
+                <p className="mt-2 text-xs text-blue-600">
+                  Seu User ID: <code className="font-mono bg-blue-100 px-1 rounded">{profile?.id}</code> | Seu Cargo: <code className="font-mono bg-blue-100 px-1 rounded">{profile?.role}</code>
+                </p>
+                {profile?.role !== 'admin' && (
+                  <p className="mt-3 text-sm font-bold text-red-600">
+                    AVISO: O seu perfil no banco de dados não está com o cargo 'admin'. Por isso você vê tudo vazio.
                   </p>
-                  <p className="mt-1 text-sm text-slate-700">
-                    Revise estes comprovativos o mais rápido possível para o estudante não ficar à espera do plano.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
-                <Users className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 font-medium">Total Usuários</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.users}</p>
-              </div>
-            </div>
-            <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
-                <Database className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 font-medium">Total Questões</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.questions}</p>
-              </div>
-            </div>
-            <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-purple-50 flex items-center justify-center text-purple-600">
-                <Zap className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 font-medium">Usuários Premium</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.premium}</p>
-              </div>
-            </div>
-            <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
-                <BellRing className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 font-medium">Pagamentos Pendentes</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.pendingPayments}</p>
+                )}
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {activeTab === 'payments' && (
-        <div className="space-y-5">
-          <div className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-2xl font-black text-slate-900">Pagamentos para aprovação</h2>
-                <p className="text-sm text-slate-500">Aprove ou rejeite e ative o premium manualmente.</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {(['pending', 'approved', 'rejected', 'all'] as const).map((filter) => (
-                  <button
-                    key={filter}
-                    type="button"
-                    onClick={() => setPaymentFilter(filter)}
-                    className={`rounded-full px-4 py-2 text-sm font-semibold ${paymentFilter === filter ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
-                      }`}
-                  >
-                    {filter === 'pending'
-                      ? 'Pendentes'
-                      : filter === 'approved'
-                        ? 'Aprovados'
-                        : filter === 'rejected'
-                          ? 'Rejeitados'
-                          : 'Todos'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {loadingPayments ? (
-            <div className="rounded-[1.8rem] border border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500">
-              A carregar pedidos de pagamento...
-            </div>
-          ) : paymentRequests.length === 0 ? (
-            <div className="rounded-[1.8rem] border border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500">
-              Nenhum pagamento nesta fila.
-            </div>
-          ) : (
-            paymentRequests.map((request) => (
-              <div key={request.id} className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
-                        {request.status}
-                      </span>
-                      <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
-                        {request.plan_name}
-                      </span>
-                      <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-800">
-                        {request.amount_kwanza?.toLocaleString('pt-PT')} Kz
-                      </span>
-                    </div>
-                    <p className="mt-3 text-lg font-black text-slate-900">{request.profiles?.full_name || request.payer_name}</p>
-                    <div className="mt-2 space-y-1 text-sm text-slate-600">
-                      <p>Referência: {request.payment_reference}</p>
-                      <p>Pedido: {new Date(request.created_at).toLocaleString('pt-PT')}</p>
-                      {request.student_note && <p>Nota do estudante: {request.student_note}</p>}
-                      {request.admin_notes && <p>Nota do admin: {request.admin_notes}</p>}
-                    </div>
-                    <a
-                      href={request.proof_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-4 inline-flex rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700"
-                    >
-                      Abrir comprovativo
-                    </a>
+        {activeTab === 'dashboard' && (
+          <div className="space-y-4">
+            {stats.pendingPayments > 0 && (
+              <div className="rounded-[1.8rem] border border-amber-200 bg-amber-50 p-5">
+                <div className="flex items-start gap-3">
+                  <BellRing className="mt-1 h-5 w-5 text-amber-700" />
+                  <div>
+                    <p className="text-lg font-black text-slate-900">
+                      Há {stats.pendingPayments} pagamento{stats.pendingPayments > 1 ? 's' : ''} pendente{stats.pendingPayments > 1 ? 's' : ''}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-700">
+                      Revise estes comprovativos o mais rápido possível para o estudante não ficar à espera do plano.
+                    </p>
                   </div>
-
-                  <div className="w-full max-w-md rounded-[1.4rem] border border-slate-200 bg-slate-50 p-4">
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">Nota do admin</label>
-                    <textarea
-                      rows={3}
-                      value={adminPaymentNotes[request.id] ?? request.admin_notes ?? ''}
-                      onChange={(e) =>
-                        setAdminPaymentNotes((prev) => ({
-                          ...prev,
-                          [request.id]: e.target.value,
-                        }))
-                      }
-                      placeholder="Escreva aqui a decisão ou motivo."
-                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
-                    />
-                    {request.status === 'pending' && (
-                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                        <button
-                          type="button"
-                          onClick={() => handleReviewPayment(request, 'approved')}
-                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white"
-                        >
-                          <CheckCircle2 className="h-4 w-4" />
-                          Aprovar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleReviewPayment(request, 'rejected')}
-                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600"
-                        >
-                          <XCircle className="h-4 w-4" />
-                          Rejeitar
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {activeTab === 'content' && (
-        <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
-          <div className="space-y-6">
-            <div className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600">
-                  <FolderTree className="h-6 w-6" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-black text-slate-900">Criar area</h2>
-                  <p className="text-sm text-slate-500">Use isto apenas quando surgir uma nova carreira real.</p>
-                </div>
-              </div>
-
-              <div className="mt-5 space-y-3">
-                <input
-                  type="text"
-                  value={newAreaName}
-                  onChange={(e) => setNewAreaName(e.target.value)}
-                  placeholder="Nome da area"
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
-                />
-                <textarea
-                  rows={3}
-                  value={newAreaDescription}
-                  onChange={(e) => setNewAreaDescription(e.target.value)}
-                  placeholder="Descricao breve"
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
-                />
-                <button
-                  type="button"
-                  onClick={handleCreateArea}
-                  disabled={savingContent || !newAreaName.trim()}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  <Plus className="h-4 w-4" />
-                  Criar area
-                </button>
-              </div>
-            </div>
-
-            <div className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-black text-slate-900">Areas existentes</h2>
-              <div className="mt-4 space-y-3">
-                {areas.map((area) => (
-                  <div key={area.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-bold text-slate-900">{area.name}</p>
-                        <p className="mt-1 text-sm text-slate-500">{area.description || 'Sem descricao.'}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setManagementArea(area.id)}
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-                        >
-                          Gerir
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteArea(area.id)}
-                          disabled={savingContent}
-                          className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 disabled:opacity-50"
-                        >
-                          Apagar
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <h2 className="text-lg font-black text-slate-900">Gestao de topicos e perguntas</h2>
-                <p className="text-sm text-slate-500">Apague topicos inteiros ou perguntas especificas sem passar pelo banco manualmente.</p>
-              </div>
-              <div className="w-full max-w-sm">
-                <label className="mb-2 block text-sm font-medium text-slate-700">Area</label>
-                <select
-                  value={managementArea}
-                  onChange={(e) => setManagementArea(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
-                >
-                  <option value="">Selecione uma area</option>
-                  {areas.map((area) => (
-                    <option key={area.id} value={area.id}>
-                      {area.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {managementArea && (
-              <div className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-                <h3 className="text-sm font-black text-emerald-800">Criar topico manualmente</h3>
-                <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-                  <input
-                    type="text"
-                    value={newTopicName}
-                    onChange={(e) => setNewTopicName(e.target.value)}
-                    placeholder="Nome do topico"
-                    className="rounded-xl border border-emerald-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
-                  />
-                  <input
-                    type="text"
-                    value={newTopicDescription}
-                    onChange={(e) => setNewTopicDescription(e.target.value)}
-                    placeholder="Descricao opcional"
-                    className="rounded-xl border border-emerald-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleCreateTopic}
-                    disabled={savingContent || !newTopicName.trim()}
-                    className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
-                  >
-                    Criar topico
-                  </button>
                 </div>
               </div>
             )}
 
-            <div className="mt-5 space-y-4">
-              {!managementArea ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                  Escolha uma area para gerenciar o conteudo.
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+              <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+                  <Users className="w-6 h-6" />
                 </div>
-              ) : loadingManagement ? (
-                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                  A carregar estrutura de conteudo...
+                <div>
+                  <p className="text-sm text-gray-500 font-medium">Total Usuários</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.users}</p>
                 </div>
-              ) : managementTopics.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                  Esta area ainda nao tem topicos.
+              </div>
+              <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+                  <Database className="w-6 h-6" />
                 </div>
-              ) : (
-                managementTopics.map((topic) => (
-                  <div key={topic.id} className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <p className="text-lg font-black text-slate-900">{topic.name}</p>
-                        <p className="mt-1 text-sm text-slate-500">{topic.description || 'Sem descricao.'}</p>
-                        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                          {topic.questions.length} perguntas
-                        </p>
+                <div>
+                  <p className="text-sm text-gray-500 font-medium">Total Questões</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.questions}</p>
+                </div>
+              </div>
+              <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-purple-50 flex items-center justify-center text-purple-600">
+                  <Zap className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 font-medium">Usuários Premium</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.premium}</p>
+                </div>
+              </div>
+              <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-gray-100 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
+                  <BellRing className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 font-medium">Pagamentos Pendentes</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.pendingPayments}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'payments' && (
+          <div className="space-y-5">
+            <div className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900">Pagamentos para aprovação</h2>
+                  <p className="text-sm text-slate-500">Aprove ou rejeite e ative o premium manualmente.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(['pending', 'approved', 'rejected', 'all'] as const).map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => setPaymentFilter(filter)}
+                      className={`rounded-full px-4 py-2 text-sm font-semibold ${paymentFilter === filter ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
+                        }`}
+                    >
+                      {filter === 'pending'
+                        ? 'Pendentes'
+                        : filter === 'approved'
+                          ? 'Aprovados'
+                          : filter === 'rejected'
+                            ? 'Rejeitados'
+                            : 'Todos'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {loadingPayments ? (
+              <div className="rounded-[1.8rem] border border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500">
+                A carregar pedidos de pagamento...
+              </div>
+            ) : paymentRequests.length === 0 ? (
+              <div className="rounded-[1.8rem] border border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500">
+                Nenhum pagamento nesta fila.
+              </div>
+            ) : (
+              paymentRequests.map((request) => (
+                <div key={request.id} className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
+                          {request.status}
+                        </span>
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
+                          {request.plan_name}
+                        </span>
+                        <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-800">
+                          {request.amount_kwanza?.toLocaleString('pt-PT')} Kz
+                        </span>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedTopicId(expandedTopicId === topic.id ? null : topic.id)}
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-                        >
-                          {expandedTopicId === topic.id ? 'Esconder' : 'Ver perguntas'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteTopic(topic.id)}
-                          disabled={savingContent}
-                          className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 disabled:opacity-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Apagar topico
-                        </button>
+                      <p className="mt-3 text-lg font-black text-slate-900">{request.profiles?.full_name || request.payer_name}</p>
+                      <div className="mt-2 space-y-1 text-sm text-slate-600">
+                        <p>Referência: {request.payment_reference}</p>
+                        <p>Pedido: {new Date(request.created_at).toLocaleString('pt-PT')}</p>
+                        {request.student_note && <p>Nota do estudante: {request.student_note}</p>}
+                        {request.admin_notes && <p>Nota do admin: {request.admin_notes}</p>}
                       </div>
+                      <a
+                        href={request.proof_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-4 inline-flex rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700"
+                      >
+                        Abrir comprovativo
+                      </a>
                     </div>
 
-                    {expandedTopicId === topic.id && (
-                      <div className="mt-4 space-y-3">
-                        {topic.questions.length === 0 ? (
-                          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
-                            Nenhuma pergunta neste topico.
-                          </div>
-                        ) : (
-                          topic.questions.map((question, index) => (
-                            <div key={question.id} className="rounded-xl border border-slate-200 bg-white p-4">
-                              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                <div className="min-w-0">
-                                  <p className="text-sm font-black text-slate-900">
-                                    {index + 1}. {question.content}
-                                  </p>
-                                  <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
-                                    <span className="rounded-full bg-cyan-50 px-3 py-1 text-cyan-700">
-                                      {question.difficulty}
-                                    </span>
-                                    {question.exam_year && (
-                                      <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">
-                                        {question.exam_year}
-                                      </span>
-                                    )}
-                                  </div>
-                                  {question.alternatives && question.alternatives.length > 0 && (
-                                    <div className="mt-3 space-y-2">
-                                      {question.alternatives.map((alternative) => (
-                                        <div
-                                          key={alternative.id}
-                                          className={`rounded-lg px-3 py-2 text-sm ${alternative.is_correct
-                                            ? 'bg-emerald-50 text-emerald-800'
-                                            : 'bg-slate-50 text-slate-600'
-                                            }`}
-                                        >
-                                          {alternative.content}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {question.question_explanations?.[0]?.content && (
-                                    <p className="mt-3 text-sm leading-6 text-slate-500">
-                                      Explicacao: {question.question_explanations[0].content}
-                                    </p>
-                                  )}
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteQuestion(question.id)}
-                                  disabled={savingContent}
-                                  className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 disabled:opacity-50"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                  Apagar pergunta
-                                </button>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    )}
+                    <div className="w-full max-w-md rounded-[1.4rem] border border-slate-200 bg-slate-50 p-4">
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">Nota do admin</label>
+                      <textarea
+                        rows={3}
+                        value={adminPaymentNotes[request.id] ?? request.admin_notes ?? ''}
+                        onChange={(e) =>
+                          setAdminPaymentNotes((prev) => ({
+                            ...prev,
+                            [request.id]: e.target.value,
+                          }))
+                        }
+                        placeholder="Escreva aqui a decisão ou motivo."
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                      />
+                      {request.status === 'pending' && (
+                        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                          <button
+                            type="button"
+                            onClick={() => handleReviewPayment(request, 'approved')}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white"
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                            Aprovar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleReviewPayment(request, 'rejected')}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600"
+                          >
+                            <XCircle className="h-4 w-4" />
+                            Rejeitar
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                ))
-              )}
-            </div>
+                </div>
+              ))
+            )}
           </div>
-        </div>
-      )}
+        )}
 
-      {activeTab === 'users' && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
-            <h2 className="text-lg font-bold text-gray-900">Lista de Usuários</h2>
-            <div className="flex items-center gap-4 w-full md:w-auto">
-              <div className="relative flex-1 md:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Pesquisar..."
-                  value={userSearchQuery}
-                  onChange={(e) => setUserSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-emerald-500"
-                />
+        {activeTab === 'content' && (
+          <>
+            <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+              <div className="space-y-6">
+                <div className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600">
+                      <FolderTree className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-black text-slate-900">Criar area</h2>
+                      <p className="text-sm text-slate-500">Use isto apenas quando surgir uma nova carreira real.</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    <input
+                      type="text"
+                      value={newAreaName}
+                      onChange={(e) => setNewAreaName(e.target.value)}
+                      placeholder="Nome da area"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                    />
+                    <textarea
+                      rows={3}
+                      value={newAreaDescription}
+                      onChange={(e) => setNewAreaDescription(e.target.value)}
+                      placeholder="Descricao breve"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCreateArea}
+                      disabled={savingContent || !newAreaName.trim()}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Criar area
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm">
+                  <h2 className="text-lg font-black text-slate-900">Areas existentes</h2>
+                  <div className="mt-4 space-y-3">
+                    {areas.map((area) => (
+                      <div key={area.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-bold text-slate-900">{area.name}</p>
+                            <p className="mt-1 text-sm text-slate-500">{area.description || 'Sem descricao.'}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setManagementArea(area.id)}
+                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                            >
+                              Gerir
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteArea(area.id)}
+                              disabled={savingContent}
+                              className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 disabled:opacity-50"
+                            >
+                              Apagar
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <button onClick={fetchUsers} className="text-emerald-600 text-sm font-medium hover:underline whitespace-nowrap">Atualizar</button>
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
-                <tr>
-                  <th className="px-6 py-3 font-medium">Nome</th>
-                  <th className="px-6 py-3 font-medium">Cargo</th>
-                  <th className="px-6 py-3 font-medium">Nº Estudante</th>
-                  <th className="px-6 py-3 font-medium">Área Atual</th>
-                  <th className="px-6 py-3 font-medium">Últ. ativo</th>
-                  <th className="px-6 py-3 font-medium">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {loadingUsers ? (
-                  <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">Carregando...</td></tr>
-                ) : userList.filter(u =>
-                  u.full_name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
-                  (u.student_number?.toLowerCase().includes(userSearchQuery.toLowerCase()))
-                ).length === 0 ? (
-                  <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">Nenhum usuário encontrado.</td></tr>
-                ) : (
-                  userList
-                    .filter(u =>
-                      u.full_name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
-                      (u.student_number?.toLowerCase().includes(userSearchQuery.toLowerCase()))
-                    )
-                    .map((u) => (
-                      <tr key={u.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium text-gray-900">{u.full_name}</p>
-                            {u.last_active && (Date.now() - new Date(u.last_active).getTime() < 5 * 60 * 1000) && (
-                              <span className="h-2 w-2 rounded-full bg-emerald-500" title="Ativo agora" />
-                            )}
-                          </div>
-                          <p className="text-xs text-gray-500">{u.id.substring(0, 8)}...</p>
-                        </td>
-                        <td className="px-6 py-4">
-                          <select
-                            value={u.role}
-                            onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
-                            className="text-xs border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
-                          >
-                            <option value="free">Free</option>
-                            <option value="premium">Premium</option>
-                            <option value="admin">Admin</option>
-                          </select>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="text-sm text-gray-700">{u.student_number || '—'}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="text-sm text-gray-700">{u.areas?.name || 'Não selecionada'}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="text-sm text-gray-600">{u.last_active ? new Date(u.last_active).toLocaleString() : '—'}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <select
-                            value={u.selected_area_id || ''}
-                            onChange={(e) => handleUpdateUserArea(u.id, e.target.value)}
-                            className="text-xs border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
-                          >
-                            <option value="">Nenhuma</option>
-                            {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                          </select>
-                          <div className="mt-2">
-                            <button type="button" onClick={async () => {
-                              try {
-                                const { data } = await supabase.from('activity_logs').select('*').eq('user_id', u.id).order('activity_date', { ascending: false }).limit(20);
-                                if (!data || data.length === 0) {
-                                  alert('Sem atividade recente para este usuário.');
-                                  return;
-                                }
-                                const lines = (data || []).map((r: any) => `${r.activity_date} - ${r.activity_type} (${r.count || 1})`).join('\n');
-                                alert(lines);
-                              } catch (err) {
-                                console.error(err);
-                                alert('Erro ao buscar atividade. Veja console.');
-                              }
-                            }} className="mt-2 text-xs text-emerald-600 hover:underline">Ver atividade</button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+
+              <div className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-end lg:justify-between">
+                  <div>
+                    <h2 className="text-lg font-black text-slate-900">Gestao de topicos e perguntas</h2>
+                    <p className="text-sm text-slate-500">Apague topicos inteiros ou perguntas especificas sem passar pelo banco manualmente.</p>
+                  </div>
+                  <div className="w-full max-w-sm">
+                    <label className="mb-2 block text-sm font-medium text-slate-700">Area</label>
+                    <select
+                      value={managementArea}
+                      onChange={(e) => setManagementArea(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                    >
+                      <option value="">Selecione uma area</option>
+                      {areas.map((area) => (
+                        <option key={area.id} value={area.id}>
+                          {area.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {managementArea && (
+                  <div className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                    <h3 className="text-sm font-black text-emerald-800">Criar topico manualmente</h3>
+                    <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                      <input
+                        type="text"
+                        value={newTopicName}
+                        onChange={(e) => setNewTopicName(e.target.value)}
+                        placeholder="Nome do topico"
+                        className="rounded-xl border border-emerald-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                      />
+                      <input
+                        type="text"
+                        value={newTopicDescription}
+                        onChange={(e) => setNewTopicDescription(e.target.value)}
+                        placeholder="Descricao opcional"
+                        className="rounded-xl border border-emerald-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCreateTopic}
+                        disabled={savingContent || !newTopicName.trim()}
+                        className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                      >
+                        Criar topico
+                      </button>
+                    </div>
+                  </div>
                 )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
-      {activeTab === 'content' && (
-        <div className="pt-8 mt-10 border-t border-slate-200">
-          <h2 className="text-2xl font-black text-slate-900 mb-6">Gerador de Questões com IA</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Form */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-              <div className="bg-blue-50 border border-blue-200 text-blue-700 p-4 rounded-xl text-sm mb-4">
-                Modo Gemini: <code>{geminiMode}</code> | Modelo preferencial: <code>{geminiModel}</code>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
-                  <p className="text-xs uppercase tracking-wider text-emerald-700 font-semibold">Questoes</p>
-                  <p className="text-2xl font-bold text-emerald-900 mt-1">{stats.questions}</p>
-                </div>
-                <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
-                  <p className="text-xs uppercase tracking-wider text-blue-700 font-semibold">Topicos da area</p>
-                  <p className="text-2xl font-bold text-blue-900 mt-1">{contentCatalog.length}</p>
-                </div>
-                <div className="rounded-xl border border-purple-100 bg-purple-50 p-4">
-                  <p className="text-xs uppercase tracking-wider text-purple-700 font-semibold">Preview atual</p>
-                  <p className="text-2xl font-bold text-purple-900 mt-1">{genResult?.questions?.length || 0}</p>
-                </div>
-              </div>
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <Zap className="w-5 h-5 text-emerald-600" />
-                Gerador Inteligente (Gemini)
-              </h2>
+                <div className="mt-5 space-y-4">
+                  {!managementArea ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                      Escolha uma area para gerenciar o conteudo.
+                    </div>
+                  ) : loadingManagement ? (
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                      A carregar estrutura de conteudo...
+                    </div>
+                  ) : managementTopics.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                      Esta area ainda nao tem topicos.
+                    </div>
+                  ) : (
+                    managementTopics.map((topic) => (
+                      <div key={topic.id} className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                          <div>
+                            <p className="text-lg font-black text-slate-900">{topic.name}</p>
+                            <p className="mt-1 text-sm text-slate-500">{topic.description || 'Sem descricao.'}</p>
+                            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                              {topic.questions.length} perguntas
+                            </p>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setExpandedTopicId(expandedTopicId === topic.id ? null : topic.id)}
+                                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                              >
+                                {expandedTopicId === topic.id ? 'Esconder' : 'Ver perguntas'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTopic(topic.id)}
+                                disabled={savingContent}
+                                className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 disabled:opacity-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                Apagar topico
+                              </button>
+                            </div>
+                          </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Área</label>
-                  <select
-                    value={genArea}
-                    onChange={(e) => { setGenArea(e.target.value); setGenTopic(''); setIsCustomTopic(false); }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                  >
-                    <option value="" disabled>Selecione</option>
-                    {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
+                          {expandedTopicId === topic.id && (
+                            <div className="mt-4 space-y-3">
+                              {topic.questions.length === 0 ? (
+                                <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
+                                  Nenhuma pergunta neste topico.
+                                </div>
+                              ) : (
+                                topic.questions.map((question, index) => (
+                                  <div key={question.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-black text-slate-900">
+                                          {index + 1}. {question.content}
+                                        </p>
+                                        <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
+                                          <span className="rounded-full bg-cyan-50 px-3 py-1 text-cyan-700">
+                                            {question.difficulty}
+                                          </span>
+                                          {question.exam_year && (
+                                            <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">
+                                              {question.exam_year}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {question.alternatives && question.alternatives.length > 0 && (
+                                          <div className="mt-3 space-y-2">
+                                            {question.alternatives.map((alternative) => (
+                                              <div
+                                                key={alternative.id}
+                                                className={`rounded-lg px-3 py-2 text-sm ${alternative.is_correct
+                                                  ? 'bg-emerald-50 text-emerald-800'
+                                                  : 'bg-slate-50 text-slate-600'
+                                                  }`}
+                                              >
+                                                {alternative.content}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {question.question_explanations?.[0]?.content && (
+                                          <p className="mt-3 text-sm leading-6 text-slate-500">
+                                            Explicacao: {question.question_explanations[0].content}
+                                          </p>
+                                        )}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteQuestion(question.id)}
+                                        disabled={savingContent}
+                                        className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 disabled:opacity-50"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                        Apagar pergunta
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tópico</label>
-                  <div className="space-y-2">
+              </div>
+            </div>
+
+            <div className="pt-8">
+              <div className="bg-blue-50 border border-blue-100 text-blue-700 p-4 rounded-2xl text-xs mb-6 font-bold uppercase tracking-wider">
+                IA: {geminiModel} ({geminiMode})
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 ml-1">Área Alvo</label>
+                    <select
+                      value={genArea}
+                      onChange={(e) => { setGenArea(e.target.value); setGenTopic(''); setIsCustomTopic(false); }}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:border-emerald-500 font-bold text-slate-700 text-sm"
+                    >
+                      <option value="" disabled>Selecione uma área</option>
+                      {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 ml-1">Tópico</label>
                     <select
                       value={isCustomTopic ? 'custom' : genTopic}
                       onChange={(e) => {
@@ -1325,130 +1273,104 @@ export default function Admin() {
                           setGenTopic(e.target.value);
                         }
                       }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:border-emerald-500 font-bold text-slate-700 text-sm"
                       disabled={!genArea}
                     >
-                      <option value="" disabled>Selecione</option>
+                      <option value="" disabled>Selecione um tópico</option>
                       {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                      <option value="custom">+ Criar Novo Tópico</option>
+                      <option value="custom">+ Novo Tópico</option>
                     </select>
-
-                    {isCustomTopic && (
-                      <input
-                        type="text"
-                        placeholder="Nome do novo tópico..."
-                        value={customTopic}
-                        onChange={(e) => setCustomTopic(e.target.value)}
-                        className="w-full px-3 py-2 border border-emerald-300 bg-emerald-50 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                        autoFocus
-                      />
-                    )}
                   </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
+                {isCustomTopic && (
+                  <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 ml-1">Nome do Novo Tópico</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Farmacologia Básica"
+                      value={customTopic}
+                      onChange={(e) => setCustomTopic(e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl border-2 border-emerald-100 bg-emerald-50/30 outline-none focus:border-emerald-500 font-bold text-slate-700 text-sm"
+                    />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 ml-1">Quantidade</label>
+                    <input
+                      type="number"
+                      min="1" max="20"
+                      value={genCount}
+                      onChange={(e) => setGenCount(parseInt(e.target.value))}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:border-emerald-500 font-bold text-slate-700 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 ml-1">Nível</label>
+                    <select
+                      value={genDiff}
+                      onChange={(e) => setGenDiff(e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:border-emerald-500 font-bold text-slate-700 text-sm"
+                    >
+                      <option value="easy">Fácil</option>
+                      <option value="medium">Média</option>
+                      <option value="hard">Difícil</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade</label>
-                  <input
-                    type="number"
-                    min="1" max="20"
-                    value={genCount}
-                    onChange={(e) => setGenCount(parseInt(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 ml-1">Contexto Adicional (PDF/Texto)</label>
+                  <textarea
+                    rows={4}
+                    value={genContent}
+                    onChange={(e) => setGenContent(e.target.value)}
+                    placeholder="Cole textos de referência aqui..."
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:border-emerald-500 font-medium text-slate-700 text-xs leading-relaxed"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Dificuldade</label>
-                  <select
-                    value={genDiff}
-                    onChange={(e) => setGenDiff(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                  >
-                    <option value="easy">Fácil</option>
-                    <option value="medium">Média</option>
-                    <option value="hard">Difícil</option>
-                  </select>
-                </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Conteúdo Base (Opcional)</label>
-                <textarea
-                  rows={5}
-                  value={genContent}
-                  onChange={(e) => setGenContent(e.target.value)}
-                  placeholder="Cole aqui o texto base para a IA gerar as questões..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm font-mono"
-                />
+                <button
+                  onClick={handleGenerate}
+                  disabled={generating || !genArea || (!genTopic && !isCustomTopic)}
+                  className="w-full group flex justify-center items-center gap-2 py-4 px-6 rounded-2xl shadow-lg shadow-emerald-200/50 text-sm font-black uppercase tracking-widest text-white bg-emerald-600 hover:bg-emerald-500 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 disabled:shadow-none"
+                >
+                  {generating && !genResult ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-5 h-5 group-hover:animate-pulse" />}
+                  {generating && !genResult ? 'Pedindo à IA...' : 'Gerar Novas Questões'}
+                </button>
               </div>
-
-              <button
-                onClick={handleGenerate}
-                disabled={generating || !genArea || (!genTopic && !isCustomTopic) || (isCustomTopic && !customTopic)}
-                className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-              >
-                {generating && !genResult ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-5 h-5" />}
-                {generating && !genResult ? 'Gerando...' : 'Gerar Questões'}
-              </button>
             </div>
 
-            {/* Preview */}
-            <div className="bg-gray-50 p-6 rounded-2xl shadow-inner border border-gray-200 overflow-y-auto max-h-[600px]">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Pré-visualização</h2>
-
-              <div className="mb-4 space-y-4">
-                <div className="rounded-xl border border-gray-200 bg-white p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-gray-500 font-semibold">Mapa de conteudo</p>
-                      <p className="text-sm text-gray-600 mt-1">
-                        {genArea ? 'Veja abaixo os topicos da area e quantas questoes ja existem em cada um.' : 'Selecione uma area para ver o catalogo.'}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => fetchContentCatalog(genArea)}
-                      disabled={!genArea || loadingCatalog}
-                      className="text-sm font-medium text-emerald-600 disabled:opacity-50"
-                    >
-                      {loadingCatalog ? 'Atualizando...' : 'Atualizar'}
-                    </button>
-                  </div>
-                  <div className="mt-4 space-y-2 max-h-44 overflow-y-auto pr-1">
-                    {!genArea ? (
-                      <p className="text-sm text-gray-500">Nenhuma area selecionada.</p>
-                    ) : contentCatalog.length === 0 ? (
-                      <p className="text-sm text-gray-500">Nenhum topico encontrado para esta area.</p>
-                    ) : (
-                      contentCatalog.map((item) => (
-                        <div key={item.id} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                          <span className="text-sm text-gray-700">{item.name}</span>
-                          <span className="text-xs font-semibold text-gray-500">{item.questionsCount} questoes</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
+            <div className="bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200 p-6 overflow-y-auto max-h-[700px]">
+              <h2 className="text-lg font-black text-slate-900 mb-4 flex items-center justify-between">
+                <span>Pré-visualização</span>
+                {genResult && <span className="text-[10px] bg-white px-2 py-1 rounded-lg border border-slate-200 text-slate-500 font-bold uppercase">{genResult.questions.length} Perguntas</span>}
+              </h2>
 
               {!genResult ? (
-                <div className="text-center text-gray-500 py-12">
-                  Nenhuma questão gerada ainda.
+                <div className="h-[400px] flex flex-col items-center justify-center text-center p-8 opacity-40">
+                  <div className="w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center mb-4">
+                    <Plus className="h-8 w-8 text-slate-400" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Nada gerado ainda</p>
+                  <p className="text-xs text-slate-400 mt-2 max-w-[200px]">Configure o formulário ao lado e clique em gerar.</p>
                 </div>
               ) : (
-                <div className="space-y-6">
+                <div className="space-y-4">
                   {genResult.questions.map((q: any, i: number) => (
-                    <div key={i} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                      <p className="font-medium text-gray-900 mb-3 text-sm">{i + 1}. {q.question}</p>
-                      <div className="space-y-2 pl-4">
+                    <div key={i} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 group">
+                      <p className="font-black text-slate-900 mb-4 text-sm leading-snug">#0{i + 1} {q.question}</p>
+                      <div className="space-y-2">
                         {q.alternatives.map((a: any, j: number) => (
-                          <div key={j} className={`text-sm p-2 rounded ${a.isCorrect ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-gray-600'}`}>
+                          <div key={j} className={`text-xs font-bold p-3 rounded-xl border transition-all ${a.isCorrect ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm shadow-emerald-50' : 'bg-slate-50 text-slate-500 border-slate-100'}`}>
                             {a.text}
                           </div>
                         ))}
                       </div>
-                      <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
-                        <strong>Explicação:</strong> {q.explanation}
+                      <div className="mt-4 pt-4 border-t border-slate-50 text-[10px] text-slate-400 italic">
+                        <strong className="text-emerald-600 font-black uppercase not-italic">Porquê?</strong> {q.explanation}
                       </div>
                     </div>
                   ))}
@@ -1456,148 +1378,288 @@ export default function Admin() {
                   <button
                     onClick={handleSaveGenerated}
                     disabled={generating}
-                    className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors sticky bottom-0"
+                    className="w-full flex justify-center items-center gap-3 py-4 px-6 rounded-2xl text-xs font-black uppercase tracking-widest text-white bg-blue-600 hover:bg-blue-500 shadow-xl shadow-blue-200/50 sticky bottom-0 transition-all active:scale-95 disabled:opacity-50"
                   >
-                    {generating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-                    Salvar {genResult.questions.length} Questões no Banco
+                    {generating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Database className="w-5 h-5" />}
+                    Guardar no Banco de Dados
                   </button>
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
-      {activeTab === 'monitor' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Live Feed: Recent Simulations */}
-            <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[500px]">
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-blue-50/30">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-blue-100 text-blue-600">
-                    <Database className="h-5 w-5" />
+          </>
+        )}
+
+        {activeTab === 'monitor' && (
+          <div className="space-y-8 animate-in fade-in duration-500">
+            {/* Section 1: Events mapping */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Active Simulations */}
+              <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[450px]">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-blue-50/30">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-2xl bg-blue-100 text-blue-600">
+                      <Monitor className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-black text-slate-900 leading-tight">Simulações Ativas</h2>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Feed em Tempo Real</p>
+                    </div>
                   </div>
-                  <h2 className="text-lg font-black text-slate-900">Atividade em Tempo Real</h2>
+                  {loadingMonitor && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
                 </div>
-                {loadingMonitor && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
-              </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {recentAttempts.length === 0 ? (
-                  <p className="text-center py-10 text-slate-400 text-sm italic">Esperando por atividade...</p>
-                ) : (
-                  recentAttempts.map((attempt) => (
-                    <div key={attempt.id} className="p-4 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-white transition-colors border-l-4 border-l-blue-500">
-                      <div className="flex justify-between items-start">
-                        <span className="text-sm font-black text-slate-900">{attempt.profiles?.full_name}</span>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">{new Date(attempt.started_at).toLocaleTimeString()}</span>
+                <div className="flex-1 overflow-y-auto p-5 space-y-3 custom-scrollbar">
+                  {recentAttempts.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center opacity-30 italic">
+                      <Database className="h-8 w-8 mb-2" />
+                      <p className="text-sm">Sem atividade no momento...</p>
+                    </div>
+                  ) : (
+                    recentAttempts.map((attempt) => (
+                      <div key={attempt.id} className="p-4 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-white transition-all hover:shadow-md border-l-4 border-l-blue-500 group">
+                        <div className="flex justify-between items-start">
+                          <span className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight">{attempt.profiles?.full_name || 'Usuário Desconhecido'}</span>
+                          <span className="text-[10px] font-black text-slate-400 bg-white px-2 py-1 rounded-lg border border-slate-100 shadow-sm">
+                            {new Date(attempt.started_at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-2 font-medium">Área: <span className="text-slate-800 font-bold">{attempt.areas?.name}</span></p>
+                        <div className="mt-3 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-wider ${attempt.is_completed ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-600 text-white animate-pulse'}`}>
+                              {attempt.is_completed ? 'Concluído' : 'A Resolver Prova'}
+                            </span>
+                            {!attempt.is_completed && <span className="text-[10px] font-bold text-blue-600">Ao vivo</span>}
+                          </div>
+                          {attempt.is_completed && (
+                            <div className="flex items-center gap-1.5">
+                              <div className="h-1 w-12 bg-slate-200 rounded-full overflow-hidden">
+                                <div className="h-full bg-blue-500" style={{ width: `${attempt.score}%` }} />
+                              </div>
+                              <span className="text-[11px] font-black text-blue-600">{attempt.score}%</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <p className="text-xs text-slate-600 mt-1">Iniciou Simulação: <span className="font-semibold">{attempt.areas?.name}</span></p>
-                      <div className="mt-2 flex items-center gap-2">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${attempt.is_completed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                          {attempt.is_completed ? 'Concluído' : 'Em curso'}
-                        </span>
-                        {attempt.is_completed && (
-                          <span className="text-[10px] font-black text-slate-500">Score: {attempt.score}%</span>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Action Logs */}
+              <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[450px]">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-emerald-50/30">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-2xl bg-emerald-100 text-emerald-600">
+                      <Database className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-black text-slate-900 leading-tight">Log de Ações</h2>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Global Events</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-5 space-y-2 custom-scrollbar">
+                  {recentActivities.map((log, idx) => {
+                    const getActivityLabel = (type: string) => {
+                      switch (type) {
+                        case 'started_simulation': return 'Iniciou Simulação';
+                        case 'simulation_attempt': return 'Concluiu Simulação';
+                        case 'training_question': return 'Treino';
+                        case 'login': return 'Entrou no sistema';
+                        case 'signup': return 'Criou conta';
+                        default: return type.replace(/_/g, ' ');
+                      }
+                    };
+
+                    const metadata = log.activity_metadata || {};
+                    const formattedDate = new Date(log.created_at || log.activity_date);
+                    const day = formattedDate.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' });
+                    const hour = formattedDate.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+
+                    return (
+                      <div key={idx} className="flex flex-col p-4 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all group">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className={`h-2.5 w-2.5 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)] ${log.activity_type === 'started_simulation' ? 'bg-blue-500 shadow-blue-500/50' : log.activity_type === 'training_question' ? 'bg-amber-400 shadow-amber-400/50' : 'bg-emerald-500'}`} />
+                            <div>
+                              <span className="text-[12px] font-black text-slate-900 uppercase tracking-tight">{log.profiles?.full_name || 'Usuário'}</span>
+                              <span className={`ml-2 text-[10px] font-black px-2 py-0.5 rounded-lg border uppercase ${log.activity_type === 'started_simulation' ? 'bg-blue-50 border-blue-100 text-blue-600' : log.activity_type === 'training_question' ? 'bg-amber-50 border-amber-100 text-amber-600' : 'bg-slate-50 border-slate-100 text-slate-500'}`}>
+                                {getActivityLabel(log.activity_type)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] font-black text-slate-400">{day}</p>
+                            <p className="text-[10px] font-bold text-slate-300">{hour}</p>
+                          </div>
+                        </div>
+
+                        {(metadata.score !== undefined || metadata.topic_name) && (
+                          <div className="mt-2 ml-6.5 pl-6 border-l border-slate-100 flex gap-3">
+                            {metadata.score !== undefined && (
+                              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                                Score: {metadata.score}% ({metadata.correct}/{metadata.total})
+                              </span>
+                            )}
+                            {metadata.topic_name && (
+                              <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                                Tópico: {metadata.topic_name}
+                              </span>
+                            )}
+                            {metadata.duration && (
+                              <span className="text-[10px] font-bold text-slate-400">
+                                {Math.floor(metadata.duration / 60)}m {metadata.duration % 60}s
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Global Logs */}
-            <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[500px]">
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-emerald-50/30">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-emerald-100 text-emerald-600">
-                    <Monitor className="h-5 w-5" />
-                  </div>
-                  <h2 className="text-lg font-black text-slate-900">Logs de Uso</h2>
+                    );
+                  })}
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                {recentActivities.map((log, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 text-sm">
-                    <div className="flex items-center gap-3">
-                      <div className="h-2 w-2 rounded-full bg-emerald-400" />
-                      <div>
-                        <span className="font-bold text-slate-900">{log.profiles?.full_name}</span>
-                        <span className="text-slate-500 ml-2">{log.activity_type}</span>
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-slate-400">{log.activity_date}</span>
-                  </div>
-                ))}
-              </div>
             </div>
-          </div>
 
-          {/* User Search & Drill-down Section */}
-          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-8 border-b border-slate-100 space-y-4">
-              <h2 className="text-xl font-black text-slate-900">Pesquisar Alunos</h2>
-              <div className="relative max-w-md">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Nome ou Nº de Estudante..."
-                  value={userSearchQuery}
-                  onChange={(e) => setUserSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-4 rounded-2xl border border-slate-200 outline-none focus:border-emerald-500 transition-all font-medium text-slate-700"
-                />
+            {/* Section 2: User management */}
+            <div className="bg-white rounded-[2.2rem] border border-slate-200 shadow-xl shadow-slate-200/40 overflow-hidden">
+              <div className="p-8 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-center gap-6 bg-[radial-gradient(circle_at_top_right,#f8fafc,transparent)]">
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">Gestão de Utilizadores</h2>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">{userList.length} usuários registrados</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 w-full lg:w-auto">
+                  <div className="relative flex-1 lg:w-80">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Filtrar por nome ou nº de estudante..."
+                      value={userSearchQuery}
+                      onChange={(e) => setUserSearchQuery(e.target.value)}
+                      className="w-full pl-12 pr-4 py-3.5 rounded-2xl border border-slate-200 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-50/50 transition-all font-bold text-slate-700 text-sm shadow-sm"
+                    />
+                  </div>
+                  <button
+                    onClick={fetchUsers}
+                    disabled={loadingUsers}
+                    className="flex items-center justify-center h-[52px] w-[52px] lg:w-auto lg:px-6 rounded-2xl bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    {loadingUsers ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5 lg:mr-2" />}
+                    <span className="hidden lg:inline">Atualizar Agora</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto p-4">
+                <table className="w-full text-left border-separate border-spacing-y-2">
+                  <thead className="bg-slate-50/50 text-slate-400 text-[9px] font-black uppercase tracking-[0.25em]">
+                    <tr>
+                      <th className="px-6 py-4 rounded-l-2xl">NOME / ID</th>
+                      <th className="px-6 py-4">CARGO</th>
+                      <th className="px-6 py-4 text-center">Nº ESTUDANTE</th>
+                      <th className="px-6 py-4">ÁREA ATUAL</th>
+                      <th className="px-6 py-4">ÚLT. ATIVO</th>
+                      <th className="px-6 py-4 text-right rounded-r-2xl">ACÇÕES</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-transparent">
+                    {loadingUsers ? (
+                      <tr><td colSpan={6} className="px-6 py-32 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-emerald-500" /></td></tr>
+                    ) : userList.filter(u =>
+                      u.full_name?.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                      (u.student_number?.toLowerCase().includes(userSearchQuery.toLowerCase()))
+                    ).length === 0 ? (
+                      <tr><td colSpan={6} className="px-6 py-32 text-center text-slate-400 font-bold uppercase tracking-widest italic opacity-40">Nenhum rastro encontrado...</td></tr>
+                    ) : (
+                      userList
+                        .filter(u =>
+                          u.full_name?.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                          (u.student_number?.toLowerCase().includes(userSearchQuery.toLowerCase()))
+                        )
+                        .map((u) => (
+                          <tr key={u.id} className="bg-slate-50/20 hover:bg-white transition-all group hover:shadow-xl hover:shadow-slate-200/50">
+                            <td className="px-6 py-5 rounded-l-2xl border border-transparent border-l-slate-200 group-hover:border-slate-100">
+                              <div className="flex items-center gap-4">
+                                <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-500 shadow-lg shadow-emerald-200 flex items-center justify-center text-white font-black text-xs uppercase transition-transform group-hover:scale-110">
+                                  {u.full_name?.substring(0, 2)}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-black text-slate-900 leading-none group-hover:text-emerald-700 transition-colors uppercase tracking-tight">{u.full_name}</p>
+                                  <p className="text-[10px] text-slate-400 font-bold mt-1.5 opacity-60">ID: {u.id.substring(0, 8)}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-5">
+                              <select
+                                value={u.role}
+                                onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
+                                className={`text-[9px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl border-2 transition-all outline-none
+                                ${u.role === 'admin' ? 'bg-purple-50 text-purple-700 border-purple-100' :
+                                    u.role === 'premium' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                                      'bg-slate-100 text-slate-600 border-slate-200'}`}
+                              >
+                                <option value="free">Livre</option>
+                                <option value="premium">Premium</option>
+                                <option value="admin">Administrador</option>
+                              </select>
+                            </td>
+                            <td className="px-6 py-5 text-center">
+                              <div className="inline-block px-3 py-1 bg-white border border-slate-200 rounded-xl shadow-sm text-xs font-black text-slate-600 ring-2 ring-slate-50">
+                                {u.student_number || '---'}
+                              </div>
+                            </td>
+                            <td className="px-6 py-5">
+                              <div className="flex flex-col">
+                                <span className="text-xs font-black text-slate-800 uppercase tracking-tight">{u.areas?.name || 'Não definida'}</span>
+                                <span className="text-[9px] text-slate-400 font-bold uppercase mt-1">Desde {new Date(u.created_at).toLocaleDateString('pt-PT')}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-5">
+                              <div className="flex items-center gap-2">
+                                <div className={`h-1.5 w-1.5 rounded-full ${u.last_active && (Date.now() - new Date(u.last_active).getTime() < 10 * 60 * 1000) ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-slate-300'}`} />
+                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-tight">
+                                  {u.last_active ? new Date(u.last_active).toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Offline'}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-5 text-right rounded-r-2xl border border-transparent border-r-slate-200 group-hover:border-slate-100">
+                              <div className="flex items-center justify-end gap-3">
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const { data } = await supabase.from('activity_logs').select('*').eq('user_id', u.id).order('activity_date', { ascending: false }).limit(10);
+                                      if (!data?.length) return alert('Nenhuma pegada detectada.');
+                                      const msg = data.map((l: any) => `[${new Date(l.activity_date).toLocaleTimeString()}] ${l.activity_type}`).join('\n');
+                                      alert(`HISTÓRICO RECENTE:\n${msg}`);
+                                    } catch (e) { alert('Falha ao rastrear.'); }
+                                  }}
+                                  className="h-10 w-10 flex items-center justify-center rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                  title="Rastrear Pegadas"
+                                >
+                                  <Monitor className="h-4 w-4" />
+                                </button>
+                                <select
+                                  value={u.selected_area_id || ''}
+                                  onChange={(e) => handleUpdateUserArea(u.id, e.target.value)}
+                                  className="text-[10px] font-black uppercase tracking-tight border-2 border-slate-100 rounded-xl bg-white px-3 py-1.5 focus:border-emerald-500 outline-none shadow-sm"
+                                >
+                                  <option value="">Área...</option>
+                                  {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </select>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
-            <div className="p-8 overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-xs font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100">
-                    <th className="pb-4 px-4">Estudante</th>
-                    <th className="pb-4 px-4">Área</th>
-                    <th className="pb-4 px-4">Nível</th>
-                    <th className="pb-4 px-4">Última Atividade</th>
-                    <th className="pb-4 px-4">XP Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {userList
-                    .filter(u =>
-                      u.full_name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
-                      (u.student_number?.toLowerCase().includes(userSearchQuery.toLowerCase()))
-                    )
-                    .slice(0, 50)
-                    .map((u) => (
-                      <tr key={u.id} className="group hover:bg-slate-50/50 transition-colors">
-                        <td className="py-4 px-4">
-                          <div className="flex flex-col">
-                            <span className="font-bold text-slate-900">{u.full_name}</span>
-                            <span className="text-[10px] text-slate-400 font-medium">#{u.id.substring(0, 8)}</span>
-                          </div>
-                        </td>
-                        <td className="py-4 px-4 text-sm text-slate-600 font-medium">{u.areas?.name || '—'}</td>
-                        <td className="py-4 px-4">
-                          <span className={`text-[10px] px-2 py-1 rounded-lg font-black uppercase ${u.role === 'premium' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                            }`}>
-                            {u.role}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4 text-[10px] text-slate-500 font-bold uppercase">
-                          {u.last_active ? new Date(u.last_active).toLocaleString('pt-PT') : 'Nunca'}
-                        </td>
-                        <td className="py-4 px-4">
-                          <div className="flex items-center gap-2">
-                            <Zap className="h-3 w-3 text-yellow-500 fill-current" />
-                            <span className="font-black text-slate-900">{u.total_xp || 0}</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </main >
+    </div >
   );
 }

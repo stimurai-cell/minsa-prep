@@ -14,6 +14,8 @@ import Premium from './pages/Premium';
 import OnboardingQuiz from './pages/OnboardingQuiz';
 import Battle from './pages/Battle';
 import SpeedMode from './pages/SpeedMode';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { RefreshCw } from 'lucide-react';
 
@@ -42,6 +44,15 @@ export default function App() {
     checkSession();
   }, [checkSession]);
 
+  useEffect(() => {
+    const { updateLastActive, user } = useAuthStore.getState();
+    if (user) {
+      updateLastActive();
+      const interval = setInterval(updateLastActive, 120000); // Update every 2 mins
+      return () => clearInterval(interval);
+    }
+  }, [checkSession]); // Refresh when session changes
+
   return (
     <BrowserRouter>
       {needsUpdate && (
@@ -61,6 +72,8 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<RootRedirect />} />

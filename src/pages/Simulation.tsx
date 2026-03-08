@@ -54,6 +54,7 @@ export default function Simulation() {
   const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null);
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
   const [resultHistory, setResultHistory] = useState<boolean[]>([]);
+  const [currentAttemptId, setCurrentAttemptId] = useState<string | null>(null);
   const hasPremiumAccess = ['premium', 'elite', 'admin'].includes(profile?.role || '');
   const hasBasicAccess = ['basic', 'premium', 'elite', 'admin'].includes(profile?.role || '');
 
@@ -127,6 +128,7 @@ export default function Simulation() {
     if (!preserveSummary) {
       setSessionSummary(null);
     }
+    setCurrentAttemptId(null);
   };
 
   const awardXp = async (xpEarned: number) => {
@@ -180,9 +182,41 @@ export default function Simulation() {
 
       if (qData && qData.length > 0) {
         resetSimulationSession();
-        setQuestions(prepareQuestionSet(pickQuestionsForSession(qData, 30, difficulty)));
+        const selectedQuestions = prepareQuestionSet(pickQuestionsForSession(qData, 30, difficulty));
+        setQuestions(selectedQuestions);
         setSessionStartedAt(Date.now());
         setShowIntro(true);
+
+        // Pre-register the attempt for real-time monitoring
+        const { data: attempt } = await supabase
+          .from('quiz_attempts')
+          .insert({
+            user_id: profile.id,
+            area_id: profile.selected_area_id,
+            total_questions: selectedQuestions.length,
+            is_completed: false,
+            package: profile.role || 'free',
+          })
+          .select('id')
+          .single();
+
+        if (attempt) {
+          setCurrentAttemptId(attempt.id);
+        }
+
+        // Add to activity_logs for immediate "Action Log" visibility
+        try {
+          await supabase.from('activity_logs').insert({
+            user_id: profile.id,
+            activity_type: 'started_simulation',
+            activity_metadata: {
+              area_name: profile.selected_area_id ? areas.find(a => a.id === profile.selected_area_id)?.name : 'N/A',
+              is_live: true
+            }
+          });
+        } catch (logErr) {
+          console.error('Error logging simulation start:', logErr);
+        }
       } else {
         alert('Não há questões suficientes para esta simulação de prova.');
         navigate('/simulation', { replace: true });
@@ -215,54 +249,69 @@ export default function Simulation() {
     const xpEarned = calculateSimulationXp(correctCount, questions.length, durationSeconds);
 
     try {
-      const { data: attempt, error: attemptError } = await supabase
-        .from('quiz_attempts')
-        .insert({
-          user_id: profile.id,
-          area_id: profile.selected_area_id,
-          score: finalScore,
-          total_questions: questions.length,
-          correct_answers: correctCount,
-          is_completed: true,
-          completed_at: new Date().toISOString(),
-          package: profile.role || 'free',
-        })
-        .select()
-        .single();
+      if (currentAttemptId) {
+        // Update the existing pre-registered attempt
+        const { error: attemptError } = await supabase
+          .from('quiz_attempts')
+          .update({
+            score: finalScore,
+            correct_answers: correctCount,
+            is_completed: true,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', currentAttemptId);
 
-      if (attemptError) throw attemptError;
+        if (attemptError) throw attemptError;
+      } else {
+        // Fallback for cases where pre-registration failed
+        const { error: attemptError } = await supabase
+          .from('quiz_attempts')
+          .insert({
+            user_id: profile.id,
+            area_id: profile.selected_area_id,
+            score: finalScore,
+            total_questions: questions.length,
+            correct_answers: correctCount,
+            is_completed: true,
+            completed_at: new Date().toISOString(),
+            package: profile.role || 'free',
+          })
+          .select()
+          .single();
+
+        if (attemptError) throw attemptError;
+      }
 
       const answerInserts = questions.map((question) => {
         const selectedAltId = answers[question.id];
         const correctAlt = question.alternatives.find((alternative: any) => alternative.is_correct);
         return {
-          quiz_attempt_id: attempt.id,
+          quiz_attempt_id: currentAttemptId,
           question_id: question.id,
           selected_alternative_id: selectedAltId || null,
           is_correct: selectedAltId === correctAlt?.id,
         };
       });
 
-      await supabase.from('quiz_attempt_answers').insert(answerInserts);
+      if (currentAttemptId) {
+        await supabase.from('quiz_attempt_answers').insert(answerInserts);
+      }
       await awardXp(xpEarned);
-      // Registrar tentativa de simulacao para limites e ranking
-      try {
-        const today = new Date().toISOString().slice(0, 10);
-        const { data: existing } = await supabase
-          .from('activity_logs')
-          .select('id,count')
-          .eq('user_id', profile.id)
-          .eq('activity_type', 'simulation_attempt')
-          .eq('activity_date', today)
-          .maybeSingle();
 
-        if (existing && existing.id) {
-          await supabase.from('activity_logs').update({ count: Number(existing.count || 0) + 1 }).eq('id', existing.id);
-        } else {
-          await supabase.from('activity_logs').insert({ user_id: profile.id, activity_type: 'simulation_attempt', activity_date: today, count: 1 });
-        }
+      // Registrar atividade detalhada de conclusão
+      try {
+        await supabase.from('activity_logs').insert({
+          user_id: profile.id,
+          activity_type: 'simulation_attempt',
+          activity_metadata: {
+            score: finalScore,
+            correct: correctCount,
+            total: questions.length,
+            duration: durationSeconds
+          }
+        });
       } catch (logErr) {
-        console.error('Erro ao registar simulacao em activity_logs:', logErr);
+        console.error('Erro ao registar log de conclusão:', logErr);
       }
     } catch (err) {
       console.error('Error saving simulation results:', err);

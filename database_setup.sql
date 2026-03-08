@@ -46,10 +46,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS topics_area_id_name_idx ON topics (area_id, na
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID REFERENCES auth.users(id) PRIMARY KEY,
   full_name TEXT NOT NULL,
+  student_number TEXT,
   role user_role DEFAULT 'free',
   selected_area_id UUID,
   preparation_time_months INT DEFAULT 1,
   total_xp INT DEFAULT 0,
+  last_active TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );

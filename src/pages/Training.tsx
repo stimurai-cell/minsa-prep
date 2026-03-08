@@ -206,16 +206,15 @@ export default function Training() {
       const today = new Date().toISOString().slice(0, 10);
       void (async () => {
         try {
-          const { data: row, error } = await supabase
+          const { count, error } = await supabase
             .from('activity_logs')
-            .select('count')
+            .select('*', { count: 'exact', head: true })
             .eq('user_id', profile.id)
             .eq('activity_type', 'training_question')
-            .eq('activity_date', today)
-            .maybeSingle();
+            .gte('created_at', today);
 
           if (error) throw error;
-          const answeredToday = row ? Number(row.count || 0) : 0;
+          const answeredToday = count || 0;
           if (answeredToday >= 30) {
             alert('Limite diário de perguntas (30) atingido. Faça upgrade para um plano pago para treinar sem limites.');
             return;
@@ -290,27 +289,18 @@ export default function Training() {
       } catch (err) {
         console.error('Error updating progress:', err);
       }
-      // Registrar atividade diaria de treino (incrementar count)
+      // Registrar atividade diaria de treino (inserir registro individual)
       try {
-        const today = new Date().toISOString().slice(0, 10);
-        const { data: existing } = await supabase
-          .from('activity_logs')
-          .select('id,count')
-          .eq('user_id', profile.id)
-          .eq('activity_type', 'training_question')
-          .eq('activity_date', today)
-          .maybeSingle();
-
-        if (existing && existing.id) {
-          await supabase
-            .from('activity_logs')
-            .update({ count: Number(existing.count || 0) + 1 })
-            .eq('id', existing.id);
-        } else {
-          await supabase.from('activity_logs').insert({ user_id: profile.id, activity_type: 'training_question', activity_date: today, count: 1 });
-        }
+        await supabase.from('activity_logs').insert({
+          user_id: profile.id,
+          activity_type: 'training_question',
+          activity_metadata: {
+            topic_name: selectedTopicName,
+            is_correct: isCorrect
+          }
+        });
       } catch (logErr) {
-        console.error('Erro ao registar activity_logs:', logErr);
+        console.error('Erro ao registar log de treino:', logErr);
       }
     }
   };
