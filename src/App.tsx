@@ -14,6 +14,8 @@ import Premium from './pages/Premium';
 import OnboardingQuiz from './pages/OnboardingQuiz';
 import Battle from './pages/Battle';
 import SpeedMode from './pages/SpeedMode';
+import { useVersionCheck } from './hooks/useVersionCheck';
+import { RefreshCw } from 'lucide-react';
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuthStore();
@@ -34,6 +36,7 @@ function RootRedirect() {
 
 export default function App() {
   const { checkSession } = useAuthStore();
+  const { needsUpdate } = useVersionCheck();
 
   useEffect(() => {
     checkSession();
@@ -41,6 +44,20 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      {needsUpdate && (
+        <div className="fixed top-0 left-0 right-0 z-[100] bg-yellow-400 p-2 text-center text-sm font-bold text-slate-900 shadow-lg">
+          <div className="flex items-center justify-center gap-2">
+            <RefreshCw className="h-4 w-4 animate-spin" />
+            Nova versão disponível!
+            <button
+              onClick={() => window.location.reload()}
+              className="ml-2 rounded-lg bg-slate-900 px-3 py-1 text-white hover:bg-slate-800"
+            >
+              Atualizar agora
+            </button>
+          </div>
+        </div>
+      )}
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
