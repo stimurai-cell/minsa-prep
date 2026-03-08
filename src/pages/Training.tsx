@@ -166,6 +166,19 @@ export default function Training() {
         setQuestions(prepareQuestionSet(pickQuestionsForSession(qData, 10, difficulty)));
         setSessionStartedAt(Date.now());
         setShowIntro(true);
+
+        // Registrar início de treino (Log detalhado)
+        try {
+          await supabase.from('activity_logs').insert({
+            user_id: profile.id,
+            activity_type: 'started_training',
+            activity_metadata: {
+              topic_name: topics.find(t => t.id === topicId)?.name || 'N/A'
+            }
+          });
+        } catch (logErr) {
+          console.error('Erro ao registar início de treino:', logErr);
+        }
       } else {
         alert('Nenhuma questão encontrada para este tópico.');
         navigate('/training', { replace: true });
@@ -194,6 +207,22 @@ export default function Training() {
       xpEarned,
       durationSeconds,
     });
+
+    // Registrar conclusão de treino
+    try {
+      await supabase.from('activity_logs').insert({
+        user_id: profile.id,
+        activity_type: 'completed_training',
+        activity_metadata: {
+          topic_name: selectedTopicName,
+          correct: correctAnswers,
+          total: totalQuestions,
+          xp: xpEarned
+        }
+      });
+    } catch (logErr) {
+      console.error('Erro ao registar fim de treino:', logErr);
+    }
   };
 
   const startTraining = () => {
@@ -288,19 +317,6 @@ export default function Training() {
         }
       } catch (err) {
         console.error('Error updating progress:', err);
-      }
-      // Registrar atividade diaria de treino (inserir registro individual)
-      try {
-        await supabase.from('activity_logs').insert({
-          user_id: profile.id,
-          activity_type: 'training_question',
-          activity_metadata: {
-            topic_name: selectedTopicName,
-            is_correct: isCorrect
-          }
-        });
-      } catch (logErr) {
-        console.error('Erro ao registar log de treino:', logErr);
       }
     }
   };

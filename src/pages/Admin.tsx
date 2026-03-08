@@ -325,6 +325,7 @@ export default function Admin() {
   useEffect(() => {
     if (activeTab === 'monitor') {
       fetchUsers();
+      void fetchMonitoringData();
     }
   }, [activeTab]);
 
@@ -1418,8 +1419,9 @@ export default function Admin() {
                       <div key={attempt.id} className="p-4 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-white transition-all hover:shadow-md border-l-4 border-l-blue-500 group">
                         <div className="flex justify-between items-start">
                           <span className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight">{attempt.profiles?.full_name || 'Usuário Desconhecido'}</span>
-                          <span className="text-[10px] font-black text-slate-400 bg-white px-2 py-1 rounded-lg border border-slate-100 shadow-sm">
-                            {new Date(attempt.started_at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
+                          <span className="text-[10px] font-black text-slate-400 bg-white px-2 py-1 rounded-lg border border-slate-100 shadow-sm flex flex-col items-end">
+                            <span>{new Date(attempt.started_at).toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' })}</span>
+                            <span className="text-blue-500">{new Date(attempt.started_at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}</span>
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-500 mt-2 font-medium">Área: <span className="text-slate-800 font-bold">{attempt.areas?.name}</span></p>
@@ -1458,13 +1460,16 @@ export default function Admin() {
                     </div>
                   </div>
                 </div>
-                <div className="flex-1 overflow-y-auto p-5 space-y-2 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-5 space-y-3 custom-scrollbar">
                   {recentActivities.map((log, idx) => {
                     const getActivityLabel = (type: string) => {
                       switch (type) {
                         case 'started_simulation': return 'Iniciou Simulação';
-                        case 'simulation_attempt': return 'Concluiu Simulação';
-                        case 'training_question': return 'Treino';
+                        case 'completed_simulation': return 'Terminou Simulação';
+                        case 'started_training': return 'Iniciou Treino';
+                        case 'completed_training': return 'Terminou Treino';
+                        case 'simulation_attempt': return 'Simulação (Antigo)';
+                        case 'training_question': return 'Questão Treino';
                         case 'login': return 'Entrou no sistema';
                         case 'signup': return 'Criou conta';
                         default: return type.replace(/_/g, ' ');
@@ -1483,7 +1488,7 @@ export default function Admin() {
                             <div className={`h-2.5 w-2.5 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)] ${log.activity_type === 'started_simulation' ? 'bg-blue-500 shadow-blue-500/50' : log.activity_type === 'training_question' ? 'bg-amber-400 shadow-amber-400/50' : 'bg-emerald-500'}`} />
                             <div>
                               <span className="text-[12px] font-black text-slate-900 uppercase tracking-tight">{log.profiles?.full_name || 'Usuário'}</span>
-                              <span className={`ml-2 text-[10px] font-black px-2 py-0.5 rounded-lg border uppercase ${log.activity_type === 'started_simulation' ? 'bg-blue-50 border-blue-100 text-blue-600' : log.activity_type === 'training_question' ? 'bg-amber-50 border-amber-100 text-amber-600' : 'bg-slate-50 border-slate-100 text-slate-500'}`}>
+                              <span className={`ml-2 text-[10px] font-black px-2 py-0.5 rounded-lg border uppercase ${log.activity_type.includes('simulation') ? 'bg-blue-50 border-blue-100 text-blue-600' : log.activity_type.includes('training') ? 'bg-amber-50 border-amber-100 text-amber-600' : 'bg-slate-50 border-slate-100 text-slate-500'}`}>
                                 {getActivityLabel(log.activity_type)}
                               </span>
                             </div>
@@ -1495,22 +1500,28 @@ export default function Admin() {
                         </div>
 
                         {(metadata.score !== undefined || metadata.topic_name) && (
-                          <div className="mt-2 ml-6.5 pl-6 border-l border-slate-100 flex gap-3">
-                            {metadata.score !== undefined && (
-                              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
-                                Score: {metadata.score}% ({metadata.correct}/{metadata.total})
-                              </span>
-                            )}
+                          <div className="mt-2 ml-6.5 pl-6 border-l border-slate-100 flex flex-wrap gap-2">
                             {metadata.topic_name && (
                               <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
-                                Tópico: {metadata.topic_name}
+                                {metadata.topic_name}
+                              </span>
+                            )}
+                            {metadata.score !== undefined && (
+                              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                                {metadata.score}% ({metadata.correct}/{metadata.total})
                               </span>
                             )}
                             {metadata.duration && (
-                              <span className="text-[10px] font-bold text-slate-400">
+                              <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
                                 {Math.floor(metadata.duration / 60)}m {metadata.duration % 60}s
                               </span>
                             )}
+                          </div>
+                        )}
+                        {metadata.area_name && (
+                          <div className="mt-1 ml-6.5 pl-6 text-[9px] font-bold text-slate-300 uppercase tracking-tighter">
+                            Área: {metadata.area_name}
                           </div>
                         )}
                       </div>
@@ -1519,147 +1530,147 @@ export default function Admin() {
                 </div>
               </div>
             </div>
-
-            {/* Section 2: User management */}
-            <div className="bg-white rounded-[2.2rem] border border-slate-200 shadow-xl shadow-slate-200/40 overflow-hidden">
-              <div className="p-8 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-center gap-6 bg-[radial-gradient(circle_at_top_right,#f8fafc,transparent)]">
-                <div>
-                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">Gestão de Utilizadores</h2>
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">{userList.length} usuários registrados</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4 w-full lg:w-auto">
-                  <div className="relative flex-1 lg:w-80">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Filtrar por nome ou nº de estudante..."
-                      value={userSearchQuery}
-                      onChange={(e) => setUserSearchQuery(e.target.value)}
-                      className="w-full pl-12 pr-4 py-3.5 rounded-2xl border border-slate-200 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-50/50 transition-all font-bold text-slate-700 text-sm shadow-sm"
-                    />
-                  </div>
-                  <button
-                    onClick={fetchUsers}
-                    disabled={loadingUsers}
-                    className="flex items-center justify-center h-[52px] w-[52px] lg:w-auto lg:px-6 rounded-2xl bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50"
-                  >
-                    {loadingUsers ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5 lg:mr-2" />}
-                    <span className="hidden lg:inline">Atualizar Agora</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto p-4">
-                <table className="w-full text-left border-separate border-spacing-y-2">
-                  <thead className="bg-slate-50/50 text-slate-400 text-[9px] font-black uppercase tracking-[0.25em]">
-                    <tr>
-                      <th className="px-6 py-4 rounded-l-2xl">NOME / ID</th>
-                      <th className="px-6 py-4">CARGO</th>
-                      <th className="px-6 py-4 text-center">Nº ESTUDANTE</th>
-                      <th className="px-6 py-4">ÁREA ATUAL</th>
-                      <th className="px-6 py-4">ÚLT. ATIVO</th>
-                      <th className="px-6 py-4 text-right rounded-r-2xl">ACÇÕES</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-transparent">
-                    {loadingUsers ? (
-                      <tr><td colSpan={6} className="px-6 py-32 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-emerald-500" /></td></tr>
-                    ) : userList.filter(u =>
-                      u.full_name?.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
-                      (u.student_number?.toLowerCase().includes(userSearchQuery.toLowerCase()))
-                    ).length === 0 ? (
-                      <tr><td colSpan={6} className="px-6 py-32 text-center text-slate-400 font-bold uppercase tracking-widest italic opacity-40">Nenhum rastro encontrado...</td></tr>
-                    ) : (
-                      userList
-                        .filter(u =>
-                          u.full_name?.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
-                          (u.student_number?.toLowerCase().includes(userSearchQuery.toLowerCase()))
-                        )
-                        .map((u) => (
-                          <tr key={u.id} className="bg-slate-50/20 hover:bg-white transition-all group hover:shadow-xl hover:shadow-slate-200/50">
-                            <td className="px-6 py-5 rounded-l-2xl border border-transparent border-l-slate-200 group-hover:border-slate-100">
-                              <div className="flex items-center gap-4">
-                                <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-500 shadow-lg shadow-emerald-200 flex items-center justify-center text-white font-black text-xs uppercase transition-transform group-hover:scale-110">
-                                  {u.full_name?.substring(0, 2)}
-                                </div>
-                                <div>
-                                  <p className="text-sm font-black text-slate-900 leading-none group-hover:text-emerald-700 transition-colors uppercase tracking-tight">{u.full_name}</p>
-                                  <p className="text-[10px] text-slate-400 font-bold mt-1.5 opacity-60">ID: {u.id.substring(0, 8)}</p>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-5">
-                              <select
-                                value={u.role}
-                                onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
-                                className={`text-[9px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl border-2 transition-all outline-none
-                                ${u.role === 'admin' ? 'bg-purple-50 text-purple-700 border-purple-100' :
-                                    u.role === 'premium' ? 'bg-amber-50 text-amber-700 border-amber-100' :
-                                      'bg-slate-100 text-slate-600 border-slate-200'}`}
-                              >
-                                <option value="free">Livre</option>
-                                <option value="premium">Premium</option>
-                                <option value="admin">Administrador</option>
-                              </select>
-                            </td>
-                            <td className="px-6 py-5 text-center">
-                              <div className="inline-block px-3 py-1 bg-white border border-slate-200 rounded-xl shadow-sm text-xs font-black text-slate-600 ring-2 ring-slate-50">
-                                {u.student_number || '---'}
-                              </div>
-                            </td>
-                            <td className="px-6 py-5">
-                              <div className="flex flex-col">
-                                <span className="text-xs font-black text-slate-800 uppercase tracking-tight">{u.areas?.name || 'Não definida'}</span>
-                                <span className="text-[9px] text-slate-400 font-bold uppercase mt-1">Desde {new Date(u.created_at).toLocaleDateString('pt-PT')}</span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-5">
-                              <div className="flex items-center gap-2">
-                                <div className={`h-1.5 w-1.5 rounded-full ${u.last_active && (Date.now() - new Date(u.last_active).getTime() < 10 * 60 * 1000) ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-slate-300'}`} />
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-tight">
-                                  {u.last_active ? new Date(u.last_active).toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Offline'}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-5 text-right rounded-r-2xl border border-transparent border-r-slate-200 group-hover:border-slate-100">
-                              <div className="flex items-center justify-end gap-3">
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      const { data } = await supabase.from('activity_logs').select('*').eq('user_id', u.id).order('activity_date', { ascending: false }).limit(10);
-                                      if (!data?.length) return alert('Nenhuma pegada detectada.');
-                                      const msg = data.map((l: any) => `[${new Date(l.activity_date).toLocaleTimeString()}] ${l.activity_type}`).join('\n');
-                                      alert(`HISTÓRICO RECENTE:\n${msg}`);
-                                    } catch (e) { alert('Falha ao rastrear.'); }
-                                  }}
-                                  className="h-10 w-10 flex items-center justify-center rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                                  title="Rastrear Pegadas"
-                                >
-                                  <Monitor className="h-4 w-4" />
-                                </button>
-                                <select
-                                  value={u.selected_area_id || ''}
-                                  onChange={(e) => handleUpdateUserArea(u.id, e.target.value)}
-                                  className="text-[10px] font-black uppercase tracking-tight border-2 border-slate-100 rounded-xl bg-white px-3 py-1.5 focus:border-emerald-500 outline-none shadow-sm"
-                                >
-                                  <option value="">Área...</option>
-                                  {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                </select>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
           </div>
         )}
-      </main >
-    </div >
+
+        {/* Section 2: User management */}
+        <div className="bg-white rounded-[2.2rem] border border-slate-200 shadow-xl shadow-slate-200/40 overflow-hidden">
+          <div className="p-8 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-center gap-6 bg-[radial-gradient(circle_at_top_right,#f8fafc,transparent)]">
+            <div>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Gestão de Utilizadores</h2>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">{userList.length} usuários registrados</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 w-full lg:w-auto">
+              <div className="relative flex-1 lg:w-80">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Filtrar por nome ou nº de estudante..."
+                  value={userSearchQuery}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3.5 rounded-2xl border border-slate-200 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-50/50 transition-all font-bold text-slate-700 text-sm shadow-sm"
+                />
+              </div>
+              <button
+                onClick={fetchUsers}
+                disabled={loadingUsers}
+                className="flex items-center justify-center h-[52px] w-[52px] lg:w-auto lg:px-6 rounded-2xl bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50"
+              >
+                {loadingUsers ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5 lg:mr-2" />}
+                <span className="hidden lg:inline">Atualizar Agora</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto p-4">
+            <table className="w-full text-left border-separate border-spacing-y-2">
+              <thead className="bg-slate-50/50 text-slate-400 text-[9px] font-black uppercase tracking-[0.25em]">
+                <tr>
+                  <th className="px-6 py-4 rounded-l-2xl">NOME / ID</th>
+                  <th className="px-6 py-4">CARGO</th>
+                  <th className="px-6 py-4 text-center">Nº ESTUDANTE</th>
+                  <th className="px-6 py-4">ÁREA ATUAL</th>
+                  <th className="px-6 py-4">ÚLT. ATIVO</th>
+                  <th className="px-6 py-4 text-right rounded-r-2xl">ACÇÕES</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-transparent">
+                {loadingUsers ? (
+                  <tr><td colSpan={6} className="px-6 py-32 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-emerald-500" /></td></tr>
+                ) : userList.filter(u =>
+                  u.full_name?.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                  (u.student_number?.toLowerCase().includes(userSearchQuery.toLowerCase()))
+                ).length === 0 ? (
+                  <tr><td colSpan={6} className="px-6 py-32 text-center text-slate-400 font-bold uppercase tracking-widest italic opacity-40">Nenhum rastro encontrado...</td></tr>
+                ) : (
+                  userList
+                    .filter(u =>
+                      u.full_name?.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                      (u.student_number?.toLowerCase().includes(userSearchQuery.toLowerCase()))
+                    )
+                    .map((u) => (
+                      <tr key={u.id} className="bg-slate-50/20 hover:bg-white transition-all group hover:shadow-xl hover:shadow-slate-200/50">
+                        <td className="px-6 py-5 rounded-l-2xl border border-transparent border-l-slate-200 group-hover:border-slate-100">
+                          <div className="flex items-center gap-4">
+                            <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-500 shadow-lg shadow-emerald-200 flex items-center justify-center text-white font-black text-xs uppercase transition-transform group-hover:scale-110">
+                              {u.full_name?.substring(0, 2)}
+                            </div>
+                            <div>
+                              <p className="text-sm font-black text-slate-900 leading-none group-hover:text-emerald-700 transition-colors uppercase tracking-tight">{u.full_name}</p>
+                              <p className="text-[10px] text-slate-400 font-bold mt-1.5 opacity-60">ID: {u.id.substring(0, 8)}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-5">
+                          <select
+                            value={u.role}
+                            onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
+                            className={`text-[9px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl border-2 transition-all outline-none
+                                ${u.role === 'admin' ? 'bg-purple-50 text-purple-700 border-purple-100' :
+                                u.role === 'premium' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                                  'bg-slate-100 text-slate-600 border-slate-200'}`}
+                          >
+                            <option value="free">Livre</option>
+                            <option value="premium">Premium</option>
+                            <option value="admin">Administrador</option>
+                          </select>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <div className="inline-block px-3 py-1 bg-white border border-slate-200 rounded-xl shadow-sm text-xs font-black text-slate-600 ring-2 ring-slate-50">
+                            {u.student_number || '---'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-5">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-black text-slate-800 uppercase tracking-tight">{u.areas?.name || 'Não definida'}</span>
+                            <span className="text-[9px] text-slate-400 font-bold uppercase mt-1">Desde {new Date(u.created_at).toLocaleDateString('pt-PT')}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-5">
+                          <div className="flex items-center gap-2">
+                            <div className={`h-1.5 w-1.5 rounded-full ${u.last_active && (Date.now() - new Date(u.last_active).getTime() < 10 * 60 * 1000) ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-slate-300'}`} />
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-tight">
+                              {u.last_active ? new Date(u.last_active).toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Offline'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-5 text-right rounded-r-2xl border border-transparent border-r-slate-200 group-hover:border-slate-100">
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const { data } = await supabase.from('activity_logs').select('*').eq('user_id', u.id).order('activity_date', { ascending: false }).limit(10);
+                                  if (!data?.length) return alert('Nenhuma pegada detectada.');
+                                  const msg = data.map((l: any) => `[${new Date(l.activity_date).toLocaleTimeString()}] ${l.activity_type}`).join('\n');
+                                  alert(`HISTÓRICO RECENTE:\n${msg}`);
+                                } catch (e) { alert('Falha ao rastrear.'); }
+                              }}
+                              className="h-10 w-10 flex items-center justify-center rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                              title="Rastrear Pegadas"
+                            >
+                              <Monitor className="h-4 w-4" />
+                            </button>
+                            <select
+                              value={u.selected_area_id || ''}
+                              onChange={(e) => handleUpdateUserArea(u.id, e.target.value)}
+                              className="text-[10px] font-black uppercase tracking-tight border-2 border-slate-100 rounded-xl bg-white px-3 py-1.5 focus:border-emerald-500 outline-none shadow-sm"
+                            >
+                              <option value="">Área...</option>
+                              {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            </select>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
   );
 }

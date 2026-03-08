@@ -302,12 +302,13 @@ export default function Simulation() {
       try {
         await supabase.from('activity_logs').insert({
           user_id: profile.id,
-          activity_type: 'simulation_attempt',
+          activity_type: 'completed_simulation',
           activity_metadata: {
             score: finalScore,
             correct: correctCount,
             total: questions.length,
-            duration: durationSeconds
+            duration: durationSeconds,
+            area_name: profile.selected_area_id ? areas.find(a => a.id === profile.selected_area_id)?.name : 'N/A'
           }
         });
       } catch (logErr) {
