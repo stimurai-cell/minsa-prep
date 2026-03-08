@@ -22,7 +22,7 @@ import { getAlternativeLabel, prepareQuestionSet } from '../lib/quiz';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 
-const TIMER_SECONDS = 25;
+const TIMER_SECONDS = 60;
 
 export default function SpeedMode() {
     const { profile, refreshProfile } = useAuthStore();
@@ -57,8 +57,9 @@ export default function SpeedMode() {
         if (!window.speechSynthesis) return;
         stopTTS();
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'pt-PT'; // Portuguese from Portugal (or Brazil if needed)
-        utterance.rate = 1.1;
+        utterance.lang = 'pt-BR'; // pt-BR usually sounds slightly more natural in some browsers than pt-PT
+        utterance.rate = 0.85; // Slower for better clarity
+        utterance.pitch = 1.0;
         ttsRef.current = utterance;
         window.speechSynthesis.speak(utterance);
     }, [stopTTS]);
@@ -164,7 +165,7 @@ export default function SpeedMode() {
                     void gameOver('timeout');
                     return 0;
                 }
-                if (prev === 4 || prev === 3 || prev === 2) {
+                if (prev <= 6) {
                     playCountdownSound();
                 }
                 return prev - 1;
@@ -182,7 +183,7 @@ export default function SpeedMode() {
 
         const q = questions[currentQIndex];
         if (q) {
-            const textToRead = `${q.content}. Opções: ${q.alternatives.map((a: any, i: number) => `${getAlternativeLabel(i)}, ${a.content}`).join('. ')}`;
+            const textToRead = `${q.content}. ... ... Preste atenção às opções: ... ... ${q.alternatives.map((a: any, i: number) => `Opção ${getAlternativeLabel(i).toUpperCase()}: ... ${a.content}`).join('. ... ')}`;
             speak(textToRead);
         }
     }, [currentQIndex, questions, showIntro, isGameOver, loading, speak]);
@@ -201,7 +202,7 @@ export default function SpeedMode() {
                     <h1 className="text-4xl font-black italic tracking-tighter sm:text-6xl">MODO RELÂMPAGO</h1>
                     <p className="mt-6 text-lg text-slate-400">
                         Responda o máximo que conseguir. <br />
-                        <span className="font-bold text-yellow-400">25 segundos</span> por questão. <br />
+                        <span className="font-bold text-yellow-400">1 minuto</span> por questão. <br />
                         Errou uma? <span className="text-red-400">Game Over.</span>
                     </p>
 
