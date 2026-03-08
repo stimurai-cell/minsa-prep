@@ -461,7 +461,7 @@ export default function Admin() {
           });
           if (expError) {
             console.error('Error inserting explanation:', expError);
-            // Don't throw here, explanation is secondary
+            throw new Error(`Erro ao inserir explicação: ${expError.message}`);
           }
         }
       }

@@ -105,7 +105,8 @@ export default function Simulation() {
 
   const currentQ = questions[currentQIndex];
   const currentExplanation =
-    currentQ?.question_explanations?.[0]?.content || 'Continue firme. A resposta correta já ficou destacada.';
+    (Array.isArray(currentQ?.question_explanations) ? currentQ?.question_explanations?.[0]?.content : (currentQ?.question_explanations as any)?.content) ||
+    'A resposta correta foi destacada para o seu estudo.';
   const correctAnswers = resultHistory.filter(Boolean).length;
   const wrongAnswers = resultHistory.length - correctAnswers;
   const progressPercent =
