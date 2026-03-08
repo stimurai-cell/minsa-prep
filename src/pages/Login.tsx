@@ -50,7 +50,15 @@ export default function Login() {
       }
 
       await checkSession();
-      await useAuthStore.getState().updateLastActive();
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser) {
+        await supabase.from('activity_logs').insert({
+          user_id: currentUser.id,
+          activity_type: 'login',
+          activity_metadata: { method: 'email' }
+        });
+        await useAuthStore.getState().updateLastActive();
+      }
       if (profile?.role === 'admin') {
         navigate('/admin');
       } else {
