@@ -136,6 +136,8 @@ export default function Training() {
   };
 
   const bootTrainingSession = async (topicId: string, difficulty: DifficultyPreference) => {
+    // Safety check: force medium if non-premium tries to access hard
+    const safeDifficulty = !hasPremiumAccess && difficulty === 'hard' ? 'medium' : difficulty;
     setLoading(true);
 
     try {
@@ -151,8 +153,8 @@ export default function Training() {
         .eq('topic_id', topicId)
         .limit(80);
 
-      if (difficulty !== 'mixed') {
-        query = query.eq('difficulty', difficulty);
+      if (safeDifficulty !== 'mixed') {
+        query = query.eq('difficulty', safeDifficulty);
       }
 
       const { data: qData, error: qError } = await query;

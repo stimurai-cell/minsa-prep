@@ -138,6 +138,9 @@ export default function Simulation() {
   };
 
   const bootSimulationSession = async (difficulty: DifficultyPreference) => {
+    // Safety check: force medium if non-premium tries to access hard
+    const safeDifficulty = !hasPremiumAccess && difficulty === 'hard' ? 'medium' : difficulty;
+
     if (!profile?.selected_area_id) return;
 
     setLoading(true);
@@ -167,8 +170,8 @@ export default function Simulation() {
         .in('topic_id', topicIds)
         .limit(240);
 
-      if (difficulty !== 'mixed') {
-        query = query.eq('difficulty', difficulty);
+      if (safeDifficulty !== 'mixed') {
+        query = query.eq('difficulty', safeDifficulty);
       }
 
       const { data: qData, error: qError } = await query;
@@ -667,18 +670,28 @@ export default function Simulation() {
                   key={difficulty}
                   type="button"
                   onClick={() => {
-                    if (!hasPremiumAccess && difficulty === 'hard') return; // hard blocked
+                    if (!hasPremiumAccess && difficulty === 'hard') {
+                      navigate(`/premium?plan=focus#payment-section`);
+                      return;
+                    }
                     setSelectedDifficulty(difficulty);
                   }}
                   disabled={!hasPremiumAccess && difficulty === 'hard'}
-                  className={`rounded-2xl px-3 py-3 text-sm font-semibold transition ${selectedDifficulty === difficulty
+                  className={`relative rounded-2xl px-3 py-3 text-sm font-semibold transition ${selectedDifficulty === difficulty
                     ? 'bg-emerald-600 text-white'
                     : !hasPremiumAccess && difficulty === 'hard'
-                      ? 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400'
+                      ? 'cursor-pointer border border-slate-200 bg-slate-100 text-slate-400'
                       : 'border border-slate-200 bg-slate-50 text-slate-700'
                     }`}
                 >
-                  {getDifficultyLabel(difficulty)}
+                  <span className="inline-flex items-center gap-2">
+                    {getDifficultyLabel(difficulty)}
+                    {!hasPremiumAccess && difficulty === 'hard' && (
+                      <span className="ml-2 inline-flex items-center rounded-full bg-amber-200/40 px-2 py-0.5 text-xs font-semibold text-amber-900">
+                        Premium
+                      </span>
+                    )}
+                  </span>
                 </button>
               ))}
             </div>

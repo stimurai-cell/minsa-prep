@@ -10,6 +10,7 @@ import {
   PlayCircle,
   Target,
   Crown,
+  Zap,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { createStudyPlanForUser } from '../lib/studyPlan';
@@ -238,6 +239,13 @@ export default function Dashboard() {
               <Clock3 className="h-5 w-5" />
               Fazer simulação de prova
             </Link>
+            <Link
+              to="/speed-mode"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-yellow-400 px-6 py-4 text-sm font-black uppercase tracking-tight text-slate-900 transition hover:bg-yellow-500 hover:scale-105 active:scale-95 shadow-[0_15px_30px_-12px_rgba(250,204,21,0.4)]"
+            >
+              <Zap className="h-5 w-5" fill="currentColor" />
+              Modo Relâmpago
+            </Link>
           </div>
         </div>
 
@@ -258,10 +266,10 @@ export default function Dashboard() {
                   <div className="h-2.5 w-full rounded-full bg-slate-200">
                     <div
                       className={`h-2.5 rounded-full ${progress.domain_score >= 80
-                          ? 'bg-emerald-500'
-                          : progress.domain_score >= 50
-                            ? 'bg-orange-500'
-                            : 'bg-red-500'
+                        ? 'bg-emerald-500'
+                        : progress.domain_score >= 50
+                          ? 'bg-orange-500'
+                          : 'bg-red-500'
                         }`}
                       style={{ width: `${progress.domain_score}%` }}
                     ></div>
@@ -292,8 +300,8 @@ export default function Dashboard() {
             <div
               key={plan.id}
               className={`rounded-[1.7rem] border p-5 ${plan.highlight
-                  ? 'border-amber-300 bg-amber-50 shadow-[0_18px_50px_-40px_rgba(245,158,11,0.5)]'
-                  : 'border-slate-200 bg-white'
+                ? 'border-amber-300 bg-amber-50 shadow-[0_18px_50px_-40px_rgba(245,158,11,0.5)]'
+                : 'border-slate-200 bg-white'
                 }`}
             >
               <div className="flex items-center justify-between gap-3">

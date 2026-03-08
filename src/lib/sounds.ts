@@ -69,3 +69,65 @@ export const playErrorSound = () => {
         console.warn("Could not play sound:", e);
     }
 };
+
+export const playBooSound = () => {
+    try {
+        const ctx = getAudioContext();
+        if (ctx.state === 'suspended') ctx.resume();
+
+        // Boo Sound: LOW, DISSONANT, DESCENDING
+        const osc = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sawtooth';
+        osc2.type = 'sawtooth';
+
+        osc.frequency.setValueAtTime(110, ctx.currentTime); // A2
+        osc2.frequency.setValueAtTime(116.54, ctx.currentTime); // Bb2 (Dissonant)
+
+        osc.frequency.exponentialRampToValueAtTime(55, ctx.currentTime + 1.5);
+        osc2.frequency.exponentialRampToValueAtTime(58.27, ctx.currentTime + 1.5);
+
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.5);
+
+        osc.connect(gain);
+        osc2.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start();
+        osc2.start();
+        osc.stop(ctx.currentTime + 1.5);
+        osc2.stop(ctx.currentTime + 1.5);
+    } catch (e) {
+        console.warn("Could not play sound:", e);
+    }
+};
+
+export const playCountdownSound = () => {
+    try {
+        const ctx = getAudioContext();
+        if (ctx.state === 'suspended') ctx.resume();
+
+        // Short Beep
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
+
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start();
+        osc.stop(ctx.currentTime + 0.1);
+    } catch (e) {
+        console.warn("Could not play sound:", e);
+    }
+};

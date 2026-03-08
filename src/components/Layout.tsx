@@ -15,6 +15,7 @@ import {
   Menu,
   UserRound,
   Swords,
+  Zap,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
@@ -54,6 +55,7 @@ export default function Layout() {
     { to: '/dashboard', label: 'Painel', icon: LayoutDashboard },
     { to: '/training', label: 'Treino', icon: BookOpen },
     { to: '/simulation', label: 'Prova', icon: Compass },
+    { to: '/speed-mode', label: 'Relâmpago', icon: Zap },
     { to: '/battle', label: 'Batalha', icon: Swords },
     { to: '/ranking', label: 'Ranking', icon: Award },
     { to: '/premium', label: 'Premium', icon: Crown },
@@ -62,8 +64,8 @@ export default function Layout() {
   const links = profile?.role === 'admin' ? adminLinks : studentLinks;
   const currentAdminTab = new URLSearchParams(location.search).get('tab') || 'dashboard';
   const isImmersiveSession =
-    (location.pathname === '/training' || location.pathname === '/simulation') &&
-    searchParams.get('session') === '1';
+    (location.pathname === '/training' || location.pathname === '/simulation' || location.pathname === '/speed-mode') &&
+    (searchParams.get('session') === '1' || location.pathname === '/speed-mode');
 
   const getLinkActive = (link: (typeof links)[number]) => {
     if (profile?.role === 'admin' && 'key' in link) {

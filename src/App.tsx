@@ -13,6 +13,7 @@ import Admin from './pages/Admin';
 import Premium from './pages/Premium';
 import OnboardingQuiz from './pages/OnboardingQuiz';
 import Battle from './pages/Battle';
+import SpeedMode from './pages/SpeedMode';
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuthStore();
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="training" element={<Training />} />
           <Route path="simulation" element={<Simulation />} />
           <Route path="battle" element={<Battle />} />
+          <Route path="speed-mode" element={<SpeedMode />} />
           <Route path="ranking" element={<Ranking />} />
           <Route path="premium" element={<Premium />} />
           <Route path="admin" element={<Admin />} />
