@@ -125,7 +125,7 @@ export default function Admin() {
     const { data, error } = await supabase
       .from('profiles')
       .select('*, areas(name), student_number, last_active, total_xp')
-      .order('created_at', { ascending: false });
+      .order('last_active', { ascending: false, nullsFirst: false });
 
     if (error) {
       console.error('CRITICAL: Error fetching users:', error);
