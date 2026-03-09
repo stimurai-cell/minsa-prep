@@ -227,8 +227,15 @@ export default function Training() {
 
   const startTraining = () => {
     if (!selectedTopic) return;
+
     // Non-premium users can use mixed, easy or medium, but not hard.
     const difficulty = hasPremiumAccess ? selectedDifficulty : (selectedDifficulty === 'hard' ? 'medium' : selectedDifficulty);
+
+    let actualTopic = selectedTopic;
+    if (actualTopic === 'random') {
+      const topicIds = topics.map(t => t.id);
+      actualTopic = topicIds[Math.floor(Math.random() * topicIds.length)];
+    }
 
     // Limite para utilizadores free: 30 questões por dia
     if (!hasBasicAccess && profile?.id) {
@@ -249,16 +256,16 @@ export default function Training() {
             return;
           }
 
-          navigate(`/training?session=1&topic=${selectedTopic}&difficulty=${difficulty}`);
+          navigate(`/training?session=1&topic=${actualTopic}&difficulty=${difficulty}`);
         } catch (err) {
           console.error('Erro ao verificar limite diário:', err);
-          navigate(`/training?session=1&topic=${selectedTopic}&difficulty=${difficulty}`);
+          navigate(`/training?session=1&topic=${actualTopic}&difficulty=${difficulty}`);
         }
       })();
       return;
     }
 
-    navigate(`/training?session=1&topic=${selectedTopic}&difficulty=${difficulty}`);
+    navigate(`/training?session=1&topic=${actualTopic}&difficulty=${difficulty}`);
   };
 
   const leaveTrainingSession = () => {
@@ -656,6 +663,7 @@ export default function Training() {
                 <option value="" disabled>
                   Selecione um tópico
                 </option>
+                <option value="random">🌟 Tópico Surpresa (Misto)</option>
                 {topics.map((topic) => (
                   <option key={topic.id} value={topic.id}>
                     {topic.name}

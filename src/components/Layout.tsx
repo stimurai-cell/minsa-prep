@@ -1,21 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Award,
-  BookOpen,
-  ChevronDown,
-  Compass,
-  Crown,
-  FolderTree,
+  Home,
+  Dumbbell,
+  UsersRound,
   LayoutDashboard,
-  LogOut,
-  ShieldCheck,
-  Sparkles,
+  FolderTree,
   Users,
-  Menu,
+  Award,
+  Crown,
+  Sparkles,
+  ShieldCheck,
   UserRound,
-  Swords,
-  Zap,
+  ChevronDown,
+  LogOut,
+  Menu
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
@@ -52,13 +51,11 @@ export default function Layout() {
   ];
 
   const studentLinks = [
-    { to: '/dashboard', label: 'Painel', icon: LayoutDashboard },
-    { to: '/training', label: 'Treino', icon: BookOpen },
-    { to: '/simulation', label: 'Prova', icon: Compass },
-    { to: '/speed-mode', label: 'Relâmpago', icon: Zap },
-    { to: '/battle', label: 'Batalha', icon: Swords },
+    { to: '/dashboard', label: 'Início', icon: Home },
+    { to: '/practice', label: 'Pratique', icon: Dumbbell },
+    { to: '/social', label: 'Amigos', icon: UsersRound },
     { to: '/ranking', label: 'Ranking', icon: Award },
-    { to: '/premium', label: 'Premium', icon: Crown },
+    { to: '/premium', label: 'Loja', icon: Crown },
   ];
 
   const links = profile?.role === 'admin' ? adminLinks : studentLinks;
@@ -77,14 +74,14 @@ export default function Layout() {
 
   const navClass = (isActive: boolean, tone: 'student' | 'admin') =>
     [
-      'flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition',
+      'flex items-center gap-4 rounded-2xl px-5 py-3.5 text-base font-bold transition-all border-2',
       tone === 'admin'
         ? isActive
-          ? 'bg-slate-900 text-white shadow-[0_18px_40px_-28px_rgba(15,23,42,0.6)]'
-          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+          ? 'bg-slate-900 border-slate-900 text-white shadow-md'
+          : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900'
         : isActive
-          ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]'
-          : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-700',
+          ? 'bg-emerald-100 border-emerald-200 text-emerald-600 shadow-sm shadow-emerald-100/50'
+          : 'border-transparent text-slate-500 hover:bg-emerald-50 hover:text-emerald-500',
     ].join(' ');
 
   return (
@@ -112,7 +109,7 @@ export default function Layout() {
 
               return (
                 <NavLink key={link.to} to={link.to} className={navClass(isActive, profile?.role === 'admin' ? 'admin' : 'student')}>
-                  <Icon className="h-5 w-5" />
+                  <Icon className={`h-6 w-6 ${isActive && profile?.role !== 'admin' ? 'text-emerald-500' : ''}`} />
                   <span>{link.label}</span>
                 </NavLink>
               );
@@ -266,16 +263,16 @@ export default function Layout() {
               <NavLink
                 key={link.to}
                 to={link.to}
-                className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-semibold transition ${profile?.role === 'admin'
+                className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-bold transition ${profile?.role === 'admin'
                   ? isActive
                     ? 'bg-slate-900 text-white'
-                    : 'text-slate-500'
+                    : 'text-slate-400'
                   : isActive
-                    ? 'bg-emerald-600 text-white'
-                    : 'text-slate-500'
+                    ? 'text-emerald-600 bg-emerald-50 border-2 border-emerald-200'
+                    : 'text-slate-400 border-2 border-transparent hover:bg-emerald-50/50'
                   }`}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className={`h-6 w-6 ${isActive && profile?.role !== 'admin' ? 'text-emerald-500' : ''}`} />
                 <span className="truncate">{link.label}</span>
               </NavLink>
             );

@@ -13,6 +13,7 @@ export default function Register() {
   const [areaId, setAreaId] = useState('');
   const [prepTime, setPrepTime] = useState('1');
   const [studentNumber, setStudentNumber] = useState('');
+  const [goal, setGoal] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -31,6 +32,7 @@ export default function Register() {
       student_number: studentNumber || null,
       selected_area_id: areaId || null,
       preparation_time_months: parseInt(prepTime, 10),
+      goal: goal || null,
     };
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -47,6 +49,7 @@ export default function Register() {
             full_name: fullName,
             selected_area_id: areaId || null,
             preparation_time_months: parseInt(prepTime, 10),
+            goal: goal || null,
           })
           .eq('id', userId);
 
@@ -230,6 +233,22 @@ export default function Register() {
                 onChange={(e) => setStudentNumber(e.target.value)}
                 className="mt-1 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Qual o seu foco principal?</label>
+              <select
+                required
+                value={goal}
+                onChange={(e) => setGoal(e.target.value)}
+                className="mt-1 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+              >
+                <option value="" disabled>Selecione um objetivo</option>
+                <option value="Aprender e rever conceitos">Aprender e rever conceitos</option>
+                <option value="Passar no concurso publico">Passar no concurso público</option>
+                <option value="Descontrair e treinar">Descontrair e treinar</option>
+                <option value="Testar minhas habilidades">Testar minhas habilidades</option>
+              </select>
             </div>
 
             <div>

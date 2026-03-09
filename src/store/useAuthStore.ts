@@ -8,6 +8,9 @@ interface UserProfile {
   selected_area_id: string | null;
   preparation_time_months: number;
   total_xp?: number;
+  last_active?: string | null;
+  goal?: string | null;
+  avatar_style?: string | null;
 }
 
 interface AuthState {

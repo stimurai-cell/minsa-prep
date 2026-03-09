@@ -11,6 +11,7 @@ import {
   Target,
   Crown,
   Zap,
+  Flame,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { createStudyPlanForUser } from '../lib/studyPlan';
@@ -18,6 +19,15 @@ import { premiumPlans } from '../lib/premium';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import AreaLockCard from '../components/AreaLockCard';
+import { UserPlus, Sparkles } from 'lucide-react';
+
+const DAILY_TIPS = [
+  "Treinar 15 minutos todos os dias gera mais resultado do que estudar 3 horas só no domingo!",
+  "A consistência é a chave da aprovação. Não quebre a sua ofensiva!",
+  "Revise as questões que você errou; é ali que o aprendizado acontece de verdade.",
+  "Estudar com amigos ajuda a manter o foco. Que tal convidar alguém na aba Social?",
+  "Fazer simulados ajuda a controlar o tempo e o nervosismo para o dia da prova real."
+];
 
 export default function Dashboard() {
   const { profile } = useAuthStore();
@@ -29,6 +39,13 @@ export default function Dashboard() {
   });
   const [topicProgress, setTopicProgress] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [missingGoal, setMissingGoal] = useState('');
+  const [savingGoal, setSavingGoal] = useState(false);
+
+  const dailyTip = useMemo(() => {
+    const day = new Date().getDay();
+    return DAILY_TIPS[day % DAILY_TIPS.length];
+  }, []);
 
   useEffect(() => {
     fetchAreas();
@@ -115,31 +132,89 @@ export default function Dashboard() {
     );
   }
 
+  const handleSaveMissingGoal = async () => {
+    if (!profile?.id || !missingGoal) return;
+    setSavingGoal(true);
+    try {
+      await supabase.from('profiles').update({ goal: missingGoal }).eq('id', profile.id);
+      // Forçar recarregamento na store (embora no exemplo não exportemos 'refreshProfile' deste componente, podemos alterar localmente ou confiar no cache)
+      window.location.reload();
+    } catch (err) {
+      console.error(err);
+      setSavingGoal(false);
+    }
+  };
+
   return (
     <div className="space-y-5 md:space-y-8">
+      {/* Aviso para utilizadores antigos sem meta definida */}
+      {(profile as any)?.goal === null && (
+        <div className="bg-orange-50 border-2 border-orange-200 rounded-[2rem] p-6 shadow-sm flex flex-col items-center text-center animate-in zoom-in duration-300">
+          <Target className="w-12 h-12 text-orange-500 mb-4" />
+          <h2 className="text-2xl font-black text-slate-800 mb-2">Qual é o seu foco principal?</h2>
+          <p className="text-slate-600 mb-6">Defina o que deseja alcançar com os seus estudos para acompanharmos a sua evolução.</p>
+
+          <select
+            value={missingGoal}
+            onChange={(e) => setMissingGoal(e.target.value)}
+            className="w-full max-w-sm rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-orange-400 mb-4"
+          >
+            <option value="" disabled>Selecione o seu objetivo principal</option>
+            <option value="Aprender e rever conceitos">Aprender e rever conceitos</option>
+            <option value="Passar no concurso público">Passar no concurso público</option>
+            <option value="Descontrair e treinar">Descontrair e treinar</option>
+            <option value="Testar minhas habilidades">Testar as minhas habilidades</option>
+          </select>
+
+          <button
+            onClick={handleSaveMissingGoal}
+            disabled={!missingGoal || savingGoal}
+            className="w-full max-w-sm bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 rounded-2xl shadow-[0_4px_0_0_#c2410c] active:shadow-none active:translate-y-1 transition-all disabled:opacity-50"
+          >
+            {savingGoal ? 'A guardar...' : 'Confirmar Objetivo'}
+          </button>
+        </div>
+      )}
+
+      {/* Dica do dia */}
+      <div className="rounded-[1.5rem] bg-indigo-50 border border-indigo-100 p-4 flex items-start gap-4">
+        <div className="p-2 bg-indigo-100 rounded-xl text-indigo-600 shrink-0">
+          <Sparkles className="w-5 h-5" />
+        </div>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-indigo-800 mb-1">Dica do Dia</p>
+          <p className="text-sm font-medium text-indigo-900">{dailyTip}</p>
+        </div>
+      </div>
+
       <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,#dff7ea,transparent_36%),linear-gradient(135deg,#ffffff_0%,#f5fff9_48%,#eff6ff_100%)] p-5 shadow-[0_28px_90px_-48px_rgba(15,23,42,0.45)] md:p-8">
         <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">Painel do estudante</p>
-            <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-900 md:text-4xl">
-              Olá, {profile?.full_name?.split(' ')[0]}
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 md:text-base">
-              Entre, continue o seu ritmo, ganhe XP e acompanhe o progresso da sua área.
-            </p>
-
-            <div className="mt-5 inline-flex max-w-full items-center gap-2 rounded-full border border-emerald-200 bg-white/80 px-4 py-2 text-sm font-semibold text-emerald-800">
-              <Lock className="h-4 w-4" />
-              <span className="truncate">Area ativa: {areaName}</span>
+          <div className="flex items-center gap-6">
+            <div className="w-24 h-24 rounded-full border-4 border-white bg-slate-100 flex items-center justify-center shadow-lg shadow-emerald-600/20 overflow-hidden relative">
+              <span className="text-4xl font-black text-slate-400">
+                {profile?.full_name?.charAt(0) || 'U'}
+              </span>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">Painel do estudante</p>
+              <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900 md:text-4xl">
+                Olá, {profile?.full_name?.split(' ')[0]}
+              </h1>
+              {(profile as any)?.goal && (
+                <p className="mt-2 inline-flex items-center gap-2 rounded-xl bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-700">
+                  <Target className="w-4 h-4" />
+                  Meta: {(profile as any)?.goal}
+                </p>
+              )}
             </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-[1.6rem] border border-white/60 bg-white/90 p-4 md:p-5">
-              <p className="text-sm font-medium text-slate-500">Plano</p>
-              <p className="mt-2 flex items-center gap-2 text-2xl font-black text-slate-900">
-                <Target className="h-5 w-5 text-emerald-600" />
-                {profile?.preparation_time_months} {profile?.preparation_time_months === 1 ? 'mês' : 'meses'}
+            <div className="rounded-[1.6rem] border-2 border-orange-100 bg-orange-50 shadow-[0_6px_0_0_#ffedd5] p-4 md:p-5 flex flex-col justify-between transition-transform hover:-translate-y-1">
+              <p className="text-sm font-bold text-orange-600 uppercase tracking-widest">Ofensiva</p>
+              <p className="mt-2 flex items-center gap-2 text-3xl font-black text-orange-600">
+                <Flame className="h-7 w-7 fill-current" />
+                2 Dias
               </p>
             </div>
             <div className="rounded-[1.6rem] border border-white/60 bg-white/90 p-4 md:p-5">
@@ -149,10 +224,10 @@ export default function Dashboard() {
                 {stats.lastSimScore}%
               </p>
             </div>
-            <div className="rounded-[1.6rem] border border-white/60 bg-white/90 p-4 md:p-5">
-              <p className="text-sm font-medium text-slate-500">XP total</p>
-              <p className="mt-2 flex items-center gap-2 text-2xl font-black text-yellow-600">
-                <Award className="h-5 w-5" />
+            <div className="rounded-[1.6rem] border-2 border-yellow-200 bg-yellow-50 shadow-[0_6px_0_0_#fef08a] p-4 md:p-5 flex flex-col justify-between transition-transform hover:-translate-y-1">
+              <p className="text-sm font-bold text-yellow-700 uppercase tracking-widest">XP Total</p>
+              <p className="mt-2 flex items-center gap-2 text-3xl font-black text-yellow-600">
+                <Award className="h-7 w-7" fill="currentColor" />
                 {profile?.total_xp || 0}
               </p>
             </div>
