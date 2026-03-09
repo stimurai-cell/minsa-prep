@@ -22,7 +22,12 @@ import {
   XCircle,
   Zap,
   MessageCircle,
+  ShieldCheck,
+  Clock,
+  Sparkles,
 } from 'lucide-react';
+import AdminBackup from '../components/AdminBackup';
+import AdminNews from '../components/AdminNews';
 
 type ManagedQuestion = {
   id: string;
@@ -839,6 +844,18 @@ export default function Admin() {
           className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'support' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
         >
           Suporte {supportMessages.filter(m => m.status === 'open').length > 0 ? `(${supportMessages.filter(m => m.status === 'open').length})` : ''}
+        </button>
+        <button
+          onClick={() => changeTab('backup')}
+          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'backup' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
+        >
+          Backup
+        </button>
+        <button
+          onClick={() => changeTab('social')}
+          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'social' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
+        >
+          Notificações e Feed
         </button>
       </div>
 
@@ -1842,6 +1859,18 @@ export default function Admin() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+        {activeTab === 'backup' && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <h2 className="text-2xl font-black text-gray-900 border-b border-gray-100 pb-4">Backup e Importação</h2>
+            <AdminBackup />
+          </div>
+        )}
+        {activeTab === 'social' && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <h2 className="text-2xl font-black text-gray-900 border-b border-gray-100 pb-4">Gestão Social e Alertas</h2>
+            <AdminNews />
           </div>
         )}
       </main>

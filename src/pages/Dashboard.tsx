@@ -24,6 +24,8 @@ import AreaLockCard from '../components/AreaLockCard';
 import { UserPlus, Sparkles, ArrowRight, Award as AwardIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DailyTasks from '../components/DailyTasks';
+import AIMentor from '../components/AIMentor';
+import NotificationCenter from '../components/NotificationCenter';
 
 const DAILY_TIPS = [
   "Treinar 15 minutos todos os dias gera mais resultado do que estudar 3 horas só no domingo!",
@@ -41,6 +43,7 @@ export default function Dashboard() {
     totalQuestions: 0,
     avgScore: 0,
     lastSimScore: 0,
+    dueQuestions: 0,
   });
   const [topicProgress, setTopicProgress] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,10 +116,17 @@ export default function Dashboard() {
 
         const lastSim = simData && simData.length > 0 ? simData[0].score : 0;
 
+        const { count: dueCount } = await supabase
+          .from('user_question_srs')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', profile.id)
+          .lte('next_review', new Date().toISOString());
+
         setStats({
           totalQuestions: totalQ,
           avgScore: avg,
           lastSimScore: lastSim,
+          dueQuestions: dueCount || 0,
         });
       } catch (error) {
         console.error('Error fetching stats:', error);
@@ -299,6 +309,9 @@ export default function Dashboard() {
                 </p>
               )}
             </div>
+            <div className="ml-auto flex items-center gap-2">
+              <NotificationCenter />
+            </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
@@ -344,15 +357,32 @@ export default function Dashboard() {
         </div>
       </section>
 
+      {/* Spaced Repetition (SRS) Card */}
+      {stats.dueQuestions > 0 && (
+        <section className="animate-in slide-in-from-bottom duration-500">
+          <div className="rounded-[2rem] border-2 border-emerald-200 bg-emerald-50 p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
+            <div className="flex items-center gap-5 text-center md:text-left">
+              <div className="w-16 h-16 bg-white rounded-[1.4rem] flex items-center justify-center text-emerald-600 shadow-sm shrink-0">
+                <Clock3 className="w-8 h-8" />
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-slate-800">É hora de revisar!</h2>
+                <p className="text-slate-600 font-medium">Você tem <span className="font-black text-emerald-600">{stats.dueQuestions} questões</span> prontas para revisão hoje.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate('/training?session=1&type=review')}
+              className="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 py-4 rounded-2xl shadow-[0_6px_0_0_#065f46] transition-all hover:translate-y-[1px] hover:shadow-[0_4px_0_0_#065f46] active:shadow-none active:translate-y-[2px]"
+            >
+              Começar Revisão
+            </button>
+          </div>
+        </section>
+      )}
+
       <section className="grid gap-6 md:grid-cols-2">
         <DailyTasks />
-        <div className="rounded-[2rem] border-2 border-dashed border-slate-200 p-8 flex flex-col items-center justify-center text-center bg-slate-50/30">
-          <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4 border border-slate-100">
-            <AwardIcon className="w-8 h-8 text-indigo-400" />
-          </div>
-          <h3 className="text-lg font-black text-slate-800">Mais missões em breve</h3>
-          <p className="text-sm text-slate-500 max-w-[200px] mt-2 font-medium">Continue batendo as suas metas diárias para ganhar emblemas exclusivos.</p>
-        </div>
+        <AIMentor />
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
@@ -467,7 +497,7 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-      </section >
+      </section>
 
       <section className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#fff8eb_40%,#f5fff7_100%)] p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)] md:p-6">
         <div className="flex flex-col gap-3 border-b border-slate-100 pb-5 md:flex-row md:items-end md:justify-between">
@@ -514,6 +544,6 @@ export default function Dashboard() {
           ))}
         </div>
       </section>
-    </div >
+    </div>
   );
 }

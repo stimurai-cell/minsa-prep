@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   current_league TEXT DEFAULT 'Bronze',
   streak_freeze_active BOOLEAN DEFAULT FALSE,
   last_streak_freeze_at TIMESTAMP WITH TIME ZONE,
+  streak_count INT DEFAULT 0,
   last_active TIMESTAMP WITH TIME ZONE,
   is_public BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
@@ -108,6 +109,24 @@ CREATE TABLE IF NOT EXISTS public.user_activities (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
 
+CREATE TABLE IF NOT EXISTS public.badges (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL UNIQUE,
+  description TEXT NOT NULL,
+  icon_url TEXT,
+  criteria_type TEXT NOT NULL, -- streak, score, count, time
+  criteria_value INT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+CREATE TABLE IF NOT EXISTS public.user_badges (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  badge_id UUID REFERENCES public.badges(id) ON DELETE CASCADE,
+  earned_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
+  UNIQUE(user_id, badge_id)
+);
+
 CREATE TABLE IF NOT EXISTS public.user_follows (
     follower_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
     following_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -136,6 +155,18 @@ CREATE TABLE IF NOT EXISTS public.quiz_attempt_answers (
   selected_alternative_id UUID REFERENCES public.alternatives(id),
   is_correct BOOLEAN NOT NULL,
   answered_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+CREATE TABLE IF NOT EXISTS public.user_question_srs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  question_id UUID REFERENCES public.questions(id) ON DELETE CASCADE,
+  interval INT DEFAULT 0,
+  ease_factor FLOAT DEFAULT 2.5,
+  repetitions INT DEFAULT 0,
+  next_review TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
+  last_reviewed_at TIMESTAMP WITH TIME ZONE,
+  UNIQUE(user_id, question_id)
 );
 
 CREATE TABLE IF NOT EXISTS public.battle_matches (
@@ -201,6 +232,14 @@ CREATE TABLE IF NOT EXISTS public.support_messages (
   reviewed_at TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS public.ai_mentor_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  advice_text TEXT NOT NULL,
+  weakness_data JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
 -- 7. Functions
 CREATE OR REPLACE FUNCTION public.is_current_user_admin()
 RETURNS boolean
@@ -258,6 +297,10 @@ ALTER TABLE weekly_league_stats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_follows ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_activities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE support_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE badges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_badges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_question_srs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_mentor_logs ENABLE ROW LEVEL SECURITY;
 
 -- Reset policies safely
 DO $$
@@ -286,6 +329,13 @@ BEGIN
     DROP POLICY IF EXISTS "Users can insert support messages" ON support_messages;
     DROP POLICY IF EXISTS "Admins can view support messages" ON support_messages;
     DROP POLICY IF EXISTS "Admins can update support messages" ON support_messages;
+
+    -- New Features
+    DROP POLICY IF EXISTS "Anyone can view badges" ON badges;
+    DROP POLICY IF EXISTS "Users can view own earned badges" ON user_badges;
+    DROP POLICY IF EXISTS "Users can view own SRS data" ON user_question_srs;
+    DROP POLICY IF EXISTS "Users can update own SRS data" ON user_question_srs;
+    DROP POLICY IF EXISTS "Users can view own mentor logs" ON ai_mentor_logs;
 END$$;
 
 -- Applying Consolidated Policies
@@ -309,6 +359,12 @@ CREATE POLICY "Users can create activities" ON user_activities FOR INSERT WITH C
 CREATE POLICY "Users can insert support messages" ON support_messages FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Admins can view support messages" ON support_messages FOR SELECT USING (public.is_current_user_admin());
 CREATE POLICY "Admins can update support messages" ON support_messages FOR UPDATE USING (public.is_current_user_admin());
+
+CREATE POLICY "Anyone can view badges" ON badges FOR SELECT USING (true);
+CREATE POLICY "Users can view own earned badges" ON user_badges FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can view own SRS data" ON user_question_srs FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can update own SRS data" ON user_question_srs FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can view own mentor logs" ON ai_mentor_logs FOR SELECT USING (auth.uid() = user_id);
 
 -- Core Read Policies
 CREATE POLICY "Public read areas" ON areas FOR SELECT USING (true);
@@ -335,3 +391,12 @@ SELECT id, 'Anatomia e Fisiologia' FROM areas WHERE name = 'Enfermagem' UNION AL
 SELECT id, U&'Sa\00FAde da Mulher e da Crian\00E7a' FROM areas WHERE name = 'Enfermagem' UNION ALL
 SELECT id, U&'\00C9tica e Deontologia' FROM areas WHERE name = 'Enfermagem'
 ON CONFLICT (area_id, name) DO NOTHING;
+
+-- Initial Badges
+INSERT INTO public.badges (name, description, criteria_type, criteria_value) VALUES
+('Corujão', 'Estudou após às 22h.', 'time', 22),
+('Madrugador', 'Estudou antes das 7h.', 'time', 7),
+('Mestre de Enfermagem', 'Acertou 50 questões de Enfermagem.', 'count', 50),
+('Mestre de Farmácia', 'Acertou 50 questões de Farmácia.', 'count', 50),
+('Sequência de Fogo', 'Manteve uma sequência de 7 dias.', 'streak', 7)
+ON CONFLICT (name) DO NOTHING;

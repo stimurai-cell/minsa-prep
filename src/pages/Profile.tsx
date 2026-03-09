@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
-import { Settings, Share, Flame, Zap, ShieldCheck, Crown } from 'lucide-react';
+import { Settings, Share, Flame, Zap, ShieldCheck, Crown, Award } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { useState, useEffect } from 'react';
 
 const AVATAR_COLORS = [
     'bg-emerald-100 text-emerald-600',
@@ -15,6 +17,19 @@ const AVATAR_COLORS = [
 export default function Profile() {
     const { profile } = useAuthStore();
     const { areas } = useAppStore();
+    const [userBadges, setUserBadges] = useState<any[]>([]);
+
+    useEffect(() => {
+        const fetchBadges = async () => {
+            if (!profile?.id) return;
+            const { data } = await supabase
+                .from('user_badges')
+                .select('*, badges(*)')
+                .eq('user_id', profile.id);
+            setUserBadges(data || []);
+        };
+        fetchBadges();
+    }, [profile?.id]);
 
     const areaName = areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Área não definida';
 
@@ -154,6 +169,30 @@ export default function Profile() {
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <hr className="border-slate-200 my-4" />
+
+                {/* Badges Section */}
+                <div>
+                    <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4">Minhas Medalhas</h2>
+                    {userBadges.length === 0 ? (
+                        <div className="bg-slate-100/50 border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center">
+                            <Award className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                            <p className="text-sm font-medium text-slate-500">Continue estudando para desbloquear medalhas exclusivas!</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-3 gap-4">
+                            {userBadges.map((ub, idx) => (
+                                <div key={idx} className="flex flex-col items-center text-center p-2">
+                                    <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center text-amber-600 mb-2 shadow-sm border border-amber-200">
+                                        <Award className="w-8 h-8" />
+                                    </div>
+                                    <p className="text-[10px] font-black uppercase text-slate-700 leading-tight">{ub.badges?.name}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

@@ -15,7 +15,8 @@ import {
   ChevronDown,
   LogOut,
   Menu,
-  Download
+  Download,
+  Megaphone
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
@@ -59,6 +60,7 @@ export default function Layout() {
     { to: '/leagues', label: 'Ligas', icon: ShieldCheck, activeColor: 'text-indigo-500', activeBg: 'bg-indigo-100', activeBorder: 'border-indigo-200' },
     { to: '/profile', label: 'Perfil', icon: UserRound, activeColor: 'text-teal-500', activeBg: 'bg-teal-100', activeBorder: 'border-teal-200' },
     { to: '/premium', label: 'Loja', icon: Crown, activeColor: 'text-yellow-500', activeBg: 'bg-yellow-100', activeBorder: 'border-yellow-200' },
+    { to: '/news', label: 'Novidades', icon: Megaphone, activeColor: 'text-blue-500', activeBg: 'bg-blue-100', activeBorder: 'border-blue-200' },
   ];
 
   const links = profile?.role === 'admin' ? adminLinks : studentLinks;
@@ -280,7 +282,7 @@ export default function Layout() {
       </div>
 
       <nav className={`fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur xl:hidden ${isImmersiveSession ? 'hidden' : ''}`}>
-        <div className={`mx-auto grid max-w-xl gap-2 ${profile?.role === 'admin' ? 'grid-cols-4' : 'grid-cols-6'}`}>
+        <div className={`mx-auto grid max-w-xl gap-2 ${profile?.role === 'admin' ? 'grid-cols-4' : 'grid-cols-7'}`}>
           {links.map((link) => {
             const Icon = link.icon;
             const isActive = getLinkActive(link);

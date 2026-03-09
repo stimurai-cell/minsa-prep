@@ -4,6 +4,7 @@ import { useAuthStore } from './store/useAuthStore';
 
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
+import OfflineSync from './components/OfflineSync';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -14,11 +15,13 @@ import Admin from './pages/Admin';
 import Premium from './pages/Premium';
 import OnboardingQuiz from './pages/OnboardingQuiz';
 import Battle from './pages/Battle';
+import BattleArena from './pages/BattleArena';
 import SpeedMode from './pages/SpeedMode';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Practice from './pages/Practice';
 import Social from './pages/Social';
+import News from './pages/News';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import EditProfile from './pages/EditProfile';
@@ -67,6 +70,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <OfflineSync />
       {needsUpdate && (
         <div className="fixed top-0 left-0 right-0 z-[100] bg-yellow-400 p-2 text-center text-sm font-bold text-slate-900 shadow-lg">
           <div className="flex items-center justify-center gap-2">
@@ -95,9 +99,11 @@ export default function App() {
             <Route path="training" element={<Training />} />
             <Route path="simulation" element={<Simulation />} />
             <Route path="battle" element={<Battle />} />
+            <Route path="battle/:matchId" element={<BattleArena />} />
             <Route path="speed-mode" element={<SpeedMode />} />
             <Route path="practice" element={<Practice />} />
             <Route path="social" element={<Social />} />
+            <Route path="news" element={<News />} />
             <Route path="profile" element={<Profile />} />
             <Route path="profile/:userId" element={<UserProfileView />} />
             <Route path="settings" element={<Settings />} />

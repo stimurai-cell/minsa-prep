@@ -24,6 +24,10 @@ import { useAppStore } from '../store/useAppStore';
 import AreaLockCard from '../components/AreaLockCard';
 import SessionCelebration from '../components/SessionCelebration';
 import { awardXp as unifiedAwardXp } from '../lib/xp';
+import { savePendingXp, savePendingLog } from '../lib/offlineStore';
+import { calculateNextReview } from '../lib/srs';
+import { checkForBadges, type Badge } from '../lib/badges';
+import BadgeNotification from '../components/BadgeNotification';
 
 type SessionSummary = {
   correctAnswers: number;
@@ -52,11 +56,14 @@ export default function Training() {
   const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null);
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
   const [resultHistory, setResultHistory] = useState<boolean[]>([]);
+  const [earnedBadges, setEarnedBadges] = useState<Badge[]>([]);
+  const [showBadge, setShowBadge] = useState<Badge | null>(null);
   const hasPremiumAccess = ['premium', 'elite', 'admin'].includes(profile?.role || '');
   const hasBasicAccess = ['basic', 'premium', 'elite', 'admin'].includes(profile?.role || '');
 
   const sessionActive = searchParams.get('session') === '1';
   const sessionTopicId = searchParams.get('topic') || '';
+  const isReviewMode = searchParams.get('type') === 'review';
   const sessionDifficulty = (searchParams.get('difficulty') as DifficultyPreference) || 'mixed';
   // Allow all difficulties for non-premium except 'hard' (difícil) which remains premium-only
   const effectiveDifficulty = hasPremiumAccess ? sessionDifficulty : (sessionDifficulty === 'hard' ? 'medium' : sessionDifficulty);
@@ -89,12 +96,16 @@ export default function Training() {
   }, [hasPremiumAccess, sessionDifficulty]);
 
   useEffect(() => {
-    if (!sessionActive || !sessionTopicId || questions.length > 0 || loading) {
+    if (!sessionActive || questions.length > 0 || loading) {
       return;
     }
 
-    void bootTrainingSession(sessionTopicId, effectiveDifficulty);
-  }, [effectiveDifficulty, loading, questions.length, sessionActive, sessionTopicId]);
+    if (isReviewMode) {
+      void bootReviewSession();
+    } else if (sessionTopicId) {
+      void bootTrainingSession(sessionTopicId, effectiveDifficulty);
+    }
+  }, [effectiveDifficulty, isReviewMode, loading, questions.length, sessionActive, sessionTopicId]);
 
   const selectedAreaName = useMemo(
     () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Área não definida',
@@ -131,9 +142,52 @@ export default function Training() {
   const awardXp = async (xpEarned: number) => {
     if (!profile?.id) return;
 
-    const result = await unifiedAwardXp(profile.id, xpEarned, profile.total_xp || 0);
-    if (result.success) {
-      await refreshProfile(profile.id);
+    if (navigator.onLine) {
+      const result = await unifiedAwardXp(profile.id, xpEarned, profile.total_xp || 0);
+      if (result.success) {
+        await refreshProfile(profile.id);
+      }
+    } else {
+      await savePendingXp(xpEarned);
+    }
+  };
+
+  const bootReviewSession = async () => {
+    if (!profile?.id) return;
+    setLoading(true);
+
+    try {
+      const { data: srsQuestions, error: srsError } = await supabase
+        .from('user_question_srs')
+        .select(`
+          question_id,
+          questions (
+            id, content, difficulty,
+            alternatives (id, content, is_correct),
+            question_explanations (content)
+          )
+        `)
+        .eq('user_id', profile.id)
+        .lte('next_review', new Date().toISOString())
+        .limit(20);
+
+      if (srsError) throw srsError;
+
+      if (srsQuestions && srsQuestions.length > 0) {
+        const formattedQuestions = srsQuestions.map((srs: any) => srs.questions).filter(Boolean);
+        resetTrainingSession();
+        setQuestions(prepareQuestionSet(formattedQuestions));
+        setSessionStartedAt(Date.now());
+        setShowIntro(true);
+      } else {
+        alert('Não há questões para revisar hoje! Bom trabalho.');
+        navigate('/dashboard', { replace: true });
+      }
+    } catch (error) {
+      console.error('Error starting review session:', error);
+      navigate('/dashboard', { replace: true });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -211,9 +265,18 @@ export default function Training() {
       durationSeconds,
     });
 
+    // Check for badges
+    if (profile?.id) {
+      const badges = await checkForBadges(profile.id);
+      if (badges.length > 0) {
+        setEarnedBadges(badges);
+        setShowBadge(badges[0]);
+      }
+    }
+
     // Registrar conclusão de treino
     try {
-      await supabase.from('activity_logs').insert({
+      const logData = {
         user_id: profile.id,
         activity_type: 'completed_training',
         activity_date: new Date().toISOString(),
@@ -223,7 +286,13 @@ export default function Training() {
           total: totalQuestions,
           xp: xpEarned
         }
-      });
+      };
+
+      if (navigator.onLine) {
+        await supabase.from('activity_logs').insert(logData);
+      } else {
+        await savePendingLog(logData);
+      }
     } catch (logErr) {
       console.error('Erro ao registar fim de treino:', logErr);
     }
@@ -304,6 +373,24 @@ export default function Training() {
           .eq('topic_id', selectedTopic)
           .single();
 
+        // Spaced Repetition (SRS) Update
+        const { data: srsData } = await supabase
+          .from('user_question_srs')
+          .select('*')
+          .eq('user_id', profile.id)
+          .eq('question_id', currentQ.id)
+          .single();
+
+        const quality = isCorrect ? 5 : 0;
+        const nextSrs = calculateNextReview(quality, srsData || undefined);
+
+        await supabase.from('user_question_srs').upsert({
+          user_id: profile.id,
+          question_id: currentQ.id,
+          ...nextSrs,
+          last_reviewed_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,question_id' });
+
         let newScore = progress ? Number(progress.domain_score) : 0;
         newScore = isCorrect ? Math.min(100, newScore + 2) : Math.max(0, newScore - 1);
 
@@ -355,26 +442,38 @@ export default function Training() {
         : 0;
 
     return (
-      <SessionCelebration
-        title="Treino concluído!"
-        subtitle={`Você terminou ${selectedTopicName} com ${sessionSummary.correctAnswers} acertos. O seu XP já entrou no perfil.`}
-        xpEarned={sessionSummary.xpEarned}
-        accuracy={accuracy}
-        durationSeconds={sessionSummary.durationSeconds}
-        primaryActionLabel="Voltar ao treino"
-        onPrimaryAction={() => {
-          resetTrainingSession();
-          setSessionSummary(null);
-          navigate('/training', { replace: true });
-        }}
-        secondaryActionLabel="Treinar outro tópico"
-        onSecondaryAction={() => {
-          resetTrainingSession();
-          setSelectedTopic('');
-          setSessionSummary(null);
-          navigate('/training', { replace: true });
-        }}
-      />
+      <>
+        <SessionCelebration
+          title="Treino concluído!"
+          subtitle={`Você terminou ${selectedTopicName} com ${sessionSummary.correctAnswers} acertos. O seu XP já entrou no perfil.`}
+          xpEarned={sessionSummary.xpEarned}
+          accuracy={accuracy}
+          durationSeconds={sessionSummary.durationSeconds}
+          primaryActionLabel="Voltar ao treino"
+          onPrimaryAction={() => {
+            resetTrainingSession();
+            setSessionSummary(null);
+            navigate('/training', { replace: true });
+          }}
+          secondaryActionLabel="Treinar outro tópico"
+          onSecondaryAction={() => {
+            resetTrainingSession();
+            setSelectedTopic('');
+            setSessionSummary(null);
+            navigate('/training', { replace: true });
+          }}
+        />
+        {showBadge && (
+          <BadgeNotification
+            badge={showBadge}
+            onClose={() => {
+              const remaining = earnedBadges.slice(1);
+              setEarnedBadges(remaining);
+              setShowBadge(remaining.length > 0 ? remaining[0] : null);
+            }}
+          />
+        )}
+      </>
     );
   }
 
@@ -430,9 +529,14 @@ export default function Training() {
                   transition={{ duration: 0.35, delay: 0.1, ease: 'easeOut' }}
                   className="rounded-[2rem] border-4 border-slate-200 bg-white px-6 py-5 shadow-[0_20px_50px_-36px_rgba(15,23,42,0.35)]"
                 >
-                  <p className="text-3xl font-black leading-tight text-slate-800">Vamos entrar em ritmo.</p>
+                  <p className="text-3xl font-black leading-tight text-slate-800">
+                    {isReviewMode ? 'Hora de consolidar.' : 'Vamos entrar em ritmo.'}
+                  </p>
                   <p className="mt-3 text-lg leading-8 text-slate-600">
-                    Você vai responder <span className="font-black text-cyan-500">{questions.length} questões</span> de {selectedTopicName} em modo {getDifficultyLabel(selectedDifficulty).toLowerCase()}.
+                    {isReviewMode
+                      ? `Você vai revisar ${questions.length} questões que precisam da sua atenção hoje.`
+                      : `Você vai responder ${questions.length} questões de ${selectedTopicName} em modo ${getDifficultyLabel(selectedDifficulty).toLowerCase()}.`
+                    }
                   </p>
                   <p className="mt-2 text-base text-slate-500">
                     Toque, confirme e receba a correção na mesma tela antes de seguir.
@@ -504,7 +608,7 @@ export default function Training() {
                 <div className="flex items-center justify-between gap-3">
                   <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
                     <Sparkles className="h-3.5 w-3.5" />
-                    {selectedTopicName}
+                    {isReviewMode ? 'Revisão Inteligente' : selectedTopicName}
                   </span>
                   <span className="rounded-full bg-cyan-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-600">
                     {getDifficultyLabel(currentQ.difficulty)}

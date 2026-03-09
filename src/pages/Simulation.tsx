@@ -25,6 +25,10 @@ import { useAppStore } from '../store/useAppStore';
 import AreaLockCard from '../components/AreaLockCard';
 import SessionCelebration from '../components/SessionCelebration';
 import { awardXp as unifiedAwardXp } from '../lib/xp';
+import { calculateNextReview } from '../lib/srs';
+import { checkForBadges, type Badge } from '../lib/badges';
+import { savePendingXp, savePendingLog } from '../lib/offlineStore';
+import BadgeNotification from '../components/BadgeNotification';
 
 type SessionSummary = {
   correctAnswers: number;
@@ -56,6 +60,8 @@ export default function Simulation() {
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
   const [resultHistory, setResultHistory] = useState<boolean[]>([]);
   const [currentAttemptId, setCurrentAttemptId] = useState<string | null>(null);
+  const [earnedBadges, setEarnedBadges] = useState<Badge[]>([]);
+  const [showBadge, setShowBadge] = useState<Badge | null>(null);
   const hasPremiumAccess = ['premium', 'elite', 'admin'].includes(profile?.role || '');
   const hasBasicAccess = ['basic', 'premium', 'elite', 'admin'].includes(profile?.role || '');
 
@@ -135,9 +141,13 @@ export default function Simulation() {
   const awardXp = async (xpEarned: number) => {
     if (!profile?.id) return;
 
-    const result = await unifiedAwardXp(profile.id, xpEarned, profile.total_xp || 0);
-    if (result.success) {
-      await refreshProfile(profile.id);
+    if (navigator.onLine) {
+      const result = await unifiedAwardXp(profile.id, xpEarned, profile.total_xp || 0);
+      if (result.success) {
+        await refreshProfile(profile.id);
+      }
+    } else {
+      await savePendingXp(xpEarned);
     }
   };
 
@@ -334,7 +344,7 @@ export default function Simulation() {
 
       // Registrar atividade detalhada de conclusão
       try {
-        await supabase.from('activity_logs').insert({
+        const logData = {
           user_id: profile.id,
           activity_type: 'completed_simulation',
           activity_date: new Date().toISOString(),
@@ -346,7 +356,13 @@ export default function Simulation() {
             xp: xpEarned,
             area_name: profile.selected_area_id ? areas.find(a => a.id === profile.selected_area_id)?.name : 'N/A'
           }
-        });
+        };
+
+        if (navigator.onLine) {
+          await supabase.from('activity_logs').insert(logData);
+        } else {
+          await savePendingLog(logData);
+        }
       } catch (logErr) {
         console.error('Erro ao registar log de conclusão:', logErr);
       }
@@ -361,6 +377,17 @@ export default function Simulation() {
       durationSeconds,
       score: finalScore,
     });
+
+    // Check for badges
+    if (profile?.id) {
+      void (async () => {
+        const badges = await checkForBadges(profile.id);
+        if (badges.length > 0) {
+          setEarnedBadges(badges);
+          setShowBadge(badges[0]);
+        }
+      })();
+    }
   };
 
   const startSimulation = () => {
@@ -403,7 +430,7 @@ export default function Simulation() {
     }
   };
 
-  const confirmAnswer = () => {
+  const confirmAnswer = async () => {
     if (!pendingAlt || isAnswered || !currentQ) return;
 
     const selectedAlternative = currentQ.alternatives.find((alt: any) => alt.id === pendingAlt);
@@ -419,6 +446,30 @@ export default function Simulation() {
     setSelectedAlt(pendingAlt);
     setIsAnswered(true);
     setResultHistory((prev) => [...prev, isCorrect]);
+
+    // Spaced Repetition (SRS) Update
+    if (profile?.id) {
+      try {
+        const { data: srsData } = await supabase
+          .from('user_question_srs')
+          .select('*')
+          .eq('user_id', profile.id)
+          .eq('question_id', currentQ.id)
+          .single();
+
+        const quality = isCorrect ? 5 : 0;
+        const nextSrs = calculateNextReview(quality, srsData || undefined);
+
+        await supabase.from('user_question_srs').upsert({
+          user_id: profile.id,
+          question_id: currentQ.id,
+          ...nextSrs,
+          last_reviewed_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,question_id' });
+      } catch (err) {
+        console.error('Error updating SRS in simulation:', err);
+      }
+    }
   };
 
   const nextQuestion = async () => {
@@ -445,25 +496,39 @@ export default function Simulation() {
 
   if (sessionSummary) {
     return (
-      <SessionCelebration
-        title="Simulacao concluida!"
-        subtitle={`Voce fechou a prova com ${sessionSummary.score}% de aproveitamento e somou novo XP ao seu percurso.`}
-        xpEarned={sessionSummary.xpEarned}
-        accuracy={sessionSummary.score}
-        durationSeconds={sessionSummary.durationSeconds}
-        primaryActionLabel="Voltar a prova"
-        onPrimaryAction={() => {
-          resetSimulationSession();
-          setSessionSummary(null);
-          navigate('/simulation', { replace: true });
-        }}
-        secondaryActionLabel="Nova simulacao de prova"
-        onSecondaryAction={() => {
-          resetSimulationSession();
-          setSessionSummary(null);
-          navigate('/simulation', { replace: true });
-        }}
-      />
+      <>
+        <SessionCelebration
+          title="Simulacao concluida!"
+          subtitle={`Voce fechou a prova com ${sessionSummary.score}% de aproveitamento e somou novo XP ao seu percurso.`}
+          xpEarned={sessionSummary.xpEarned}
+          accuracy={sessionSummary.score}
+          durationSeconds={sessionSummary.durationSeconds}
+          primaryActionLabel="Voltar a prova"
+          onPrimaryAction={() => {
+            resetSimulationSession();
+            setSessionSummary(null);
+            navigate('/simulation', { replace: true });
+          }}
+          secondaryActionLabel="Nova simulacao de prova"
+          onSecondaryAction={() => {
+            resetSimulationSession();
+            setSessionSummary(null);
+            navigate('/simulation', { replace: true });
+          }}
+        />
+        {
+          showBadge && (
+            <BadgeNotification
+              badge={showBadge}
+              onClose={() => {
+                const remaining = earnedBadges.slice(1);
+                setEarnedBadges(remaining);
+                setShowBadge(remaining.length > 0 ? remaining[0] : null);
+              }}
+            />
+          )
+        }
+      </>
     );
   }
 
