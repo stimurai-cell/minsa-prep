@@ -30,7 +30,8 @@ import {
   Shield,
   Layout as LayoutIcon,
   Activity,
-  LifeBuoy
+  LifeBuoy,
+  Megaphone
 } from 'lucide-react';
 import AdminBackup from '../components/AdminBackup';
 import AdminNews from '../components/AdminNews';
