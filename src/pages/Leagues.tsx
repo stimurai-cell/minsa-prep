@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, TrendingUp, Trophy, Flame, ChevronRight, Info } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
@@ -17,6 +18,7 @@ const LEAGUE_ICONS: Record<string, string> = {
 };
 
 export default function Leagues() {
+    const navigate = useNavigate();
     const { profile } = useAuthStore();
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState<any[]>([]);
@@ -132,7 +134,8 @@ export default function Leagues() {
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: index * 0.05 }}
                                     key={entry.user_id}
-                                    className={`flex items-center gap-4 p-5 transition-colors ${isUser ? 'bg-indigo-50/50' : 'hover:bg-slate-50'}`}
+                                    onClick={() => navigate(`/profile/${entry.user_id}`)}
+                                    className={`flex items-center gap-4 p-5 transition-colors cursor-pointer ${isUser ? 'bg-indigo-50/50' : 'hover:bg-slate-50'}`}
                                 >
                                     <div className="w-8 flex justify-center text-lg font-black text-slate-400">
                                         {index + 1 === 1 ? '🥇' : index + 1 === 2 ? '🥈' : index + 1 === 3 ? '🥉' : index + 1}

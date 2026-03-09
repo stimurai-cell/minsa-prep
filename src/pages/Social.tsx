@@ -292,7 +292,7 @@ export default function Social() {
                         activities.map(act => (
                             <div key={act.id} className="bg-white border-2 border-slate-100 rounded-[2rem] p-6 shadow-sm hover:border-indigo-100 transition-all">
                                 <div className="flex items-start gap-4">
-                                    <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center font-bold text-indigo-600">
+                                    <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center font-bold text-indigo-600 cursor-pointer" onClick={() => navigate(`/profile/${act.user_id}`)}>
                                         {act.profiles?.full_name?.charAt(0)}
                                     </div>
                                     <div className="flex-1">

@@ -158,7 +158,20 @@ CREATE TRIGGER trigger_activity_to_feed
     AFTER INSERT ON public.activity_logs
     FOR EACH ROW EXECUTE FUNCTION public.create_feed_item_from_activity();
 
--- 8. Notificações de Seguidores
+-- 8. Notificações de Seguidores e RLS de Amigos
+ALTER TABLE public.user_follows ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+    DROP POLICY IF EXISTS "Anyone can view follow relationships" ON user_follows;
+    DROP POLICY IF EXISTS "Users can follow others" ON user_follows;
+    DROP POLICY IF EXISTS "Users can unfollow" ON user_follows;
+END$$;
+
+CREATE POLICY "Anyone can view follow relationships" ON user_follows FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Users can follow others" ON user_follows FOR INSERT WITH CHECK (auth.uid() = follower_id);
+CREATE POLICY "Users can unfollow" ON user_follows FOR DELETE USING (auth.uid() = follower_id);
+
 CREATE OR REPLACE FUNCTION public.notify_new_follower()
 RETURNS TRIGGER AS $$
 DECLARE

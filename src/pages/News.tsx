@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import {
@@ -37,6 +38,7 @@ type FeedItem = {
 };
 
 export default function News() {
+    const navigate = useNavigate();
     const { profile } = useAuthStore();
     const [feed, setFeed] = useState<FeedItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -157,8 +159,8 @@ export default function News() {
                             key={tab}
                             onClick={() => setActiveTab(tab)}
                             className={`px-6 py-2 rounded-full text-sm font-black transition-all uppercase tracking-wider ${activeTab === tab
-                                    ? 'bg-slate-900 text-white shadow-lg'
-                                    : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                                ? 'bg-slate-900 text-white shadow-lg'
+                                : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
                                 }`}
                         >
                             {tab === 'all' ? 'Tudo' : tab === 'news' ? 'Avisos' : 'Conquistas'}
@@ -187,7 +189,7 @@ export default function News() {
                             {/* Post Header */}
                             <div className="p-6 pb-3 flex items-start justify-between">
                                 <div className="flex items-center gap-4">
-                                    <div className="relative">
+                                    <div className="relative cursor-pointer" onClick={() => item.user_id && navigate(`/profile/${item.user_id}`)}>
                                         <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center font-black text-slate-400 border-2 border-white shadow-sm overflow-hidden">
                                             {item.profiles?.avatar_url ? (
                                                 <img src={item.profiles.avatar_url} alt="" className="w-full h-full object-cover" />
@@ -200,7 +202,7 @@ export default function News() {
                                         </div>
                                     </div>
                                     <div>
-                                        <h3 className="font-black text-slate-900 leading-tight">
+                                        <h3 className="font-black text-slate-900 leading-tight cursor-pointer hover:text-emerald-600 transition-colors" onClick={() => item.user_id && navigate(`/profile/${item.user_id}`)}>
                                             {item.profiles?.full_name || 'Equipe MINSA Prep'}
                                         </h3>
                                         <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
@@ -248,8 +250,8 @@ export default function News() {
                                             key={r.emoji}
                                             onClick={() => handleReaction(item.id, r.emoji)}
                                             className={`flex items-center gap-2 px-4 py-2 rounded-2xl transition-all ${r.reacted
-                                                    ? 'bg-red-50 text-red-600 border border-red-100'
-                                                    : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-transparent'
+                                                ? 'bg-red-50 text-red-600 border border-red-100'
+                                                : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-transparent'
                                                 }`}
                                         >
                                             <span className="text-lg">{r.emoji}</span>

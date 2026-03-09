@@ -25,6 +25,8 @@ export default function UserProfileView() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [followLoading, setFollowLoading] = useState(false);
+    const [followingCount, setFollowingCount] = useState(0);
+    const [followersCount, setFollowersCount] = useState(0);
 
     useEffect(() => {
         if (!userId) return;
@@ -61,6 +63,20 @@ export default function UserProfileView() {
 
                     setIsFollowing(!!follow);
                 }
+
+                // Fetch real social counts
+                const { count: following } = await supabase
+                    .from('user_follows')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('follower_id', userId);
+                setFollowingCount(following || 0);
+
+                const { count: followers } = await supabase
+                    .from('user_follows')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('following_id', userId);
+                setFollowersCount(followers || 0);
+
             } catch (err: any) {
                 console.error('Catch error:', err);
                 setError(err.message || 'Ocorreu um erro ao carregar o perfil.');
@@ -203,6 +219,22 @@ export default function UserProfileView() {
                             </button>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            {/* Followers Stats Row */}
+            <div className="flex justify-center gap-8 py-6 bg-white rounded-[2rem] border-2 border-slate-100 mb-8 shadow-sm">
+                <div className="text-center">
+                    <p className="text-xl font-black text-slate-800">1</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Cursos</p>
+                </div>
+                <div className="text-center">
+                    <p className="text-xl font-black text-slate-800">{followingCount}</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Segue</p>
+                </div>
+                <div className="text-center">
+                    <p className="text-xl font-black text-slate-800">{followersCount}</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Seguidores</p>
                 </div>
             </div>
 

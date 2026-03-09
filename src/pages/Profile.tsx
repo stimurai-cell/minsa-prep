@@ -18,6 +18,8 @@ export default function Profile() {
     const { profile } = useAuthStore();
     const { areas } = useAppStore();
     const [userBadges, setUserBadges] = useState<any[]>([]);
+    const [followingCount, setFollowingCount] = useState(0);
+    const [followersCount, setFollowersCount] = useState(0);
 
     useEffect(() => {
         const fetchBadges = async () => {
@@ -28,7 +30,27 @@ export default function Profile() {
                 .eq('user_id', profile.id);
             setUserBadges(data || []);
         };
+
+        const fetchSocialCounts = async () => {
+            if (!profile?.id) return;
+
+            // Count Following
+            const { count: following } = await supabase
+                .from('user_follows')
+                .select('*', { count: 'exact', head: true })
+                .eq('follower_id', profile.id);
+            setFollowingCount(following || 0);
+
+            // Count Followers
+            const { count: followers } = await supabase
+                .from('user_follows')
+                .select('*', { count: 'exact', head: true })
+                .eq('following_id', profile.id);
+            setFollowersCount(followers || 0);
+        };
+
         fetchBadges();
+        fetchSocialCounts();
     }, [profile?.id]);
 
     const areaName = areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Área não definida';
@@ -112,13 +134,13 @@ export default function Profile() {
                     </div>
                     <div className="flex gap-2 items-center text-center">
                         <div>
-                            <p className="text-xl font-black text-slate-800">0</p>
+                            <p className="text-xl font-black text-slate-800">{followingCount}</p>
                             <p className="text-xs font-bold text-slate-400">Segue</p>
                         </div>
                     </div>
                     <div className="flex gap-2 items-center text-center">
                         <div>
-                            <p className="text-xl font-black text-slate-800">0</p>
+                            <p className="text-xl font-black text-slate-800">{followersCount}</p>
                             <p className="text-xs font-bold text-slate-400">Seguidores</p>
                         </div>
                     </div>
