@@ -121,6 +121,23 @@ export default function SpeedMode() {
         if (profile?.id && score > 0) {
             const xpAmount = score * 2; // 2 XP per correct answer in speed mode
             const result = await unifiedAwardXp(profile.id, xpAmount, profile.total_xp || 0);
+
+            // Log speed mode completion
+            try {
+                await supabase.from('activity_logs').insert({
+                    user_id: profile.id,
+                    activity_type: 'completed_speed_mode',
+                    activity_date: new Date().toISOString(),
+                    activity_metadata: {
+                        score: score,
+                        xp: xpAmount,
+                        reason: reason
+                    }
+                });
+            } catch (logErr) {
+                console.error('Error logging speed mode completion:', logErr);
+            }
+
             if (result.success) {
                 await refreshProfile(profile.id);
             }

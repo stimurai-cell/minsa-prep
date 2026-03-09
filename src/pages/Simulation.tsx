@@ -241,6 +241,7 @@ export default function Simulation() {
           await supabase.from('activity_logs').insert({
             user_id: profile?.id,
             activity_type: 'started_simulation',
+            activity_date: new Date().toISOString(),
             activity_metadata: {
               area_name: sessionType ? 'Especial Concurso' : (profile?.selected_area_id ? areas.find(a => a.id === profile.selected_area_id)?.name : 'N/A'),
               is_live: true,
@@ -336,11 +337,13 @@ export default function Simulation() {
         await supabase.from('activity_logs').insert({
           user_id: profile.id,
           activity_type: 'completed_simulation',
+          activity_date: new Date().toISOString(),
           activity_metadata: {
             score: finalScore,
             correct: correctCount,
             total: questions.length,
             duration: durationSeconds,
+            xp: xpEarned,
             area_name: profile.selected_area_id ? areas.find(a => a.id === profile.selected_area_id)?.name : 'N/A'
           }
         });

@@ -21,7 +21,6 @@ import {
 } from '../lib/quiz';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
-import { useAppStore } from '../store/useAppStore';
 import AreaLockCard from '../components/AreaLockCard';
 import SessionCelebration from '../components/SessionCelebration';
 import { awardXp as unifiedAwardXp } from '../lib/xp';
@@ -175,6 +174,7 @@ export default function Training() {
           await supabase.from('activity_logs').insert({
             user_id: profile.id,
             activity_type: 'started_training',
+            activity_date: new Date().toISOString(),
             activity_metadata: {
               topic_name: topics.find(t => t.id === topicId)?.name || 'N/A'
             }
@@ -216,6 +216,7 @@ export default function Training() {
       await supabase.from('activity_logs').insert({
         user_id: profile.id,
         activity_type: 'completed_training',
+        activity_date: new Date().toISOString(),
         activity_metadata: {
           topic_name: selectedTopicName,
           correct: correctAnswers,

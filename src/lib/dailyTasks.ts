@@ -18,18 +18,21 @@ export const getDailyTasksProgress = async (userId: string): Promise<DailyTaskPr
 
     try {
         // Fetch all relevant logs for today
+        // We check created_at >= today OR activity_date >= today to be safe
         const { data: logs, error } = await supabase
             .from('activity_logs')
-            .select('activity_type, activity_metadata')
+            .select('activity_type, activity_metadata, created_at, activity_date')
             .eq('user_id', userId)
-            .gte('created_at', today);
+            .or(`created_at.gte.${today},activity_date.gte.${today}`);
 
         if (error) throw error;
 
         // 1. Task: Win 50 XP
-        const totalXpToday = logs
-            .filter(l => l.activity_type === 'xp_earned')
-            .reduce((acc, l) => acc + (l.activity_metadata?.xp || 0), 0);
+        // Consider both 'xp_earned' logs and sessions that have 'xp' in metadata
+        const totalXpToday = logs.reduce((acc, l) => {
+            const xpFromMetadata = l.activity_metadata?.xp || 0;
+            return acc + xpFromMetadata;
+        }, 0);
 
         // 2. Task: Complete 2 Training Sessions
         const trainingsToday = logs.filter(l => l.activity_type === 'completed_training').length;
