@@ -252,11 +252,11 @@ export default function Dashboard() {
       <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,#dff7ea,transparent_36%),linear-gradient(135deg,#ffffff_0%,#f5fff9_48%,#eff6ff_100%)] p-5 shadow-[0_28px_90px_-48px_rgba(15,23,42,0.45)] md:p-8">
         <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="flex items-center gap-6">
-            <div className="w-24 h-24 rounded-full border-4 border-white bg-white flex items-center justify-center shadow-lg shadow-emerald-600/10 overflow-hidden relative">
+            <div className={`w-24 h-24 rounded-full border-4 border-white bg-white flex items-center justify-center shadow-lg shadow-emerald-600/10 overflow-hidden relative ${!profile?.avatar_url ? 'p-1' : ''}`}>
               <img
-                src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png"
+                src={profile?.avatar_url || "https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png"}
                 alt="Avatar"
-                className="w-full h-full object-cover p-1"
+                className="w-full h-full object-cover"
               />
             </div>
             <div>

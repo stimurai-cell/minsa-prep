@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
-import { Camera, ShieldAlert, ArrowLeft } from 'lucide-react';
+import { Camera, ShieldAlert, ArrowLeft, Loader2 } from 'lucide-react';
 
 const AVATAR_COLORS = [
     'bg-emerald-100 text-emerald-600',
@@ -16,15 +16,53 @@ const AVATAR_COLORS = [
 export default function EditProfile() {
     const { profile, user, signOut, refreshProfile } = useAuthStore();
     const navigate = useNavigate();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
     const [fullName, setFullName] = useState(profile?.full_name || '');
     const [goal, setGoal] = useState(profile?.goal || '');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [uploading, setUploading] = useState(false);
     const [message, setMessage] = useState('');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url || null);
     const [selectedAvatarColor, setSelectedAvatarColor] = useState(
         profile?.avatar_style || AVATAR_COLORS[0]
     );
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !user?.id) return;
+
+        setUploading(true);
+        setMessage('');
+
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${user.id}-${Math.random()}.${fileExt}`;
+            const filePath = `${fileName}`;
+
+            // 1. Upload to Supabase Storage
+            const { error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+
+            // 2. Get Public URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(filePath);
+
+            setAvatarUrl(publicUrl);
+            setMessage('Foto carregada! Salve para confirmar.');
+        } catch (err: any) {
+            console.error('Error uploading image:', err);
+            setMessage('Erro ao carregar imagem. Verifique se o bucket "avatars" existe.');
+        } finally {
+            setUploading(false);
+        }
+    };
 
     const handleUpdateProfile = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -38,6 +76,7 @@ export default function EditProfile() {
                 .update({
                     full_name: fullName,
                     avatar_style: selectedAvatarColor,
+                    avatar_url: avatarUrl,
                     goal: goal,
                 })
                 .eq('id', profile.id);
@@ -81,9 +120,25 @@ export default function EditProfile() {
             <div className="p-4 md:p-8 space-y-6 md:space-y-8 animate-in fade-in duration-300">
                 <form onSubmit={handleUpdateProfile} className="space-y-6">
                     <div className="flex flex-col items-center justify-center space-y-4">
-                        <div className={`relative w-28 h-28 rounded-full flex items-center justify-center text-5xl font-black transition-colors ${selectedAvatarColor}`}>
-                            {fullName.charAt(0).toUpperCase() || 'U'}
-                            <div className="absolute bottom-0 right-0 bg-white p-2 border-2 border-slate-200 rounded-full shadow-sm text-slate-500 hover:text-blue-500 cursor-pointer transition-colors">
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleImageUpload}
+                            accept="image/*"
+                            className="hidden"
+                        />
+                        <div
+                            onClick={() => fileInputRef.current?.click()}
+                            className={`relative w-28 h-28 rounded-full flex items-center justify-center text-5xl font-black transition-colors cursor-pointer overflow-hidden ${!avatarUrl ? selectedAvatarColor : 'bg-white'}`}
+                        >
+                            {uploading ? (
+                                <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+                            ) : avatarUrl ? (
+                                <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                            ) : (
+                                fullName.charAt(0).toUpperCase() || 'U'
+                            )}
+                            <div className="absolute bottom-0 right-0 bg-white p-2 border-2 border-slate-200 rounded-full shadow-sm text-slate-500 hover:text-blue-500 transition-colors">
                                 <Camera className="w-5 h-5" />
                             </div>
                         </div>

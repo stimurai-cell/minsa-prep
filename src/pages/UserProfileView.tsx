@@ -33,7 +33,7 @@ export default function UserProfileView() {
                 // Fetch Profile
                 const { data, error } = await supabase
                     .from('profiles')
-                    .select('*, topics(name)')
+                    .select('*, areas!profiles_selected_area_id_fkey(name)')
                     .eq('id', userId)
                     .single();
 
@@ -116,8 +116,12 @@ export default function UserProfileView() {
 
                 <div className="relative z-10 flex flex-col items-center md:flex-row md:items-start gap-8">
                     <div className="relative">
-                        <div className="w-32 h-32 rounded-[2.5rem] bg-slate-100 flex items-center justify-center text-5xl font-black text-slate-400 border-4 border-white shadow-lg">
-                            {userProfile.full_name?.charAt(0)}
+                        <div className={`w-32 h-32 rounded-[2.5rem] flex items-center justify-center text-5xl font-black border-4 border-white shadow-lg overflow-hidden ${!userProfile.avatar_url ? userProfile.avatar_style : 'bg-white'}`}>
+                            {userProfile.avatar_url ? (
+                                <img src={userProfile.avatar_url} alt={userProfile.full_name} className="w-full h-full object-cover" />
+                            ) : (
+                                userProfile.full_name?.charAt(0)
+                            )}
                         </div>
                         {userProfile.streak_freeze_active && (
                             <div className="absolute -bottom-2 -right-2 bg-blue-500 text-white p-2 rounded-2xl border-4 border-white shadow-md">
@@ -137,7 +141,7 @@ export default function UserProfileView() {
                         </div>
                         <p className="text-slate-500 font-medium text-lg mb-6 flex items-center justify-center md:justify-start gap-2">
                             <BookOpen className="w-5 h-5 text-emerald-500" />
-                            {userProfile.topics?.name || 'Estudante da Saúde'}
+                            {userProfile.areas?.name || 'Estudante da Saúde'}
                         </p>
 
                         <div className="flex flex-wrap items-center justify-center md:justify-start gap-4">
@@ -145,8 +149,8 @@ export default function UserProfileView() {
                                 onClick={handleToggleFollow}
                                 disabled={followLoading}
                                 className={`flex items-center gap-2 px-8 py-4 rounded-2xl font-bold transition-all shadow-md active:translate-y-1 active:shadow-none ${isFollowing
-                                        ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                        : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200'
+                                    ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200'
                                     }`}
                             >
                                 {isFollowing ? <UserMinus className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}

@@ -142,8 +142,12 @@ export default function Layout() {
           <div className="mt-auto border-t border-slate-100 px-5 py-5">
             <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.35)]">
               <div className="flex items-start gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-sm font-black text-emerald-700">
-                  {profile?.full_name?.charAt(0) || 'U'}
+                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-xl font-black shadow-sm overflow-hidden ${!profile?.avatar_url ? (profile?.avatar_style || 'bg-emerald-100 text-emerald-700') : 'bg-white'}`}>
+                  {profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    profile?.full_name?.charAt(0) || 'U'
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-bold text-slate-900">{profile?.full_name}</p>
@@ -220,8 +224,12 @@ export default function Layout() {
               </div>
 
               <div className="mt-4 flex items-center gap-3 rounded-[1.5rem] border border-white/70 bg-[linear-gradient(135deg,#ffffff_0%,#f3fbf6_100%)] px-4 py-3 shadow-[0_20px_60px_-46px_rgba(15,23,42,0.35)]">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-sm font-black text-emerald-700">
-                  {profile?.full_name?.charAt(0) || 'U'}
+                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-xl font-black shadow-sm overflow-hidden ${!profile?.avatar_url ? (profile?.avatar_style || 'bg-emerald-100 text-emerald-700') : 'bg-white'}`}>
+                  {profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    profile?.full_name?.charAt(0) || 'U'
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-bold text-slate-900">{profile?.full_name}</p>

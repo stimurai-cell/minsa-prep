@@ -66,8 +66,12 @@ export default function Profile() {
 
                 {/* Avatar */}
                 <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2">
-                    <div className={`w-32 h-32 rounded-[2.5rem] flex items-center justify-center text-6xl font-black border-4 border-slate-50 shadow-md ${selectedColorClass}`}>
-                        {profile?.full_name?.charAt(0).toUpperCase() || 'U'}
+                    <div className={`w-32 h-32 rounded-[2.5rem] flex items-center justify-center text-6xl font-black border-4 border-slate-50 shadow-md overflow-hidden ${!profile?.avatar_url ? selectedColorClass : 'bg-white'}`}>
+                        {profile?.avatar_url ? (
+                            <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                        ) : (
+                            profile?.full_name?.charAt(0).toUpperCase() || 'U'
+                        )}
                     </div>
                 </div>
             </div>
