@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/useAuthStore';
 
 import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -80,37 +81,39 @@ export default function App() {
           </div>
         </div>
       )}
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
-        <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-          <Route index element={<RootRedirect />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="onboarding-quiz" element={<OnboardingQuiz />} />
-          <Route path="training" element={<Training />} />
-          <Route path="simulation" element={<Simulation />} />
-          <Route path="battle" element={<Battle />} />
-          <Route path="speed-mode" element={<SpeedMode />} />
-          <Route path="practice" element={<Practice />} />
-          <Route path="social" element={<Social />} />
-          <Route path="profile" element={<Profile />} />
-          <Route path="profile/:userId" element={<UserProfileView />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="settings/profile" element={<EditProfile />} />
-          <Route path="help" element={<HelpCenter />} />
-          <Route path="feedback" element={<Feedback />} />
-          <Route path="terms" element={<TermsOfUse />} />
-          <Route path="privacy" element={<PrivacyPolicy />} />
-          <Route path="contest" element={<PublicExam />} />
-          <Route path="leagues" element={<Leagues />} />
-          <Route path="ranking" element={<Ranking />} />
-          <Route path="premium" element={<Premium />} />
-          <Route path="admin" element={<Admin />} />
-        </Route>
-      </Routes>
+          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+            <Route index element={<RootRedirect />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="onboarding-quiz" element={<OnboardingQuiz />} />
+            <Route path="training" element={<Training />} />
+            <Route path="simulation" element={<Simulation />} />
+            <Route path="battle" element={<Battle />} />
+            <Route path="speed-mode" element={<SpeedMode />} />
+            <Route path="practice" element={<Practice />} />
+            <Route path="social" element={<Social />} />
+            <Route path="profile" element={<Profile />} />
+            <Route path="profile/:userId" element={<UserProfileView />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="settings/profile" element={<EditProfile />} />
+            <Route path="help" element={<HelpCenter />} />
+            <Route path="feedback" element={<Feedback />} />
+            <Route path="terms" element={<TermsOfUse />} />
+            <Route path="privacy" element={<PrivacyPolicy />} />
+            <Route path="contest" element={<PublicExam />} />
+            <Route path="leagues" element={<Leagues />} />
+            <Route path="ranking" element={<Ranking />} />
+            <Route path="premium" element={<Premium />} />
+            <Route path="admin" element={<Admin />} />
+          </Route>
+        </Routes>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

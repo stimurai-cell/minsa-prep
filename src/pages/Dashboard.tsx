@@ -46,6 +46,7 @@ export default function Dashboard() {
   const [missingGoal, setMissingGoal] = useState('');
   const [savingGoal, setSavingGoal] = useState(false);
   const [freezingStreak, setFreezingStreak] = useState(false);
+  const { deferredPrompt, setDeferredPrompt } = useAppStore();
 
   const dailyTip = useMemo(() => {
     const day = new Date().getDay();
@@ -56,9 +57,32 @@ export default function Dashboard() {
     fetchAreas();
   }, [fetchAreas]);
 
+  // Autoreservar Notificações
+  useEffect(() => {
+    const askForNotifications = async () => {
+      if ("Notification" in window && Notification.permission === "default") {
+        try {
+          const permission = await Notification.requestPermission();
+          if (permission === "granted") {
+            new Notification("Notificações Ativadas!", {
+              body: "Agora você receberá lembretes de estudo e novidades do MINSA Prep.",
+              icon: "https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png"
+            });
+          }
+        } catch (error) {
+          console.error('Error requesting notification permission:', error);
+        }
+      }
+    };
+    askForNotifications();
+  }, []);
+
   useEffect(() => {
     const fetchStats = async () => {
-      if (!profile?.id) return;
+      if (!profile?.id) {
+        setLoading(false);
+        return;
+      }
 
       try {
         const { data: progressData } = await supabase
@@ -100,18 +124,20 @@ export default function Dashboard() {
     };
 
     fetchStats();
+
     // Gerar plano inteligente de estudo se ainda nao existir
-    void (async () => {
-      try {
-        if (!profile?.id) return;
-        const { data: existing } = await supabase.from('study_plans').select('id').eq('user_id', profile.id).maybeSingle();
-        if (!existing) {
-          await createStudyPlanForUser(profile as any);
+    if (profile?.id) {
+      void (async () => {
+        try {
+          const { data: existing } = await supabase.from('study_plans').select('id').eq('user_id', profile.id).maybeSingle();
+          if (!existing) {
+            await createStudyPlanForUser(profile as any);
+          }
+        } catch (err) {
+          console.error('Erro ver/plano de estudo:', err);
         }
-      } catch (err) {
-        console.error('Erro ver/plano de estudo:', err);
-      }
-    })();
+      })();
+    }
   }, [profile?.id]);
 
   const areaName = useMemo(
@@ -170,8 +196,6 @@ export default function Dashboard() {
     }
   };
 
-  const { deferredPrompt, setDeferredPrompt } = useAppStore();
-
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
@@ -228,15 +252,17 @@ export default function Dashboard() {
       <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,#dff7ea,transparent_36%),linear-gradient(135deg,#ffffff_0%,#f5fff9_48%,#eff6ff_100%)] p-5 shadow-[0_28px_90px_-48px_rgba(15,23,42,0.45)] md:p-8">
         <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="flex items-center gap-6">
-            <div className="w-24 h-24 rounded-full border-4 border-white bg-slate-100 flex items-center justify-center shadow-lg shadow-emerald-600/20 overflow-hidden relative">
-              <span className="text-4xl font-black text-slate-400">
-                {profile?.full_name?.charAt(0) || 'U'}
-              </span>
+            <div className="w-24 h-24 rounded-full border-4 border-white bg-white flex items-center justify-center shadow-lg shadow-emerald-600/10 overflow-hidden relative">
+              <img
+                src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png"
+                alt="Avatar"
+                className="w-full h-full object-cover p-1"
+              />
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">Painel do estudante</p>
               <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900 md:text-4xl">
-                Olá, {profile?.full_name?.split(' ')[0]}
+                Olá, {profile?.full_name?.split(' ')[0] || 'Estudante'}
               </h1>
               {(profile as any)?.goal && (
                 <p className="mt-2 inline-flex items-center gap-2 rounded-xl bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-700">

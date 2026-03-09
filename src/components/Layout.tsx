@@ -14,15 +14,17 @@ import {
   UserRound,
   ChevronDown,
   LogOut,
-  Menu
+  Menu,
+  Download
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import { getRoleLabel } from '../lib/labels';
+import ErrorBoundary from './ErrorBoundary';
 
 export default function Layout() {
   const { profile, signOut } = useAuthStore();
-  const { areas, fetchAreas } = useAppStore();
+  const { areas, fetchAreas, deferredPrompt, setDeferredPrompt } = useAppStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -96,19 +98,13 @@ export default function Layout() {
       <div className="mx-auto flex min-h-screen max-w-[1600px]">
         <aside className={`hidden w-80 shrink-0 border-r border-white/70 bg-[linear-gradient(180deg,#ffffff_0%,#f4fbf7_100%)] xl:flex xl:flex-col ${isImmersiveSession ? 'xl:hidden' : ''}`}>
           <div className="border-b border-slate-100 px-7 py-8">
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-white shadow-sm border border-slate-100 p-2">
+            <div className="flex flex-col items-center">
+              <div className="flex h-24 w-full items-center justify-center rounded-[2rem] bg-white shadow-xl shadow-emerald-900/5 border border-slate-100 p-4 transition-transform hover:scale-[1.02]">
                 <img
-                  src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773045071/fgfjriydrec3rytqbodo.png"
-                  alt="FarmoGentileza Logo"
+                  src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/abj60fbildawqtq47qgu.png"
+                  alt="MINSA Prep Logo"
                   className="h-full w-full object-contain"
                 />
-              </div>
-              <div>
-                <h1 className="text-3xl font-black tracking-tight text-emerald-700">MINSA Prep</h1>
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">
-                  Estudando com inteligência
-                </p>
               </div>
             </div>
           </div>
@@ -128,6 +124,19 @@ export default function Layout() {
                 </NavLink>
               );
             })}
+
+            {deferredPrompt && (
+              <button
+                onClick={() => {
+                  deferredPrompt.prompt();
+                  setDeferredPrompt(null);
+                }}
+                className="flex w-full items-center gap-4 rounded-2xl border-2 border-emerald-200 bg-emerald-50 px-5 py-3.5 text-base font-bold text-emerald-700 shadow-sm transition-all hover:bg-emerald-100"
+              >
+                <Download className="h-6 w-6" />
+                <span>Instalar Aplicativo</span>
+              </button>
+            )}
           </nav>
 
           <div className="mt-auto border-t border-slate-100 px-5 py-5">
@@ -194,10 +203,10 @@ export default function Layout() {
             <div className="px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm border border-slate-100 p-1.5">
+                  <div className="flex h-12 w-32 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm border border-slate-100 p-1.5">
                     <img
-                      src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773045071/fgfjriydrec3rytqbodo.png"
-                      alt="FarmoGentileza Logo"
+                      src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/abj60fbildawqtq47qgu.png"
+                      alt="MINSA Prep Logo"
                       className="h-full w-full object-contain"
                     />
                   </div>
@@ -265,8 +274,25 @@ export default function Layout() {
             </div>
           </div>
 
+          {deferredPrompt && (
+            <div className="mx-4 mt-4 xl:hidden">
+              <button
+                onClick={() => {
+                  deferredPrompt.prompt();
+                  setDeferredPrompt(null);
+                }}
+                className="flex w-full items-center justify-center gap-3 rounded-2xl bg-emerald-600 px-4 py-4 font-black uppercase tracking-tight text-white shadow-lg shadow-emerald-200"
+              >
+                <Download className="h-5 w-5" />
+                Instalar no Telemóvel
+              </button>
+            </div>
+          )}
+
           <div className={isImmersiveSession ? '' : 'mx-auto max-w-7xl px-4 pb-8 pt-4 md:px-6 xl:p-8'}>
-            <Outlet />
+            <ErrorBoundary>
+              <Outlet />
+            </ErrorBoundary>
           </div>
         </main>
       </div>

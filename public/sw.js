@@ -38,3 +38,32 @@ self.addEventListener('fetch', (event) => {
         })
     );
 });
+
+// Suporte a Notificações Push
+self.addEventListener('push', (event) => {
+    const data = event.data ? event.data.json() : {
+        title: 'MINSA Prep',
+        body: 'Nova atualização disponível para você!'
+    };
+
+    const options = {
+        body: data.body,
+        icon: 'https://res.cloudinary.com/dzvusz0u4/image/upload/v1773045071/fgfjriydrec3rytqbodo.png',
+        badge: 'https://res.cloudinary.com/dzvusz0u4/image/upload/v1773045071/fgfjriydrec3rytqbodo.png',
+        vibrate: [100, 50, 100],
+        data: {
+            url: data.url || '/dashboard'
+        }
+    };
+
+    event.waitUntil(
+        self.notification.showNotification(data.title, options)
+    );
+});
+
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    event.waitUntil(
+        clients.openWindow(event.notification.data.url)
+    );
+});

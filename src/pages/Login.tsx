@@ -75,11 +75,11 @@ export default function Login() {
     <div className="flex min-h-screen flex-col justify-center bg-[radial-gradient(circle_at_top,#dff7ea,transparent_34%),linear-gradient(180deg,#f8fffb_0%,#eff6ff_100%)] px-4 py-12 font-sans sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-[2rem] bg-white shadow-xl shadow-emerald-500/10 border border-emerald-50">
+          <div className="flex h-24 w-full items-center justify-center rounded-[2.5rem] bg-white shadow-xl shadow-emerald-500/10 border border-emerald-50 p-4">
             <img
-              src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773045071/fgfjriydrec3rytqbodo.png"
-              alt="FarmoGentileza Logo"
-              className="h-16 w-16 object-contain"
+              src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/abj60fbildawqtq47qgu.png"
+              alt="MINSA Prep Logo"
+              className="h-full w-full object-contain"
             />
           </div>
         </div>
