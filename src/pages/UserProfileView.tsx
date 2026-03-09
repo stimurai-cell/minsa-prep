@@ -4,6 +4,7 @@ import {
     Flame,
     Award,
     ShieldCheck,
+    ShieldAlert,
     ArrowLeft,
     UserPlus,
     UserMinus,
@@ -22,6 +23,7 @@ export default function UserProfileView() {
     const [userProfile, setUserProfile] = useState<any>(null);
     const [isFollowing, setIsFollowing] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [followLoading, setFollowLoading] = useState(false);
 
     useEffect(() => {
@@ -31,13 +33,21 @@ export default function UserProfileView() {
             setLoading(true);
             try {
                 // Fetch Profile
+                console.log('Fetching profile for userId:', userId);
                 const { data, error } = await supabase
                     .from('profiles')
-                    .select('*, areas!profiles_selected_area_id_fkey(name)')
+                    .select('*, areas(name)')
                     .eq('id', userId)
                     .single();
 
-                if (error) throw error;
+                if (error) {
+                    console.error('Error fetching profile:', error);
+                    // Temporarily alert the error to see what's happening on the user's side
+                    // alert(`Erro ao carregar perfil: ${error.message}`);
+                    throw error;
+                }
+
+                console.log('Profile data received:', data);
                 setUserProfile(data);
 
                 // Check Follow Status
@@ -51,9 +61,11 @@ export default function UserProfileView() {
 
                     setIsFollowing(!!follow);
                 }
-            } catch (err) {
-                console.error(err);
-                navigate('/social');
+            } catch (err: any) {
+                console.error('Catch error:', err);
+                setError(err.message || 'Ocorreu um erro ao carregar o perfil.');
+                // Removing automatic navigate to let user read error
+                // navigate('/social');
             } finally {
                 setLoading(false);
             }
@@ -97,6 +109,39 @@ export default function UserProfileView() {
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
             <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">A carregar perfil...</p>
+        </div>
+    );
+
+    if (error) return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 px-6 text-center">
+            <div className="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center text-rose-500">
+                <ShieldAlert className="w-10 h-10" />
+            </div>
+            <div>
+                <h3 className="text-xl font-black text-slate-800 mb-2">Erro ao carregar perfil</h3>
+                <p className="text-slate-500 font-medium max-w-xs mx-auto">{error}</p>
+            </div>
+            <div className="flex gap-3">
+                <button
+                    onClick={() => navigate('/social')}
+                    className="px-6 py-3 bg-white border-2 border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-colors uppercase tracking-widest text-xs"
+                >
+                    Voltar
+                </button>
+                <button
+                    onClick={() => window.location.reload()}
+                    className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-md active:translate-y-1 uppercase tracking-widest text-xs"
+                >
+                    Tentar Novamente
+                </button>
+            </div>
+        </div>
+    );
+
+    if (!userProfile) return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+            <p className="text-slate-500 font-bold">Perfil não encontrado.</p>
+            <button onClick={() => navigate('/social')} className="text-emerald-600 font-bold uppercase tracking-widest text-xs">Voltar para busca</button>
         </div>
     );
 
