@@ -55,19 +55,6 @@ export default function App() {
   const { needsUpdate } = useVersionCheck();
 
   useEffect(() => {
-    const handleBeforeInstallPrompt = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
-  }, [setDeferredPrompt]);
-
-  useEffect(() => {
     checkSession();
   }, [checkSession]);
 

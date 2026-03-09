@@ -184,28 +184,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5 md:space-y-8">
-      {/* Banner de Instalação PWA */}
-      {deferredPrompt && (
-        <div className="bg-emerald-600 rounded-[2rem] p-6 text-white shadow-lg shadow-emerald-200 flex flex-col md:flex-row items-center justify-between gap-6 animate-in slide-in-from-top duration-500 overflow-hidden relative">
-          <div className="relative z-10 flex items-center gap-4">
-            <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center shrink-0 backdrop-blur-sm">
-              <Download className="w-8 h-8" />
-            </div>
-            <div>
-              <h3 className="text-xl font-black">Instalar no Telemóvel</h3>
-              <p className="text-emerald-50 text-sm font-medium">Aceda ao MINSA Prep mais rápido e estude em modo offline.</p>
-            </div>
-          </div>
-          <button
-            onClick={handleInstallClick}
-            className="relative z-10 bg-white text-emerald-600 px-8 py-3.5 rounded-2xl font-black text-sm hover:bg-emerald-50 transition-all shadow-xl shadow-emerald-900/10 active:scale-95"
-          >
-            INSTALAR APP
-          </button>
-
-          <Download className="absolute -right-8 -bottom-8 w-48 h-48 text-emerald-500/20 rotate-12" />
-        </div>
-      )}
 
       {/* Aviso para utilizadores antigos sem meta definida */}
       {(profile as any)?.goal === null && (
