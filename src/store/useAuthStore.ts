@@ -12,6 +12,7 @@ interface UserProfile {
   goal?: string | null;
   avatar_style?: string | null;
   avatar_url?: string | null;
+  phone?: string | null;
   current_league?: string;
   streak_freeze_active?: boolean;
   last_streak_freeze_at?: string | null;

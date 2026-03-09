@@ -13,6 +13,7 @@ export default function Register() {
   const [areaId, setAreaId] = useState('');
   const [prepTime, setPrepTime] = useState('1');
   const [studentNumber, setStudentNumber] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [goal, setGoal] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -30,6 +31,7 @@ export default function Register() {
       id: userId,
       full_name: fullName,
       student_number: studentNumber || null,
+      phone: phoneNumber,
       selected_area_id: areaId || null,
       preparation_time_months: parseInt(prepTime, 10),
       goal: goal || null,
@@ -47,6 +49,7 @@ export default function Register() {
           .from('profiles')
           .update({
             full_name: fullName,
+            phone: phoneNumber,
             selected_area_id: areaId || null,
             preparation_time_months: parseInt(prepTime, 10),
             goal: goal || null,
@@ -227,6 +230,18 @@ export default function Register() {
                   Nenhuma area encontrada. Execute o script SQL no Supabase para configurar o banco.
                 </p>
               )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Número de Telefone</label>
+              <input
+                type="tel"
+                required
+                placeholder="Ex: +244 9..."
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                className="mt-1 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+              />
             </div>
 
             <div>

@@ -20,6 +20,7 @@ export default function EditProfile() {
 
     const [fullName, setFullName] = useState(profile?.full_name || '');
     const [goal, setGoal] = useState(profile?.goal || '');
+    const [phone, setPhone] = useState(profile?.phone || '');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -78,6 +79,7 @@ export default function EditProfile() {
                     avatar_style: selectedAvatarColor,
                     avatar_url: avatarUrl,
                     goal: goal,
+                    phone: phone,
                 })
                 .eq('id', profile.id);
 
@@ -183,6 +185,17 @@ export default function EditProfile() {
                                 <option value="Aprender conceitos fundamentais">Aprender conceitos fundamentais (Estudante)</option>
                                 <option value="Outro">Outro</option>
                             </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 mb-1">Número de Telefone</label>
+                            <input
+                                type="tel"
+                                required
+                                value={phone}
+                                onChange={(e) => setPhone(e.target.value)}
+                                className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-sky-400 focus:bg-white font-medium"
+                            />
                         </div>
 
                         <div>
