@@ -39,17 +39,15 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
                 }
             });
 
-        if (logError) {
-            console.error('Error logging XP activity:', logError);
-        }
-
         // 3. Sync with weekly_league_stats
-        // Calculate start of current week (Monday)
-        const now = new Date();
-        const first = now.getDate() - (now.getDay() === 0 ? 6 : now.getDay() - 1); // Get Monday
-        const monday = new Date(now.setDate(first)).toISOString().split('T')[0];
+        // Calcular o início da semana (Segunda-feira) de forma robusta
+        const date = new Date();
+        const day = date.getDay();
+        const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(date.setDate(diff)).toISOString().split('T')[0];
 
-        // Get user's current league
+        console.log(`[XP] Sincronizando liga para usuário ${userId}. Semana: ${monday}, XP: ${xpAmount}`);
+
         const { data: profileData } = await supabase
             .from('profiles')
             .select('current_league')
@@ -58,29 +56,37 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
 
         const leagueName = profileData?.current_league || 'Bronze';
 
-        // Manual upsert logic for weekly stats
-        const { data: currentStats } = await supabase
+        // Tenta fazer o upsert - O Postgres usará a restrição UNIQUE(user_id, week_start_date)
+        const { error: leagueError } = await supabase
             .from('weekly_league_stats')
-            .select('xp_earned')
-            .eq('user_id', userId)
-            .eq('week_start_date', monday)
-            .maybeSingle();
+            .upsert({
+                user_id: userId,
+                league_name: leagueName,
+                week_start_date: monday,
+                xp_earned: xpAmount // Nota: Este campo precisa ser acumulado se já existir
+            }, {
+                onConflict: 'user_id,week_start_date'
+            });
 
-        if (currentStats) {
+        // Como o upsert substitui, precisamos de uma estratégia para incrementar.
+        // Se o upsert acima não suportar incremento nativo (depende da config de RLS/DB),
+        // usamos a lógica manual com verificação de erro.
+        if (!leagueError) {
+            // Recuperar o valor atual para somar corretamente no frontend ou usar RPC
+            const { data: currentWeek } = await supabase
+                .from('weekly_league_stats')
+                .select('xp_earned')
+                .eq('user_id', userId)
+                .eq('week_start_date', monday)
+                .maybeSingle();
+
             await supabase
                 .from('weekly_league_stats')
-                .update({ xp_earned: (currentStats.xp_earned || 0) + xpAmount })
+                .update({ xp_earned: (currentWeek?.xp_earned || 0) + xpAmount })
                 .eq('user_id', userId)
                 .eq('week_start_date', monday);
         } else {
-            await supabase
-                .from('weekly_league_stats')
-                .insert({
-                    user_id: userId,
-                    league_name: leagueName,
-                    week_start_date: monday,
-                    xp_earned: xpAmount
-                });
+            console.error('[XP] Erro ao sincronizar liga:', leagueError);
         }
 
         return {

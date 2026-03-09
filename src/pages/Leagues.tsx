@@ -25,18 +25,26 @@ export default function Leagues() {
     useEffect(() => {
         const fetchLeagueData = async () => {
             if (!profile?.id) return;
+
+            // Calcular o início da semana (Segunda-feira) de forma robusta
+            const date = new Date();
+            const day = date.getDay();
+            const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+            const monday = new Date(date.setDate(diff)).toISOString().split('T')[0];
+
             try {
                 const { data, error } = await supabase
                     .from('weekly_league_stats')
                     .select('user_id, xp_earned, profiles(full_name, avatar_style)')
                     .eq('league_name', profile.current_league || 'Bronze')
+                    .eq('week_start_date', monday)
                     .order('xp_earned', { ascending: false })
                     .limit(30);
 
                 if (error) throw error;
                 setStats(data || []);
             } catch (err) {
-                console.error(err);
+                console.error('[Leagues] Erro ao carregar dados:', err);
             } finally {
                 setLoading(false);
             }
