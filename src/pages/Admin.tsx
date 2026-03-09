@@ -21,6 +21,7 @@ import {
   Users,
   XCircle,
   Zap,
+  MessageCircle,
 } from 'lucide-react';
 
 type ManagedQuestion = {
@@ -94,6 +95,12 @@ export default function Admin() {
   const [recentAttempts, setRecentAttempts] = useState<any[]>([]);
   const [loadingMonitor, setLoadingMonitor] = useState(false);
   const [selectedUserDetail, setSelectedUserDetail] = useState<any>(null);
+
+  // Support state
+  const [supportMessages, setSupportMessages] = useState<any[]>([]);
+  const [loadingSupport, setLoadingSupport] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<any>(null);
+  const [adminResponse, setAdminResponse] = useState('');
 
   // Generator State
   const [genArea, setGenArea] = useState('');
@@ -388,12 +395,56 @@ export default function Admin() {
     }
   }, [managementArea]);
 
+  const fetchSupportMessages = async () => {
+    setLoadingSupport(true);
+    try {
+      const { data, error } = await supabase
+        .from('support_messages')
+        .select('*, profiles(full_name)')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setSupportMessages(data || []);
+    } catch (err) {
+      console.error('Error fetching support messages:', err);
+    } finally {
+      setLoadingSupport(false);
+    }
+  };
+
+  const handleUpdateSupportStatus = async (id: string, status: string) => {
+    try {
+      const { error } = await supabase
+        .from('support_messages')
+        .update({
+          status,
+          admin_response: adminResponse,
+          reviewed_at: new Date().toISOString()
+        })
+        .eq('id', id);
+      if (error) throw error;
+      setAdminResponse('');
+      setSelectedTicket(null);
+      fetchSupportMessages();
+    } catch (err) {
+      alert('Erro ao atualizar ticket.');
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'support') {
+      fetchSupportMessages();
+    }
+  }, [activeTab]);
+
   useEffect(() => {
     const interval = window.setInterval(() => {
       void fetchStats();
       if (activeTab === 'payments' || activeTab === 'dashboard') {
         void fetchPaymentRequests();
         void fetchOnlineUsers();
+      }
+      if (activeTab === 'support') {
+        void fetchSupportMessages();
       }
     }, 30000);
 
@@ -779,6 +830,12 @@ export default function Admin() {
           className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'monitor' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
         >
           Monitorização
+        </button>
+        <button
+          onClick={() => changeTab('support')}
+          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'support' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
+        >
+          Suporte {supportMessages.filter(m => m.status === 'open').length > 0 ? `(${supportMessages.filter(m => m.status === 'open').length})` : ''}
         </button>
       </div>
 
@@ -1667,6 +1724,88 @@ export default function Admin() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        )}
+        {activeTab === 'support' && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-black text-gray-900">Mensagens de Suporte</h2>
+              <button
+                onClick={fetchSupportMessages}
+                className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-full transition-colors"
+              >
+                <RefreshCw className={`w-5 h-5 ${loadingSupport ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+
+            <div className="grid gap-4">
+              {supportMessages.length === 0 && !loadingSupport && (
+                <div className="bg-white rounded-[2rem] border-2 border-slate-100 p-12 text-center text-slate-400 font-medium font-bold">
+                  Nenhuma mensagem recebida ainda.
+                </div>
+              )}
+
+              {supportMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`bg-white rounded-[2rem] border-2 transition-all overflow-hidden ${selectedTicket?.id === msg.id ? 'border-emerald-500 shadow-lg' : 'border-slate-100'}`}
+                >
+                  <div
+                    className="p-6 cursor-pointer"
+                    onClick={() => setSelectedTicket(selectedTicket?.id === msg.id ? null : msg)}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex gap-3 items-center font-bold">
+                        <span className={`px-3 py-1 rounded-full text-[10px] uppercase tracking-widest ${msg.status === 'open' ? 'bg-sky-100 text-sky-600' :
+                          msg.status === 'in_progress' ? 'bg-amber-100 text-amber-600' :
+                            'bg-emerald-100 text-emerald-600'
+                          }`}>
+                          {msg.status === 'open' ? 'Aberto' : msg.status === 'in_progress' ? 'Em curso' : 'Resolvido'}
+                        </span>
+                        <span className="text-slate-400 text-xs">{new Date(msg.created_at).toLocaleString()}</span>
+                      </div>
+                      <MessageCircle className={`w-5 h-5 ${msg.status === 'open' ? 'text-sky-500' : 'text-slate-300'}`} />
+                    </div>
+                    <h3 className="font-black text-slate-800 text-lg leading-tight">{msg.subject}</h3>
+                    <p className="text-sm text-slate-500 font-medium mt-1">De: {msg.profiles?.full_name || msg.email} ({msg.email})</p>
+                    <p className="text-xs font-black text-emerald-600 uppercase tracking-widest mt-2">{msg.problem_type}</p>
+                  </div>
+
+                  {selectedTicket?.id === msg.id && (
+                    <div className="px-6 pb-6 pt-2 bg-slate-50/50 border-t border-slate-100 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                      <div className="bg-white p-4 rounded-2xl border border-slate-100 text-slate-700 text-sm leading-relaxed whitespace-pre-wrap font-medium">
+                        {msg.description}
+                      </div>
+
+                      <div className="space-y-3">
+                        <label className="block text-xs font-black text-slate-500 uppercase tracking-widest">Resposta do Administrador</label>
+                        <textarea
+                          placeholder="Escreva a resposta que o aluno verá..."
+                          value={adminResponse}
+                          onChange={(e) => setAdminResponse(e.target.value)}
+                          className="w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-400 font-medium resize-none"
+                          rows={3}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleUpdateSupportStatus(msg.id, 'in_progress')}
+                            className="flex-1 bg-amber-500 text-white font-black py-3 rounded-xl uppercase tracking-widest text-[10px] shadow-[0_4px_0_0_#d97706] active:translate-y-1 active:shadow-none transition-all"
+                          >
+                            Em Progresso
+                          </button>
+                          <button
+                            onClick={() => handleUpdateSupportStatus(msg.id, 'resolved')}
+                            className="flex-1 bg-emerald-500 text-white font-black py-3 rounded-xl uppercase tracking-widest text-[10px] shadow-[0_4px_0_0_#059669] active:translate-y-1 active:shadow-none transition-all"
+                          >
+                            Marcar Resolvido
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}

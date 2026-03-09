@@ -21,6 +21,10 @@ import Social from './pages/Social';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import EditProfile from './pages/EditProfile';
+import HelpCenter from './pages/HelpCenter';
+import Feedback from './pages/Feedback';
+import TermsOfUse from './pages/TermsOfUse';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { RefreshCw } from 'lucide-react';
 
@@ -92,6 +96,10 @@ export default function App() {
           <Route path="profile" element={<Profile />} />
           <Route path="settings" element={<Settings />} />
           <Route path="settings/profile" element={<EditProfile />} />
+          <Route path="help" element={<HelpCenter />} />
+          <Route path="feedback" element={<Feedback />} />
+          <Route path="terms" element={<TermsOfUse />} />
+          <Route path="privacy" element={<PrivacyPolicy />} />
           <Route path="ranking" element={<Ranking />} />
           <Route path="premium" element={<Premium />} />
           <Route path="admin" element={<Admin />} />

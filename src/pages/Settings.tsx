@@ -44,14 +44,10 @@ export default function Settings() {
                 <div>
                     <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2 px-2">Suporte</h2>
                     <div className="bg-white rounded-2xl border-2 border-slate-200 divide-y-2 divide-slate-100 overflow-hidden">
-                        <button className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors active:bg-slate-100 text-left">
+                        <Link to="/help" className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors active:bg-slate-100 text-left">
                             <span className="font-bold text-slate-700">Central de Ajuda</span>
                             <ChevronRight className="w-5 h-5 text-slate-400" />
-                        </button>
-                        <button className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors active:bg-slate-100 text-left">
-                            <span className="font-bold text-slate-700">Fazer comentários</span>
-                            <ChevronRight className="w-5 h-5 text-slate-400" />
-                        </button>
+                        </Link>
                     </div>
                 </div>
 
@@ -65,15 +61,12 @@ export default function Settings() {
 
                 {/* Footer Links */}
                 <div className="flex flex-col gap-3 px-2 pb-12">
-                    <button className="text-left text-xs font-bold text-sky-500 uppercase tracking-widest hover:text-sky-600 w-fit">
+                    <Link to="/terms" className="text-left text-xs font-bold text-sky-500 uppercase tracking-widest hover:text-sky-600 w-fit">
                         Termos de Uso
-                    </button>
-                    <button className="text-left text-xs font-bold text-sky-500 uppercase tracking-widest hover:text-sky-600 w-fit">
+                    </Link>
+                    <Link to="/privacy" className="text-left text-xs font-bold text-sky-500 uppercase tracking-widest hover:text-sky-600 w-fit">
                         Política de Privacidade
-                    </button>
-                    <button className="text-left text-xs font-bold text-sky-500 uppercase tracking-widest hover:text-sky-600 w-fit">
-                        Agradecimentos
-                    </button>
+                    </Link>
                 </div>
 
             </div>
