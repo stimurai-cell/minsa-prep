@@ -1,8 +1,7 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
-import { LogOut, Trash2, Camera, ShieldAlert } from 'lucide-react';
+import { useAppStore } from '../store/useAppStore';
+import { Settings, Share, Flame, Zap, ShieldCheck, Crown } from 'lucide-react';
 
 const AVATAR_COLORS = [
     'bg-emerald-100 text-emerald-600',
@@ -14,195 +13,143 @@ const AVATAR_COLORS = [
 ];
 
 export default function Profile() {
-    const { profile, user, signOut, refreshProfile } = useAuthStore();
-    const navigate = useNavigate();
-    const [fullName, setFullName] = useState(profile?.full_name || '');
-    const [password, setPassword] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [message, setMessage] = useState('');
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [selectedAvatarColor, setSelectedAvatarColor] = useState(
-        profile?.avatar_style || AVATAR_COLORS[0]
-    );
+    const { profile } = useAuthStore();
+    const { areas } = useAppStore();
 
-    const handleUpdateProfile = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!profile?.id) return;
-        setLoading(true);
-        setMessage('');
+    const areaName = areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Área não definida';
 
-        try {
-            // Update profile
-            const { error: profileError } = await supabase
-                .from('profiles')
-                .update({
-                    full_name: fullName,
-                    avatar_style: selectedAvatarColor,
-                })
-                .eq('id', profile.id);
+    // We get the selected color from profile or provide a fallback color.
+    // Ensure we can extract background color reliably
+    const selectedColorClass = profile?.avatar_style || AVATAR_COLORS[1];
+    const userRole = profile?.role === 'premium' ? 'Premium' : profile?.role === 'admin' ? 'MAX' : 'Free';
 
-            if (profileError) throw profileError;
-
-            // Update password if provided
-            if (password) {
-                const { error: authError } = await supabase.auth.updateUser({
-                    password: password,
-                });
-                if (authError) throw authError;
-            }
-
-            await refreshProfile();
-            setMessage('Perfil atualizado com sucesso!');
-            setPassword('');
-        } catch (err: any) {
-            console.error(err);
-            setMessage(err.message || 'Erro ao atualizar perfil.');
-        } finally {
-            setLoading(false);
-            setTimeout(() => setMessage(''), 3000);
-        }
+    // Just mapping the selected bg for the header
+    const headerBgMap: Record<string, string> = {
+        'bg-emerald-100 text-emerald-600': 'bg-[#6EE7B7]', // emerald-300
+        'bg-blue-100 text-blue-600': 'bg-[#7DD3FC]', // sky-300
+        'bg-purple-100 text-purple-600': 'bg-[#D8B4FE]', // purple-300
+        'bg-orange-100 text-orange-600': 'bg-[#FDBA74]', // orange-300
+        'bg-pink-100 text-pink-600': 'bg-[#F9A8D4]', // pink-300
+        'bg-yellow-100 text-yellow-700': 'bg-[#FDE047]', // yellow-300
     };
+    const headerBgColor = headerBgMap[selectedColorClass] || 'bg-sky-300';
 
-    const handleSignOut = async () => {
-        await signOut();
-        navigate('/login');
-    };
-
-    const handleDeleteAccount = async () => {
-        // In a real production app we'd call an Edge Function to delete the user via admin API
-        // For now we will flag it or sign out and show a message
-        alert('O pedido de exclusão permanente de conta foi enviado aos administradores. Você será desconectado.');
-        await signOut();
-        navigate('/login');
-    };
+    const createdAtDate = profile?.created_at ? new Date(profile.created_at).getFullYear() : '2024';
 
     return (
-        <div className="mx-auto max-w-2xl space-y-6 md:space-y-8 animate-in fade-in duration-300">
-            <div className="text-center mt-6">
-                <h1 className="text-2xl font-black text-slate-800">Perfil</h1>
-            </div>
+        <div className="mx-auto max-w-2xl bg-slate-50 min-h-screen">
 
-            <div className="bg-white rounded-[2rem] border-2 border-slate-200 p-6 md:p-8 shadow-sm">
-                <form onSubmit={handleUpdateProfile} className="space-y-6">
-
-                    {/* Avatar Section */}
-                    <div className="flex flex-col items-center justify-center space-y-4">
-                        <div className={`relative w-28 h-28 rounded-full flex items-center justify-center text-5xl font-black transition-colors ${selectedAvatarColor}`}>
-                            {fullName.charAt(0).toUpperCase() || 'U'}
-                            <div className="absolute bottom-0 right-0 bg-white p-2 border-2 border-slate-200 rounded-full shadow-sm text-slate-500 hover:text-blue-500 cursor-pointer transition-colors">
-                                <Camera className="w-5 h-5" />
-                            </div>
-                        </div>
-
-                        <div className="flex gap-2 justify-center flex-wrap mt-4">
-                            {AVATAR_COLORS.map((colorClass) => (
-                                <button
-                                    key={colorClass}
-                                    type="button"
-                                    onClick={() => setSelectedAvatarColor(colorClass)}
-                                    className={`w-10 h-10 rounded-full border-4 transition-all ${colorClass} ${selectedAvatarColor === colorClass ? 'border-slate-800 scale-110' : 'border-transparent hover:scale-105'}`}
-                                    aria-label="Mudar cor do avatar"
-                                />
-                            ))}
-                        </div>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">Cor do Avatar</p>
-                    </div>
-
-                    <hr className="border-slate-100" />
-
-                    {/* Form Fields */}
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-1">Nome Completo</label>
-                            <input
-                                type="text"
-                                value={fullName}
-                                onChange={(e) => setFullName(e.target.value)}
-                                className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-blue-400 focus:bg-white font-medium"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-1">E-mail (Leitura Visual)</label>
-                            <input
-                                type="text"
-                                value={user?.email || ''}
-                                disabled
-                                className="w-full rounded-2xl border-2 border-slate-100 bg-slate-100 px-4 py-3 text-slate-500 font-medium cursor-not-allowed"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-1">Nova Senha (opcional)</label>
-                            <input
-                                type="password"
-                                placeholder="••••••••"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-blue-400 focus:bg-white font-medium"
-                            />
-                            <p className="text-xs text-slate-400 mt-1 font-medium">Deixe em branco para manter a senha atual.</p>
-                        </div>
-                    </div>
-
-                    {message && (
-                        <div className={`p-4 rounded-2xl text-sm font-bold text-center ${message.includes('Erro') ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                            {message}
-                        </div>
-                    )}
-
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-blue-500 hover:bg-blue-600 text-white font-black uppercase tracking-wider py-4 rounded-2xl shadow-[0_4px_0_0_#2563eb] active:shadow-none active:translate-y-1 transition-all disabled:opacity-50"
-                    >
-                        {loading ? 'A Guardar...' : 'Guardar Alterações'}
-                    </button>
-                </form>
-            </div>
-
-            <div className="space-y-4 pt-4">
-                {/* Sign Out */}
-                <button
-                    onClick={handleSignOut}
-                    className="w-full flex items-center justify-center gap-3 bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 py-4 font-bold rounded-2xl transition-all"
-                >
-                    <LogOut className="w-5 h-5" />
-                    SAIR DA CONTA
-                </button>
-
-                {/* Delete Account (Hidden/Danger) */}
-                <div className="pt-8">
-                    {!showDeleteConfirm ? (
-                        <button
-                            onClick={() => setShowDeleteConfirm(true)}
-                            className="mx-auto flex items-center gap-2 text-sm font-bold text-rose-300 hover:text-rose-500 transition-colors"
-                        >
-                            <ShieldAlert className="w-4 h-4" />
-                            Excluir Conta Permanentemente
+            {/* Top Color Section */}
+            <div className={`relative pt-6 pb-20 px-6 ${headerBgColor} border-b-2 border-slate-200`}>
+                <div className="flex justify-between items-start">
+                    <h1 className="text-3xl tracking-tight font-black text-slate-900 mt-2 z-10">{profile?.full_name?.split(' ')[0] || 'Aluno'}</h1>
+                    <div className="flex gap-4 items-center z-10">
+                        <button className="p-2 text-slate-800 hover:bg-black/10 rounded-full transition-colors">
+                            <Share className="w-6 h-6" />
                         </button>
-                    ) : (
-                        <div className="bg-rose-50 border-2 border-rose-200 p-6 rounded-[2rem] text-center animate-in zoom-in duration-200">
-                            <h3 className="text-rose-700 font-black mb-2">Tem a certeza?</h3>
-                            <p className="text-sm text-rose-600 font-medium mb-6">
-                                Esta ação é irreversível e perderá todo o seu progresso, XP e histórico no MINSA Prep.
-                            </p>
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => setShowDeleteConfirm(false)}
-                                    className="flex-1 bg-white border-2 border-slate-200 text-slate-600 font-bold py-3 rounded-xl hover:bg-slate-50"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    onClick={handleDeleteAccount}
-                                    className="flex-1 bg-rose-500 text-white font-black py-3 rounded-xl shadow-[0_4px_0_0_#be123c] active:shadow-none active:translate-y-1"
-                                >
-                                    SIM, EXCLUIR
-                                </button>
+                        <Link to="/settings" className="p-2 text-slate-800 hover:bg-black/10 rounded-full transition-colors">
+                            <Settings className="w-6 h-6" />
+                        </Link>
+                    </div>
+                </div>
+
+                {userRole === 'MAX' && (
+                    <div className="absolute right-6 top-20 bg-black text-white px-3 py-1 font-black text-sm rounded-lg uppercase tracking-widest z-10 border-2 border-transparent shadow-[0_4px_0_0_rgba(0,0,0,1)]">
+                        MAX
+                    </div>
+                )}
+                {userRole === 'Premium' && (
+                    <div className="absolute right-6 top-20 bg-yellow-400 text-yellow-900 px-3 py-1 font-black text-sm rounded-lg uppercase tracking-widest z-10 shadow-[0_4px_0_0_#ca8a04]">
+                        PREMIUM
+                    </div>
+                )}
+
+                {/* Avatar */}
+                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2">
+                    <div className={`w-32 h-32 rounded-[2.5rem] flex items-center justify-center text-6xl font-black border-4 border-slate-50 shadow-md ${selectedColorClass}`}>
+                        {profile?.full_name?.charAt(0).toUpperCase() || 'U'}
+                    </div>
+                </div>
+            </div>
+
+            <div className="px-6 pt-24 pb-8 space-y-6">
+
+                {/* Username & Joined */}
+                <div className="text-center">
+                    <p className="text-sm font-bold text-slate-500 uppercase tracking-widest flex items-center justify-center gap-2">
+                        {profile?.full_name?.replace(/\s+/g, '_').toUpperCase() || '@ALUNO'}
+                        <span>•</span>
+                        AQUI DESDE {createdAtDate}
+                    </p>
+                </div>
+
+                {/* Followers Mock Stats */}
+                <div className="flex justify-center gap-8 py-2">
+                    <div className="flex gap-2 items-center text-center">
+                        <div>
+                            <p className="text-xl font-black text-slate-800">1</p>
+                            <p className="text-xs font-bold text-slate-400">Cursos</p>
+                        </div>
+                    </div>
+                    <div className="flex gap-2 items-center text-center">
+                        <div>
+                            <p className="text-xl font-black text-slate-800">0</p>
+                            <p className="text-xs font-bold text-slate-400">Segue</p>
+                        </div>
+                    </div>
+                    <div className="flex gap-2 items-center text-center">
+                        <div>
+                            <p className="text-xl font-black text-slate-800">0</p>
+                            <p className="text-xs font-bold text-slate-400">Seguidores</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex justify-center">
+                    <Link to="/social" className="w-full bg-white text-slate-700 border-2 border-slate-200 hover:bg-slate-50 active:bg-slate-100 font-bold tracking-widest uppercase py-4 rounded-2xl flex items-center justify-center gap-2 transition-colors">
+                        <span className="text-xl leading-none">+</span> ADICIONAR AMIGOS
+                    </Link>
+                </div>
+
+                <hr className="border-slate-200 my-4" />
+
+                {/* Overview Stats */}
+                <div>
+                    <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4">Visão Geral</h2>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 flex items-center gap-4 hover:border-slate-300 transition-colors">
+                            <Flame className="w-8 h-8 text-orange-500" fill="currentColor" />
+                            <div>
+                                <p className="text-lg font-black text-slate-800">2 <span className="text-sm">dias</span></p>
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Ofensiva</p>
                             </div>
                         </div>
-                    )}
+
+                        <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 flex items-center gap-4 hover:border-slate-300 transition-colors">
+                            <Zap className="w-8 h-8 text-yellow-500" fill="currentColor" />
+                            <div>
+                                <p className="text-lg font-black text-slate-800">{profile?.total_xp || 0}</p>
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total XP</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 flex items-center gap-4 hover:border-slate-300 transition-colors">
+                            <ShieldCheck className="w-8 h-8 text-emerald-500" />
+                            <div>
+                                <p className="text-lg font-black text-slate-800 line-clamp-1 truncate">{areaName}</p>
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Área</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 flex items-center gap-4 hover:border-slate-300 transition-colors opacity-90">
+                            <Crown className="w-8 h-8 text-amber-500" />
+                            <div>
+                                <p className="text-lg font-black text-slate-800">Bronze</p>
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Liga Atual</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

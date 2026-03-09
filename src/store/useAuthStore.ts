@@ -11,6 +11,7 @@ interface UserProfile {
   last_active?: string | null;
   goal?: string | null;
   avatar_style?: string | null;
+  created_at?: string;
 }
 
 interface AuthState {

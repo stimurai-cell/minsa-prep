@@ -19,6 +19,8 @@ import ResetPassword from './pages/ResetPassword';
 import Practice from './pages/Practice';
 import Social from './pages/Social';
 import Profile from './pages/Profile';
+import Settings from './pages/Settings';
+import EditProfile from './pages/EditProfile';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { RefreshCw } from 'lucide-react';
 
@@ -88,6 +90,8 @@ export default function App() {
           <Route path="practice" element={<Practice />} />
           <Route path="social" element={<Social />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="settings/profile" element={<EditProfile />} />
           <Route path="ranking" element={<Ranking />} />
           <Route path="premium" element={<Premium />} />
           <Route path="admin" element={<Admin />} />
