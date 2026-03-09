@@ -37,7 +37,7 @@ export default function Leagues() {
             try {
                 const { data, error } = await supabase
                     .from('weekly_league_stats')
-                    .select('user_id, xp_earned, profiles(full_name, avatar_style)')
+                    .select('user_id, xp_earned, profiles(full_name, avatar_style, avatar_url)')
                     .eq('league_name', profile.current_league || 'Bronze')
                     .eq('week_start_date', monday)
                     .order('xp_earned', { ascending: false })
@@ -141,8 +141,12 @@ export default function Leagues() {
                                         {index + 1 === 1 ? '🥇' : index + 1 === 2 ? '🥈' : index + 1 === 3 ? '🥉' : index + 1}
                                     </div>
                                     <div className="relative">
-                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-white text-lg shadow-md ${isUser ? 'bg-indigo-600' : 'bg-slate-200 text-slate-500'}`}>
-                                            {entry.profiles?.full_name?.charAt(0) || '?'}
+                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-white text-lg shadow-md overflow-hidden ${isUser ? 'bg-indigo-600' : 'bg-slate-200 text-slate-500'}`}>
+                                            {entry.profiles?.avatar_url ? (
+                                                <img src={entry.profiles.avatar_url} alt="" className="w-full h-full object-cover" />
+                                            ) : (
+                                                entry.profiles?.full_name?.charAt(0) || '?'
+                                            )}
                                         </div>
                                         {(isPromoted || isRelegated) && (
                                             <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${isPromoted ? 'bg-emerald-500' : 'bg-red-500'}`}></div>

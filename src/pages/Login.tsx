@@ -2,7 +2,7 @@ import { useEffect, useState, FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
-import { Activity, Eye, EyeOff, Mail, ShieldCheck } from 'lucide-react';
+import { Activity, Eye, EyeOff, Mail, ShieldCheck, Download } from 'lucide-react';
 
 const REMEMBERED_EMAIL_KEY = 'minsa-prep-remembered-email';
 
@@ -15,6 +15,32 @@ export default function Login() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const { checkSession } = useAuthStore();
+  const [canInstall, setCanInstall] = useState(false);
+
+  useEffect(() => {
+    // Verificar se o evento de instalação está disponível
+    const checkInstall = () => {
+      if ((window as any).deferredPrompt) {
+        setCanInstall(true);
+      }
+    };
+
+    checkInstall();
+    const interval = setInterval(checkInstall, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleInstallClick = async () => {
+    const promptEvent = (window as any).deferredPrompt;
+    if (!promptEvent) return;
+
+    promptEvent.prompt();
+    const { outcome } = await promptEvent.userChoice;
+    if (outcome === 'accepted') {
+      (window as any).deferredPrompt = null;
+      setCanInstall(false);
+    }
+  };
 
   useEffect(() => {
     const rememberedEmail = window.localStorage.getItem(REMEMBERED_EMAIL_KEY);
@@ -173,6 +199,17 @@ export default function Login() {
             >
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
+
+            {canInstall && (
+              <button
+                type="button"
+                onClick={handleInstallClick}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 border-2 border-slate-800 px-4 py-4 text-sm font-black text-white transition-all hover:bg-black shadow-[0_4px_0_0_#1e293b] active:translate-y-1 active:shadow-none uppercase tracking-widest"
+              >
+                <Download className="h-5 w-5 text-emerald-400" />
+                Baixar Aplicativo (Recomendado)
+              </button>
+            )}
           </form>
         </div>
       </div>

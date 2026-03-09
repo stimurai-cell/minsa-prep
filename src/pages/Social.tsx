@@ -33,7 +33,7 @@ export default function Social() {
                 // 2. Fetch Activities for Feed
                 const { data: acts, error: actError } = await supabase
                     .from('user_activities')
-                    .select('*, profiles(full_name, avatar_style)')
+                    .select('*, profiles(full_name, avatar_style, avatar_url)')
                     .order('created_at', { ascending: false })
                     .limit(20);
 
@@ -60,7 +60,7 @@ export default function Social() {
         try {
             const { data, error } = await supabase
                 .from('profiles')
-                .select('id, full_name, total_xp, selected_area_id')
+                .select('id, full_name, total_xp, selected_area_id, avatar_url')
                 .ilike('full_name', `%${query}%`)
                 .neq('id', profile?.id)
                 .limit(5);
@@ -174,8 +174,12 @@ export default function Social() {
                                     return (
                                         <div key={user.id} className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0">
                                             <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/profile/${user.id}`)}>
-                                                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500">
-                                                    {user.full_name?.charAt(0)}
+                                                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500 overflow-hidden">
+                                                    {user.avatar_url ? (
+                                                        <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        user.full_name?.charAt(0)
+                                                    )}
                                                 </div>
                                                 <div>
                                                     <p className="font-bold text-slate-900">{user.full_name}</p>
@@ -244,8 +248,12 @@ export default function Social() {
                                 >
                                     <div className="flex items-center gap-4">
                                         <div className="relative">
-                                            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-2xl font-black text-slate-400 border-2 border-slate-50 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                                                {friend.full_name?.charAt(0)}
+                                            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-2xl font-black text-slate-400 border-2 border-slate-50 group-hover:bg-blue-600 group-hover:text-white transition-colors overflow-hidden">
+                                                {friend.avatar_url ? (
+                                                    <img src={friend.avatar_url} alt="" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    friend.full_name?.charAt(0)
+                                                )}
                                             </div>
                                             {friend.streak_freeze_active && (
                                                 <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white p-1 rounded-full border-2 border-white">

@@ -39,27 +39,31 @@ export default function EditProfile() {
         setMessage('');
 
         try {
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${user.id}-${Math.random()}.${fileExt}`;
-            const filePath = `${fileName}`;
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('upload_preset', 'minsa_uploads');
+            formData.append('cloud_name', 'dzvusz0u4');
+            formData.append('folder', 'avatars');
 
-            // 1. Upload to Supabase Storage
-            const { error: uploadError } = await supabase.storage
-                .from('avatars')
-                .upload(filePath, file);
+            const response = await fetch(
+                `https://api.cloudinary.com/v1_1/dzvusz0u4/image/upload`,
+                {
+                    method: 'POST',
+                    body: formData,
+                }
+            );
 
-            if (uploadError) throw uploadError;
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error?.message || 'Erro no Cloudinary');
+            }
 
-            // 2. Get Public URL
-            const { data: { publicUrl } } = supabase.storage
-                .from('avatars')
-                .getPublicUrl(filePath);
-
-            setAvatarUrl(publicUrl);
-            setMessage('Foto carregada! Salve para confirmar.');
+            const data = await response.json();
+            setAvatarUrl(data.secure_url);
+            setMessage('Foto carregada via Cloudinary! Salve para confirmar.');
         } catch (err: any) {
             console.error('Error uploading image:', err);
-            setMessage('Erro ao carregar imagem. Verifique se o bucket "avatars" existe.');
+            setMessage(`Erro ao carregar imagem: ${err.message}`);
         } finally {
             setUploading(false);
         }

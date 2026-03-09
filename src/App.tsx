@@ -58,6 +58,15 @@ export default function App() {
 
   useEffect(() => {
     checkSession();
+
+    // PWA: Capturar o evento de instalação para uso global
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      (window as any).deferredPrompt = e;
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, [checkSession]);
 
   useEffect(() => {
