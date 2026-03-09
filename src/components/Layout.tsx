@@ -97,8 +97,12 @@ export default function Layout() {
         <aside className={`hidden w-80 shrink-0 border-r border-white/70 bg-[linear-gradient(180deg,#ffffff_0%,#f4fbf7_100%)] xl:flex xl:flex-col ${isImmersiveSession ? 'xl:hidden' : ''}`}>
           <div className="border-b border-slate-100 px-7 py-8">
             <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-[1.4rem] bg-emerald-600 text-white shadow-[0_18px_40px_-18px_rgba(16,185,129,0.6)]">
-                <Sparkles className="h-7 w-7" />
+              <div className="flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-white shadow-sm border border-slate-100 p-2">
+                <img
+                  src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773045071/fgfjriydrec3rytqbodo.png"
+                  alt="FarmoGentileza Logo"
+                  className="h-full w-full object-contain"
+                />
               </div>
               <div>
                 <h1 className="text-3xl font-black tracking-tight text-emerald-700">MINSA Prep</h1>
@@ -190,8 +194,12 @@ export default function Layout() {
             <div className="px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-[0_18px_40px_-18px_rgba(16,185,129,0.6)]">
-                    <Sparkles className="h-5 w-5" />
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm border border-slate-100 p-1.5">
+                    <img
+                      src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773045071/fgfjriydrec3rytqbodo.png"
+                      alt="FarmoGentileza Logo"
+                      className="h-full w-full object-contain"
+                    />
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-xl font-black tracking-tight text-emerald-700">MINSA Prep</p>

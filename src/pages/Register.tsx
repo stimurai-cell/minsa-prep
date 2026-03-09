@@ -128,8 +128,12 @@ export default function Register() {
     <div className="flex min-h-screen flex-col justify-center bg-[radial-gradient(circle_at_top,#dff7ea,transparent_34%),linear-gradient(180deg,#f8fffb_0%,#eff6ff_100%)] px-4 py-12 font-sans sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-[1.6rem] bg-emerald-600 text-white shadow-[0_20px_50px_-20px_rgba(5,150,105,0.7)]">
-            <Activity className="h-8 w-8" />
+          <div className="flex h-16 w-16 items-center justify-center rounded-[1.6rem] bg-white shadow-xl shadow-emerald-500/10 border border-emerald-50 p-2">
+            <img
+              src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773045071/fgfjriydrec3rytqbodo.png"
+              alt="FarmoGentileza Logo"
+              className="h-full w-full object-contain"
+            />
           </div>
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold tracking-tight text-slate-900">

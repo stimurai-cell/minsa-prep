@@ -51,7 +51,7 @@ export default function Social() {
 
     const handleSearch = async (query: string) => {
         setSearchQuery(query);
-        if (query.length < 3) {
+        if (query.trim().length < 2) {
             setSearchResults([]);
             return;
         }
@@ -134,10 +134,24 @@ export default function Social() {
                                 type="text"
                                 value={searchQuery}
                                 onChange={(e) => handleSearch(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchQuery)}
                                 placeholder="Digite o nome do estudante..."
-                                className="w-full bg-white border-2 border-slate-200 rounded-2xl px-5 py-4 pl-12 focus:border-blue-400 outline-none transition-all font-medium text-slate-800"
+                                className="w-full bg-white border-2 border-slate-200 rounded-2xl px-5 py-4 pl-12 pr-16 focus:border-blue-400 outline-none transition-all font-medium text-slate-800"
                             />
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                            <div
+                                className="absolute left-4 top-1/2 -translate-y-1/2 cursor-pointer"
+                                onClick={() => handleSearch(searchQuery)}
+                            >
+                                <Search className="w-5 h-5 text-slate-400" />
+                            </div>
+
+                            <button
+                                onClick={() => handleSearch(searchQuery)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 bg-blue-50 text-blue-600 p-2 rounded-xl hover:bg-blue-100 transition-colors"
+                                title="Pesquisar"
+                            >
+                                <Search className="w-5 h-5" />
+                            </button>
 
                             {isSearching && (
                                 <div className="absolute right-4 top-1/2 -translate-y-1/2">
@@ -147,6 +161,12 @@ export default function Social() {
                         </div>
 
                         {/* Search Results Dropdown */}
+                        {searchQuery.trim().length >= 2 && !isSearching && searchResults.length === 0 && (
+                            <div className="mt-2 bg-white border-2 border-slate-100 rounded-2xl p-4 text-center text-sm text-slate-500 font-medium">
+                                Nenhum estudante encontrado com este nome.
+                            </div>
+                        )}
+
                         {searchResults.length > 0 && (
                             <div className="mt-2 bg-white border-2 border-slate-100 rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
                                 {searchResults.map(user => (
@@ -232,7 +252,7 @@ export default function Social() {
                                     </div>
                                     <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between">
                                         <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${friend.current_league === 'Ouro' ? 'bg-yellow-100 text-yellow-700' :
-                                                friend.current_league === 'Prata' ? 'bg-slate-100 text-slate-700' : 'bg-orange-100 text-orange-700'
+                                            friend.current_league === 'Prata' ? 'bg-slate-100 text-slate-700' : 'bg-orange-100 text-orange-700'
                                             }`}>
                                             Liga {friend.current_league || 'Bronze'}
                                         </span>

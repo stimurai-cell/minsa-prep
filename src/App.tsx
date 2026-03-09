@@ -1,6 +1,7 @@
 import { useEffect, ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/useAuthStore';
+import { useAppStore } from './store/useAppStore';
 
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -50,7 +51,21 @@ function RootRedirect() {
 
 export default function App() {
   const { user, loading, checkSession, updateLastActive } = useAuthStore();
+  const { setDeferredPrompt } = useAppStore();
   const { needsUpdate } = useVersionCheck();
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, [setDeferredPrompt]);
 
   useEffect(() => {
     checkSession();

@@ -17,9 +17,11 @@ interface Topic {
 interface AppState {
   areas: Area[];
   topics: Topic[];
+  deferredPrompt: any;
   loading: boolean;
   fetchAreas: () => Promise<void>;
   fetchTopics: (areaId: string) => Promise<void>;
+  setDeferredPrompt: (prompt: any) => void;
 }
 
 const canonicalAreaNames: Record<string, string> = {
@@ -61,7 +63,9 @@ const dedupeAreas = (areas: Area[]) => {
 export const useAppStore = create<AppState>((set) => ({
   areas: [],
   topics: [],
+  deferredPrompt: null,
   loading: false,
+  setDeferredPrompt: (prompt: any) => set({ deferredPrompt: prompt }),
   fetchAreas: async () => {
     set({ loading: true });
     try {
