@@ -217,15 +217,6 @@ export default function Layout() {
                     </p>
                   </div>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => setAccountOpen((prev) => !prev)}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600"
-                  aria-label="Abrir conta"
-                >
-                  <UserRound className="h-5 w-5" />
-                </button>
               </div>
 
               <div className="mt-4 flex items-center gap-3 rounded-[1.5rem] border border-white/70 bg-[linear-gradient(135deg,#ffffff_0%,#f3fbf6_100%)] px-4 py-3 shadow-[0_20px_60px_-46px_rgba(15,23,42,0.35)]">
@@ -252,23 +243,6 @@ export default function Layout() {
                 <div className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
                   <ShieldCheck className="h-4 w-4 shrink-0" />
                   <span className="truncate">{areaName}</span>
-                </div>
-              )}
-
-              {accountOpen && (
-                <div className="mt-3 rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-[0_20px_50px_-40px_rgba(15,23,42,0.35)]">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Conta</p>
-                  <p className="mt-2 text-sm text-slate-600">
-                    A sessão é salva localmente até ser encerrada manualmente.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleSignOut}
-                    className="mt-4 flex w-full items-center justify-center gap-3 rounded-2xl bg-red-50 px-4 py-3 font-semibold text-red-600 transition hover:bg-red-100"
-                  >
-                    <LogOut className="h-5 w-5" />
-                    <span>Terminar sessão</span>
-                  </button>
                 </div>
               )}
             </div>
