@@ -130,4 +130,12 @@ export const extraPackages: ExtraPackage[] = [
     priceLabel: '1.000 Kz',
     features: ['Acesso a uma simulacao restrita com ranking oficial'],
   },
+  {
+    id: 'pacote_concurso',
+    name: 'Módulo Concurso Público',
+    description: 'Acesso vitalício ao simulador focado no edital do MINSA.',
+    priceAmount: 5000,
+    priceLabel: '5.000 Kz',
+    features: ['Simulados de Legislação e Ética', 'Cronómetro e ambiente de prova real', 'Destaques do edital atualizado'],
+  },
 ];

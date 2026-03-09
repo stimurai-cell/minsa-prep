@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Award, Medal, Trophy } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import AreaLockCard from '../components/AreaLockCard';
 
 export default function Ranking() {
+  const navigate = useNavigate();
   const { profile } = useAuthStore();
   const { areas, fetchAreas } = useAppStore();
   const [ranking, setRanking] = useState<any[]>([]);
@@ -101,12 +103,17 @@ export default function Ranking() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="font-black text-slate-900">{item.full_name || 'Estudante anónimo'}</p>
+                      <p
+                        className="font-black text-slate-900 cursor-pointer hover:text-emerald-600 transition-colors"
+                        onClick={() => navigate(`/profile/${item.id}`)}
+                      >
+                        {item.full_name || 'Estudante anónimo'}
+                      </p>
                       {item.role && item.role !== 'admin' && (
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${item.role === 'elite' ? 'bg-purple-100 text-purple-700' :
-                            item.role === 'premium' ? 'bg-amber-100 text-amber-700' :
-                              item.role === 'basic' ? 'bg-sky-100 text-sky-700' :
-                                'bg-slate-100 text-slate-500'
+                          item.role === 'premium' ? 'bg-amber-100 text-amber-700' :
+                            item.role === 'basic' ? 'bg-sky-100 text-sky-700' :
+                              'bg-slate-100 text-slate-500'
                           }`}>
                           {item.role === 'free' ? 'Gratuito' : item.role}
                         </span>

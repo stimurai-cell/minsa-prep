@@ -25,6 +25,9 @@ import HelpCenter from './pages/HelpCenter';
 import Feedback from './pages/Feedback';
 import TermsOfUse from './pages/TermsOfUse';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import PublicExam from './pages/PublicExam';
+import Leagues from './pages/Leagues';
+import UserProfileView from './pages/UserProfileView';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { RefreshCw } from 'lucide-react';
 
@@ -94,12 +97,15 @@ export default function App() {
           <Route path="practice" element={<Practice />} />
           <Route path="social" element={<Social />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="profile/:userId" element={<UserProfileView />} />
           <Route path="settings" element={<Settings />} />
           <Route path="settings/profile" element={<EditProfile />} />
           <Route path="help" element={<HelpCenter />} />
           <Route path="feedback" element={<Feedback />} />
           <Route path="terms" element={<TermsOfUse />} />
           <Route path="privacy" element={<PrivacyPolicy />} />
+          <Route path="contest" element={<PublicExam />} />
+          <Route path="leagues" element={<Leagues />} />
           <Route path="ranking" element={<Ranking />} />
           <Route path="premium" element={<Premium />} />
           <Route path="admin" element={<Admin />} />

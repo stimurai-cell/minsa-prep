@@ -12,6 +12,7 @@ import {
   Crown,
   Zap,
   Flame,
+  ShieldCheck,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { createStudyPlanForUser } from '../lib/studyPlan';
@@ -19,7 +20,8 @@ import { premiumPlans } from '../lib/premium';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import AreaLockCard from '../components/AreaLockCard';
-import { UserPlus, Sparkles } from 'lucide-react';
+import { UserPlus, Sparkles, ArrowRight, Award as AwardIcon } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const DAILY_TIPS = [
   "Treinar 15 minutos todos os dias gera mais resultado do que estudar 3 horas só no domingo!",
@@ -30,6 +32,7 @@ const DAILY_TIPS = [
 ];
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { profile } = useAuthStore();
   const { areas, fetchAreas } = useAppStore();
   const [stats, setStats] = useState({
@@ -41,6 +44,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [missingGoal, setMissingGoal] = useState('');
   const [savingGoal, setSavingGoal] = useState(false);
+  const [freezingStreak, setFreezingStreak] = useState(false);
 
   const dailyTip = useMemo(() => {
     const day = new Date().getDay();
@@ -137,11 +141,31 @@ export default function Dashboard() {
     setSavingGoal(true);
     try {
       await supabase.from('profiles').update({ goal: missingGoal }).eq('id', profile.id);
-      // Forçar recarregamento na store (embora no exemplo não exportemos 'refreshProfile' deste componente, podemos alterar localmente ou confiar no cache)
       window.location.reload();
     } catch (err) {
       console.error(err);
       setSavingGoal(false);
+    }
+  };
+
+  const handleBuyStreakFreeze = async () => {
+    if (!profile?.id || (profile?.total_xp || 0) < 1000) return;
+    setFreezingStreak(true);
+    try {
+      const { error } = await supabase.from('profiles').update({
+        streak_freeze_active: true,
+        total_xp: (profile.total_xp || 0) - 1000,
+        last_streak_freeze_at: new Date().toISOString()
+      }).eq('id', profile.id);
+
+      if (error) throw error;
+      alert('Proteção de Ofensiva ativada! Sua sequência está protegida por 24h.');
+      window.location.reload();
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao ativar proteção.');
+    } finally {
+      setFreezingStreak(false);
     }
   };
 
@@ -210,12 +234,29 @@ export default function Dashboard() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-[1.6rem] border-2 border-orange-100 bg-orange-50 shadow-[0_6px_0_0_#ffedd5] p-4 md:p-5 flex flex-col justify-between transition-transform hover:-translate-y-1">
+            <div className="rounded-[1.6rem] border-2 border-orange-100 bg-orange-50 shadow-[0_6px_0_0_#ffedd5] p-4 md:p-5 flex flex-col justify-between transition-transform hover:-translate-y-1 relative group">
               <p className="text-sm font-bold text-orange-600 uppercase tracking-widest">Ofensiva</p>
-              <p className="mt-2 flex items-center gap-2 text-3xl font-black text-orange-600">
-                <Flame className="h-7 w-7 fill-current" />
-                2 Dias
-              </p>
+              <div className="mt-2 flex items-center justify-between">
+                <p className="flex items-center gap-2 text-3xl font-black text-orange-600">
+                  <Flame className="h-7 w-7 fill-current" />
+                  2 Dias
+                </p>
+                {profile?.streak_freeze_active ? (
+                  <div className="bg-blue-500 text-white p-1 rounded-full animate-pulse" title="Protegido">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                ) : (
+                  (profile?.total_xp || 0) >= 1000 && (
+                    <button
+                      onClick={handleBuyStreakFreeze}
+                      disabled={freezingStreak}
+                      className="hidden group-hover:flex items-center gap-1 bg-blue-100 text-blue-600 px-2 py-1 rounded-lg text-[10px] font-bold border border-blue-200 transition-all"
+                    >
+                      <Zap className="w-3 h-3" /> {freezingStreak ? '...' : 'PROTEGER'}
+                    </button>
+                  )
+                )}
+              </div>
             </div>
             <div className="rounded-[1.6rem] border border-white/60 bg-white/90 p-4 md:p-5">
               <p className="text-sm font-medium text-slate-500">Ultima simulacao de prova</p>
@@ -288,8 +329,8 @@ export default function Dashboard() {
           </div>
 
           <p className="mt-5 text-sm leading-6 text-slate-600">
-            Baseado no seu plano de {profile?.preparation_time_months} {profile?.preparation_time_months === 1 ? 'mês' : 'meses'},
-            preparamos um percurso de treino centrado na área {areaName}.
+            Com base no seu objetivo de {profile?.preparation_time_months} {profile?.preparation_time_months === 1 ? 'mês' : 'meses'} focado na sua formação em {areaName},
+            preparamos um percurso de treino focado nos **tópicos principais** que você precisa dominar.
           </p>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -324,6 +365,37 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Card Especial Concurso (Apenas para quem tem esse objetivo) */}
+        {(profile as any)?.goal === "Passar no concurso público" && (
+          <div
+            className="rounded-[2.5rem] border-2 border-slate-900 bg-[#0A1128] p-8 text-white shadow-2xl relative overflow-hidden group hover:scale-[1.01] transition-all cursor-pointer"
+            onClick={() => navigate('/contest')}
+          >
+            <div className="relative z-10">
+              <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400 mb-5 border border-emerald-500/20">
+                <Sparkles className="w-3.5 h-3.5" />
+                Destaque Exclusivo
+              </div>
+              <h3 className="text-3xl md:text-4xl font-black tracking-tight leading-tight">
+                Preparação para o <br />
+                <span className="text-emerald-400">Concurso MINSA</span>
+              </h3>
+              <p className="mt-4 text-slate-400 text-sm font-medium pr-20 leading-relaxed max-w-xl">
+                Acesse simulados focados 100% no edital de saúde: Legislação Nacional,
+                Ética Profissional e Deontologia. Tudo em um só lugar.
+              </p>
+              <div className="mt-8 flex items-center gap-3 text-emerald-400 font-black text-[10px] uppercase tracking-[0.25em] group-hover:gap-5 transition-all">
+                Abrir Módulo de Concurso
+                <ArrowRight className="w-4 h-4" />
+              </div>
+            </div>
+
+            {/* Efeito visual de fundo */}
+            <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl group-hover:bg-emerald-500/10 transition-colors"></div>
+            <AwardIcon className="absolute -right-6 -bottom-6 w-40 h-40 text-white/5 rotate-12 group-hover:scale-110 group-hover:rotate-0 transition-all duration-500" />
+          </div>
+        )}
+
         <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)] md:p-6">
           <h2 className="text-xl font-black text-slate-900">Dominio por topico</h2>
           <div className="mt-5 space-y-4">
@@ -354,7 +426,7 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-      </section>
+      </section >
 
       <section className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#fff8eb_40%,#f5fff7_100%)] p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)] md:p-6">
         <div className="flex flex-col gap-3 border-b border-slate-100 pb-5 md:flex-row md:items-end md:justify-between">
@@ -401,6 +473,6 @@ export default function Dashboard() {
           ))}
         </div>
       </section>
-    </div>
+    </div >
   );
 }

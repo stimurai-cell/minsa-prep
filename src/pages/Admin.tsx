@@ -29,6 +29,7 @@ type ManagedQuestion = {
   content: string;
   difficulty: string;
   exam_year: number | null;
+  is_contest_highlight: boolean;
   alternatives?: { id: string; content: string; is_correct: boolean }[];
   question_explanations?: { id: string; content: string }[];
 };
@@ -109,6 +110,7 @@ export default function Admin() {
   const [isCustomTopic, setIsCustomTopic] = useState(false);
   const [genCount, setGenCount] = useState(5);
   const [genDiff, setGenDiff] = useState('medium');
+  const [genContestHighlight, setGenContestHighlight] = useState(false);
   const [genContent, setGenContent] = useState('');
   const [generating, setGenerating] = useState(false);
   const [genResult, setGenResult] = useState<any>(null);
@@ -563,7 +565,8 @@ export default function Admin() {
           .insert({
             topic_id: finalTopicId,
             content: q.question,
-            difficulty: q.difficulty || genDiff
+            difficulty: q.difficulty || genDiff,
+            is_contest_highlight: genContestHighlight
           })
           .select()
           .single();
@@ -1286,6 +1289,24 @@ export default function Admin() {
                                         <Trash2 className="h-4 w-4" />
                                         Apagar pergunta
                                       </button>
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          const { error } = await supabase
+                                            .from('questions')
+                                            .update({ is_contest_highlight: !question.is_contest_highlight })
+                                            .eq('id', question.id);
+                                          if (error) alert(error.message);
+                                          else fetchManagementContent(managementArea);
+                                        }}
+                                        className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ${question.is_contest_highlight
+                                          ? 'bg-amber-100 text-amber-700'
+                                          : 'bg-slate-100 text-slate-600'
+                                          }`}
+                                      >
+                                        <Sparkles className="h-4 w-4" />
+                                        {question.is_contest_highlight ? 'Destaque Concurso' : 'Marcar Destaque'}
+                                      </button>
                                     </div>
                                   </div>
                                 ))
@@ -1378,6 +1399,20 @@ export default function Admin() {
                     </select>
                   </div>
                 </div>
+
+                <label className="flex items-center gap-3 p-4 rounded-2xl border border-amber-100 bg-amber-50/30 cursor-pointer hover:bg-amber-50 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={genContestHighlight}
+                    onChange={(e) => setGenContestHighlight(e.target.checked)}
+                    className="w-5 h-5 rounded-lg border-2 border-amber-200 text-amber-500 focus:ring-amber-200"
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-black text-amber-900 leading-none">Destaque Especial Concurso</span>
+                    <span className="text-[10px] font-bold text-amber-700/60 uppercase tracking-widest mt-1">Marcar estas questões para o simulado do edital</span>
+                  </div>
+                  <Sparkles className="w-5 h-5 text-amber-400 ml-auto" />
+                </label>
 
                 <div>
                   <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 ml-1">Contexto Adicional (PDF/Texto)</label>

@@ -142,60 +142,91 @@ export default function Simulation() {
   const bootSimulationSession = async (difficulty: DifficultyPreference) => {
     // Safety check: force medium if non-premium tries to access hard
     const safeDifficulty = !hasPremiumAccess && difficulty === 'hard' ? 'medium' : difficulty;
+    const sessionType = searchParams.get('type');
 
-    if (!profile?.selected_area_id) return;
+    if (!profile?.selected_area_id && !sessionType) return;
 
     setLoading(true);
 
     try {
-      const { data: topics } = await supabase
-        .from('topics')
-        .select('id')
-        .eq('area_id', profile.selected_area_id);
+      let qData: any[] = [];
 
-      if (!topics || topics.length === 0) {
-        alert('Ainda não existem tópicos cadastrados para a sua área.');
-        navigate('/simulation', { replace: true });
-        return;
-      }
+      if (sessionType && ['legis_geral', 'etica_deon', 'simulado_geral'].includes(sessionType)) {
+        // Modo Concurso Especializado
+        let query = supabase
+          .from('questions')
+          .select(`
+            id, content, difficulty, topic_id, is_contest_highlight,
+            alternatives (id, content, is_correct),
+            question_explanations (content),
+            topics!inner (area_id, name)
+          `)
+          .eq('is_contest_highlight', true);
 
-      const topicIds = topics.map((topic) => topic.id);
-      let query = supabase
-        .from('questions')
-        .select(
+        if (sessionType === 'legis_geral') {
+          query = query.eq('topics.name', 'Legislação Geral');
+        } else if (sessionType === 'etica_deon') {
+          query = query.eq('topics.name', 'Ética e Deontologia');
+        } else {
+          // simulado_geral: mistura tudo que é destaque de concurso, mas prioriza a área do usuário + legislação
+          // Para simplificar agora, pegamos todos os destaques de concurso
+        }
+
+        const { data, error } = await query.limit(200);
+        if (error) throw error;
+        qData = data || [];
+      } else {
+        // Fluxo Normal por Área do usuário
+        const { data: topics } = await supabase
+          .from('topics')
+          .select('id')
+          .eq('area_id', profile?.selected_area_id);
+
+        if (!topics || topics.length === 0) {
+          alert('Ainda não existem tópicos cadastrados para a sua área.');
+          navigate('/simulation', { replace: true });
+          return;
+        }
+
+        const topicIds = topics.map((topic) => topic.id);
+        let query = supabase
+          .from('questions')
+          .select(
+            `
+            id, content, difficulty, topic_id,
+            alternatives (id, content, is_correct),
+            question_explanations (content)
           `
-          id, content, difficulty, topic_id,
-          alternatives (id, content, is_correct),
-          question_explanations (content)
-        `
-        )
-        .in('topic_id', topicIds)
-        .limit(240);
+          )
+          .in('topic_id', topicIds)
+          .limit(240);
 
-      if (safeDifficulty !== 'mixed') {
-        query = query.eq('difficulty', safeDifficulty);
+        if (safeDifficulty !== 'mixed') {
+          query = query.eq('difficulty', safeDifficulty);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        qData = data || [];
       }
-
-      const { data: qData, error: qError } = await query;
-
-      if (qError) throw qError;
 
       if (qData && qData.length > 0) {
         resetSimulationSession();
-        const selectedQuestions = prepareQuestionSet(pickQuestionsForSession(qData, 30, difficulty));
+        const count = sessionType === 'simulado_geral' ? 50 : 30;
+        const selectedQuestions = prepareQuestionSet(pickQuestionsForSession(qData, count, difficulty));
         setQuestions(selectedQuestions);
         setSessionStartedAt(Date.now());
         setShowIntro(true);
 
-        // Pre-register the attempt for real-time monitoring
+        // Pre-register the attempt
         const { data: attempt } = await supabase
           .from('quiz_attempts')
           .insert({
-            user_id: profile.id,
-            area_id: profile.selected_area_id,
+            user_id: profile?.id,
+            area_id: profile?.selected_area_id || qData[0]?.topics?.area_id,
             total_questions: selectedQuestions.length,
             is_completed: false,
-            package: profile.role || 'free',
+            package: profile?.role || 'free',
           })
           .select('id')
           .single();
@@ -204,14 +235,14 @@ export default function Simulation() {
           setCurrentAttemptId(attempt.id);
         }
 
-        // Add to activity_logs for immediate "Action Log" visibility
         try {
           await supabase.from('activity_logs').insert({
-            user_id: profile.id,
+            user_id: profile?.id,
             activity_type: 'started_simulation',
             activity_metadata: {
-              area_name: profile.selected_area_id ? areas.find(a => a.id === profile.selected_area_id)?.name : 'N/A',
-              is_live: true
+              area_name: sessionType ? 'Especial Concurso' : (profile?.selected_area_id ? areas.find(a => a.id === profile.selected_area_id)?.name : 'N/A'),
+              is_live: true,
+              type: sessionType || 'standard'
             }
           });
         } catch (logErr) {

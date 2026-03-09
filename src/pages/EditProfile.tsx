@@ -17,6 +17,7 @@ export default function EditProfile() {
     const { profile, user, signOut, refreshProfile } = useAuthStore();
     const navigate = useNavigate();
     const [fullName, setFullName] = useState(profile?.full_name || '');
+    const [goal, setGoal] = useState(profile?.goal || '');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
@@ -37,6 +38,7 @@ export default function EditProfile() {
                 .update({
                     full_name: fullName,
                     avatar_style: selectedAvatarColor,
+                    goal: goal,
                 })
                 .eq('id', profile.id);
 
@@ -111,6 +113,21 @@ export default function EditProfile() {
                                 onChange={(e) => setFullName(e.target.value)}
                                 className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-sky-400 focus:bg-white font-medium"
                             />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 mb-1">Qual o seu objetivo principal?</label>
+                            <select
+                                value={goal}
+                                onChange={(e) => setGoal(e.target.value)}
+                                className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-sky-400 focus:bg-white font-medium appearance-none"
+                            >
+                                <option value="" disabled>Selecione um foco</option>
+                                <option value="Passar no concurso público">Passar no concurso público (MINSA)</option>
+                                <option value="Reciclagem de conhecimentos">Reciclagem de conhecimentos (Pós-graduação)</option>
+                                <option value="Aprender conceitos fundamentais">Aprender conceitos fundamentais (Estudante)</option>
+                                <option value="Outro">Outro</option>
+                            </select>
                         </div>
 
                         <div>
