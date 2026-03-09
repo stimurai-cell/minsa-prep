@@ -169,25 +169,36 @@ export default function Social() {
 
                         {searchResults.length > 0 && (
                             <div className="mt-2 bg-white border-2 border-slate-100 rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
-                                {searchResults.map(user => (
-                                    <div key={user.id} className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0">
-                                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/profile/${user.id}`)}>
-                                            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500">
-                                                {user.full_name?.charAt(0)}
+                                {searchResults.map(user => {
+                                    const isFollowing = friends.some(f => f.id === user.id);
+                                    return (
+                                        <div key={user.id} className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0">
+                                            <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/profile/${user.id}`)}>
+                                                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500">
+                                                    {user.full_name?.charAt(0)}
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-slate-900">{user.full_name}</p>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{user.total_xp} XP</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="font-bold text-slate-900">{user.full_name}</p>
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{user.total_xp} XP</p>
-                                            </div>
+                                            {isFollowing ? (
+                                                <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-500 rounded-xl text-xs font-black uppercase tracking-widest">
+                                                    <UserCheck className="w-4 h-4" />
+                                                    Seguindo
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => handleFollow(user.id)}
+                                                    className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2"
+                                                >
+                                                    <UserPlus className="w-4 h-4" />
+                                                    Seguir
+                                                </button>
+                                            )}
                                         </div>
-                                        <button
-                                            onClick={() => handleFollow(user.id)}
-                                            className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors shadow-sm"
-                                        >
-                                            Seguir
-                                        </button>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

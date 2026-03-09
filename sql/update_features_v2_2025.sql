@@ -157,3 +157,27 @@ DROP TRIGGER IF EXISTS trigger_activity_to_feed ON public.activity_logs;
 CREATE TRIGGER trigger_activity_to_feed
     AFTER INSERT ON public.activity_logs
     FOR EACH ROW EXECUTE FUNCTION public.create_feed_item_from_activity();
+
+-- 8. Notificações de Seguidores
+CREATE OR REPLACE FUNCTION public.notify_new_follower()
+RETURNS TRIGGER AS $$
+DECLARE
+    follower_name TEXT;
+BEGIN
+    SELECT full_name INTO follower_name FROM public.profiles WHERE id = NEW.follower_id;
+    INSERT INTO public.user_notifications (user_id, title, body, type, link)
+    VALUES (
+        NEW.following_id, 
+        'Novo Seguidor! 👥', 
+        follower_name || ' começou a seguir você no MINSA Prep.',
+        'personal',
+        '/profile/' || NEW.follower_id
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trigger_notify_follower ON public.user_follows;
+CREATE TRIGGER trigger_notify_follower
+    AFTER INSERT ON public.user_follows
+    FOR EACH ROW EXECUTE FUNCTION public.notify_new_follower();
