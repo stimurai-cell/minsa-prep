@@ -25,6 +25,12 @@ import {
   ShieldCheck,
   Clock,
   Sparkles,
+  LogOut,
+  User,
+  Shield,
+  Layout as LayoutIcon,
+  Activity,
+  LifeBuoy
 } from 'lucide-react';
 import AdminBackup from '../components/AdminBackup';
 import AdminNews from '../components/AdminNews';
@@ -813,50 +819,84 @@ export default function Admin() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        <button
-          onClick={() => changeTab('dashboard')}
-          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'dashboard' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
-        >
-          Visão Geral
-        </button>
-        <button
-          onClick={() => changeTab('payments')}
-          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'payments' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
-        >
-          Pagamentos {stats.pendingPayments > 0 ? `(${stats.pendingPayments})` : ''}
-        </button>
-        <button
-          onClick={() => changeTab('content')}
-          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'content' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
-        >
-          Conteudo e IA
-        </button>
-        <button
-          onClick={() => changeTab('monitor')}
-          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'monitor' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
-        >
-          Monitorização
-        </button>
-        <button
-          onClick={() => changeTab('support')}
-          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'support' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
-        >
-          Suporte {supportMessages.filter(m => m.status === 'open').length > 0 ? `(${supportMessages.filter(m => m.status === 'open').length})` : ''}
-        </button>
-        <button
-          onClick={() => changeTab('backup')}
-          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'backup' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
-        >
-          Backup
-        </button>
-        <button
-          onClick={() => changeTab('social')}
-          className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'social' ? 'bg-emerald-600 text-white shadow-[0_18px_40px_-28px_rgba(5,150,105,0.55)]' : 'bg-white text-gray-500 ring-1 ring-gray-200'}`}
-        >
-          Notificações e Feed
-        </button>
+      {/* Tabs Reorganizadas por Categorias */}
+      <div className="space-y-4">
+        {/* Gestão e Estrutura */}
+        <div>
+          <p className="mb-2 ml-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Gestão e Operações</p>
+          <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            <button
+              onClick={() => changeTab('dashboard')}
+              className={`flex shrink-0 items-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50'}`}
+            >
+              <LayoutIcon className="h-4 w-4" />
+              Geral
+            </button>
+            <button
+              onClick={() => changeTab('payments')}
+              className={`flex shrink-0 items-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition-all ${activeTab === 'payments' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50'}`}
+            >
+              <Zap className="h-4 w-4" />
+              Pagamentos {stats.pendingPayments > 0 && <span className="ml-1 rounded-md bg-amber-400 px-1.5 py-0.5 text-[10px] text-slate-900">{stats.pendingPayments}</span>}
+            </button>
+            <button
+              onClick={() => changeTab('content')}
+              className={`flex shrink-0 items-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition-all ${activeTab === 'content' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50'}`}
+            >
+              <FolderTree className="h-4 w-4" />
+              Conteúdo & IA
+            </button>
+          </div>
+        </div>
+
+        {/* Monitorização e Suporte */}
+        <div>
+          <p className="mb-2 ml-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Monitorização e Suporte</p>
+          <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            <button
+              onClick={() => changeTab('monitor')}
+              className={`flex shrink-0 items-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition-all ${activeTab === 'monitor' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50'}`}
+            >
+              <Activity className="h-4 w-4" />
+              Real-time
+            </button>
+            <button
+              onClick={() => changeTab('support')}
+              className={`flex shrink-0 items-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition-all ${activeTab === 'support' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50'}`}
+            >
+              <LifeBuoy className="h-4 w-4" />
+              Suporte {supportMessages.filter(m => m.status === 'open').length > 0 && <span className="ml-1 rounded-md bg-sky-400 px-1.5 py-0.5 text-[10px] text-white text-white">{supportMessages.filter(m => m.status === 'open').length}</span>}
+            </button>
+            <button
+              onClick={() => changeTab('social')}
+              className={`flex shrink-0 items-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition-all ${activeTab === 'social' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50'}`}
+            >
+              <Megaphone className="h-4 w-4" />
+              News & Alertas
+            </button>
+          </div>
+        </div>
+
+        {/* Sistema e Conta */}
+        <div>
+          <p className="mb-2 ml-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Sistema e Conta</p>
+          <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            <button
+              onClick={() => changeTab('backup')}
+              className={`flex shrink-0 items-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition-all ${activeTab === 'backup' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50'}`}
+            >
+              <Database className="h-4 w-4" />
+              Backup
+            </button>
+            <button
+              onClick={() => changeTab('profile')}
+              className={`flex shrink-0 items-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition-all ${activeTab === 'profile' ? 'bg-emerald-600 text-white shadow-lg border-emerald-500' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100'}`}
+            >
+              <User className="h-4 w-4" />
+              O meu Perfil
+            </button>
+          </div>
+        </div>
       </div>
 
       <main className="space-y-6">
@@ -1871,6 +1911,83 @@ export default function Admin() {
           <div className="space-y-6 animate-in fade-in duration-300">
             <h2 className="text-2xl font-black text-gray-900 border-b border-gray-100 pb-4">Gestão Social e Alertas</h2>
             <AdminNews />
+          </div>
+        )}
+
+        {activeTab === 'profile' && (
+          <div className="animate-in fade-in duration-500 space-y-6">
+            <div className="rounded-[2.5rem] border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/40 relative overflow-hidden">
+              <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
+                <div className={`relative w-40 h-40 shrink-0 rounded-[3rem] shadow-2xl flex items-center justify-center text-7xl font-black border-4 border-white overflow-hidden ${!profile?.avatar_url ? (profile?.avatar_style || 'bg-emerald-100 text-emerald-700') : 'bg-white'}`}>
+                  {profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    profile?.full_name?.charAt(0) || 'A'
+                  )}
+                </div>
+
+                <div className="flex-1 text-center md:text-left">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-purple-100 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.25em] text-purple-700 mb-4">
+                    <Shield className="w-3.5 h-3.5" />
+                    Administrador Master
+                  </div>
+                  <h2 className="text-4xl font-black text-slate-900 tracking-tight">{profile?.full_name}</h2>
+                  <p className="mt-2 text-slate-500 font-medium">Logado como <span className="text-slate-900 font-bold">{profile?.role}</span></p>
+
+                  <div className="mt-6 flex flex-wrap justify-center md:justify-start gap-4 text-xs font-bold uppercase tracking-widest">
+                    <div className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
+                      <Clock className="w-4 h-4 text-slate-400" />
+                      Desde {profile?.created_at ? new Date(profile.created_at).toLocaleDateString('pt-PT') : '---'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="shrink-0">
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Tem certeza que deseja sair do painel administrativo?')) {
+                        const { signOut } = useAuthStore.getState();
+                        signOut().then(() => window.location.href = '/login');
+                      }
+                    }}
+                    className="group flex flex-col items-center justify-center gap-2 w-32 h-32 rounded-[2rem] bg-rose-50 border-2 border-rose-100 text-rose-600 hover:bg-rose-600 hover:text-white transition-all shadow-lg shadow-rose-200/50 hover:shadow-rose-500/30"
+                  >
+                    <LogOut className="w-8 h-8 group-hover:scale-110 transition-transform" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Sair Agora</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Background accent */}
+              <div className="absolute right-[-5%] top-[-10%] w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl"></div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-200">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Segurança</p>
+                <p className="text-sm font-medium text-slate-600 mb-6">A sua conta possui acesso total a todos os dados sensíveis, incluindo pagamentos e logs de usuários.</p>
+                <div className="p-4 rounded-xl bg-amber-50 border border-amber-100">
+                  <p className="text-xs font-bold text-amber-800 flex items-center gap-2">
+                    <Shield className="w-4 h-4" />
+                    Proteção Ativa
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-200">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Sessão Atual</p>
+                <p className="text-sm font-medium text-slate-600 mb-2">ID: <span className="text-slate-900 font-mono text-[10px]">{profile?.id}</span></p>
+                <p className="text-sm font-medium text-slate-600">PWA: Instalado</p>
+              </div>
+
+              <div className="bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_100%)] p-6 rounded-[2rem] text-white">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Ajuda Admin</p>
+                <p className="text-sm font-medium text-slate-200 mb-4">Precisa de assistência técnica ou encontrou um bug crítico no painel?</p>
+                <button className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">
+                  Contactar Suporte Dev
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </main>

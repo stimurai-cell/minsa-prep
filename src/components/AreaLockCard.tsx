@@ -34,13 +34,16 @@ export default function AreaLockCard({
     setError('');
 
     try {
-      const { error: updateError } = await supabase
+      const { error: upsertError } = await supabase
         .from('profiles')
-        .update({ selected_area_id: selectedAreaId })
-        .eq('id', user.id);
+        .upsert({
+          id: user.id,
+          selected_area_id: selectedAreaId,
+          full_name: user.user_metadata?.full_name || 'Estudante'
+        }, { onConflict: 'id' });
 
-      if (updateError) {
-        throw updateError;
+      if (upsertError) {
+        throw upsertError;
       }
 
       await refreshProfile(user.id);

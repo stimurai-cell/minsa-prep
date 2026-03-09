@@ -34,6 +34,7 @@ import Leagues from './pages/Leagues';
 import UserProfileView from './pages/UserProfileView';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { RefreshCw } from 'lucide-react';
+import PaymentNotificationListener from './components/PaymentNotificationListener';
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuthStore();
@@ -80,6 +81,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <OfflineSync />
+      <PaymentNotificationListener />
       {needsUpdate && (
         <div className="fixed top-0 left-0 right-0 z-[100] bg-yellow-400 p-2 text-center text-sm font-bold text-slate-900 shadow-lg">
           <div className="flex items-center justify-center gap-2">

@@ -207,7 +207,7 @@ export default function Training() {
         `
         )
         .eq('topic_id', topicId)
-        .limit(80);
+        .limit(20);
 
       if (safeDifficulty !== 'mixed') {
         query = query.eq('difficulty', safeDifficulty);
