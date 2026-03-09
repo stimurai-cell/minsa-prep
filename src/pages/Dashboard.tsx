@@ -23,6 +23,7 @@ import { useAppStore } from '../store/useAppStore';
 import AreaLockCard from '../components/AreaLockCard';
 import { UserPlus, Sparkles, ArrowRight, Award as AwardIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import DailyTasks from '../components/DailyTasks';
 
 const DAILY_TIPS = [
   "Treinar 15 minutos todos os dias gera mais resultado do que estudar 3 horas só no domingo!",
@@ -46,6 +47,7 @@ export default function Dashboard() {
   const [missingGoal, setMissingGoal] = useState('');
   const [savingGoal, setSavingGoal] = useState(false);
   const [freezingStreak, setFreezingStreak] = useState(false);
+  const [lastTaskCount, setLastTaskCount] = useState<number | null>(null);
   const { deferredPrompt, setDeferredPrompt } = useAppStore();
 
   const dailyTip = useMemo(() => {
@@ -139,6 +141,32 @@ export default function Dashboard() {
       })();
     }
   }, [profile?.id]);
+
+  // Daily Tasks Completion check
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    const monitorTasks = async () => {
+      const { getDailyTasksProgress } = await import('../lib/dailyTasks');
+      const tasks = await getDailyTasksProgress(profile.id);
+      const completedNow = tasks.filter(t => t.completed).length;
+
+      if (lastTaskCount !== null && completedNow > lastTaskCount) {
+        // Task completed!
+        if ("Notification" in window && Notification.permission === "granted") {
+          new Notification("Tarefa Concluída! 🎉", {
+            body: "Você deu mais um passo importante na sua preparação. Continue assim!",
+            icon: "https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png"
+          });
+        }
+      }
+      setLastTaskCount(completedNow);
+    };
+
+    monitorTasks();
+    const interval = setInterval(monitorTasks, 30000);
+    return () => clearInterval(interval);
+  }, [profile?.id, lastTaskCount]);
 
   const areaName = useMemo(
     () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Área ainda não definida',
@@ -316,41 +344,14 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.4)] md:p-6">
-          <div className="flex items-center gap-4">
-            <div className="rounded-2xl bg-blue-50 p-3 text-blue-600">
-              <CheckCircle className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-slate-500">Questoes resolvidas</p>
-              <p className="text-3xl font-black text-slate-900">{stats.totalQuestions}</p>
-            </div>
+      <section className="grid gap-6 md:grid-cols-2">
+        <DailyTasks />
+        <div className="rounded-[2rem] border-2 border-dashed border-slate-200 p-8 flex flex-col items-center justify-center text-center bg-slate-50/30">
+          <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4 border border-slate-100">
+            <AwardIcon className="w-8 h-8 text-indigo-400" />
           </div>
-        </div>
-
-        <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.4)] md:p-6">
-          <div className="flex items-center gap-4">
-            <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600">
-              <BarChart2 className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-slate-500">Media geral</p>
-              <p className="text-3xl font-black text-slate-900">{stats.avgScore}%</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.4)] md:p-6">
-          <div className="flex items-center gap-4">
-            <div className="rounded-2xl bg-orange-50 p-3 text-orange-600">
-              <BookOpen className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-slate-500">Área ativa</p>
-              <p className="text-xl font-black text-slate-900">{areaName}</p>
-            </div>
-          </div>
+          <h3 className="text-lg font-black text-slate-800">Mais missões em breve</h3>
+          <p className="text-sm text-slate-500 max-w-[200px] mt-2 font-medium">Continue batendo as suas metas diárias para ganhar emblemas exclusivos.</p>
         </div>
       </section>
 

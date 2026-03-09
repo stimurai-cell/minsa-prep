@@ -24,6 +24,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import AreaLockCard from '../components/AreaLockCard';
 import SessionCelebration from '../components/SessionCelebration';
+import { awardXp as unifiedAwardXp } from '../lib/xp';
 
 type SessionSummary = {
   correctAnswers: number;
@@ -134,9 +135,10 @@ export default function Simulation() {
   const awardXp = async (xpEarned: number) => {
     if (!profile?.id) return;
 
-    const updatedXp = (profile.total_xp || 0) + xpEarned;
-    await supabase.from('profiles').update({ total_xp: updatedXp }).eq('id', profile.id);
-    await refreshProfile(profile.id);
+    const result = await unifiedAwardXp(profile.id, xpEarned, profile.total_xp || 0);
+    if (result.success) {
+      await refreshProfile(profile.id);
+    }
   };
 
   const bootSimulationSession = async (difficulty: DifficultyPreference) => {

@@ -21,6 +21,7 @@ import {
 import { getAlternativeLabel, prepareQuestionSet } from '../lib/quiz';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
+import { awardXp as unifiedAwardXp } from '../lib/xp';
 
 const TIMER_SECONDS = 60;
 
@@ -118,10 +119,11 @@ export default function SpeedMode() {
 
         // Award XP based on score
         if (profile?.id && score > 0) {
-            const xp = score * 2; // 2 XP per correct answer in speed mode
-            const updatedXp = (profile.total_xp || 0) + xp;
-            await supabase.from('profiles').update({ total_xp: updatedXp }).eq('id', profile.id);
-            await refreshProfile(profile.id);
+            const xpAmount = score * 2; // 2 XP per correct answer in speed mode
+            const result = await unifiedAwardXp(profile.id, xpAmount, profile.total_xp || 0);
+            if (result.success) {
+                await refreshProfile(profile.id);
+            }
         }
     }, [score, bestStreak, profile, refreshProfile, stopTTS]);
 
