@@ -18,6 +18,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Practice from './pages/Practice';
 import Social from './pages/Social';
+import Profile from './pages/Profile';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { RefreshCw } from 'lucide-react';
 
@@ -86,6 +87,7 @@ export default function App() {
           <Route path="speed-mode" element={<SpeedMode />} />
           <Route path="practice" element={<Practice />} />
           <Route path="social" element={<Social />} />
+          <Route path="profile" element={<Profile />} />
           <Route path="ranking" element={<Ranking />} />
           <Route path="premium" element={<Premium />} />
           <Route path="admin" element={<Admin />} />

@@ -51,11 +51,12 @@ export default function Layout() {
   ];
 
   const studentLinks = [
-    { to: '/dashboard', label: 'Início', icon: Home },
-    { to: '/practice', label: 'Pratique', icon: Dumbbell },
-    { to: '/social', label: 'Amigos', icon: UsersRound },
-    { to: '/ranking', label: 'Ranking', icon: Award },
-    { to: '/premium', label: 'Loja', icon: Crown },
+    { to: '/dashboard', label: 'Início', icon: Home, activeColor: 'text-amber-500', activeBg: 'bg-amber-100', activeBorder: 'border-amber-200' },
+    { to: '/practice', label: 'Pratique', icon: Dumbbell, activeColor: 'text-sky-500', activeBg: 'bg-sky-100', activeBorder: 'border-sky-200' },
+    { to: '/social', label: 'Amigos', icon: UsersRound, activeColor: 'text-rose-500', activeBg: 'bg-rose-100', activeBorder: 'border-rose-200' },
+    { to: '/ranking', label: 'Ranking', icon: Award, activeColor: 'text-indigo-500', activeBg: 'bg-indigo-100', activeBorder: 'border-indigo-200' },
+    { to: '/profile', label: 'Perfil', icon: UserRound, activeColor: 'text-teal-500', activeBg: 'bg-teal-100', activeBorder: 'border-teal-200' },
+    { to: '/premium', label: 'Loja', icon: Crown, activeColor: 'text-yellow-500', activeBg: 'bg-yellow-100', activeBorder: 'border-yellow-200' },
   ];
 
   const links = profile?.role === 'admin' ? adminLinks : studentLinks;
@@ -72,17 +73,23 @@ export default function Layout() {
     return location.pathname === link.to;
   };
 
-  const navClass = (isActive: boolean, tone: 'student' | 'admin') =>
-    [
-      'flex items-center gap-4 rounded-2xl px-5 py-3.5 text-base font-bold transition-all border-2',
-      tone === 'admin'
-        ? isActive
+  const navClass = (isActive: boolean, tone: 'student' | 'admin', link?: any) => {
+    if (tone === 'admin') {
+      return [
+        'flex items-center gap-4 rounded-2xl px-5 py-3.5 text-base font-bold transition-all border-2',
+        isActive
           ? 'bg-slate-900 border-slate-900 text-white shadow-md'
           : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-        : isActive
-          ? 'bg-emerald-100 border-emerald-200 text-emerald-600 shadow-sm shadow-emerald-100/50'
-          : 'border-transparent text-slate-500 hover:bg-emerald-50 hover:text-emerald-500',
+      ].join(' ');
+    }
+
+    return [
+      'flex items-center gap-4 rounded-2xl px-5 py-3.5 text-base font-bold transition-all border-2',
+      isActive
+        ? `${link.activeBg} ${link.activeBorder} ${link.activeColor} shadow-sm`
+        : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900',
     ].join(' ');
+  };
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#eef7f1_52%,#f6fbf7_100%)] text-slate-900">
@@ -108,8 +115,11 @@ export default function Layout() {
               const isActive = getLinkActive(link);
 
               return (
-                <NavLink key={link.to} to={link.to} className={navClass(isActive, profile?.role === 'admin' ? 'admin' : 'student')}>
-                  <Icon className={`h-6 w-6 ${isActive && profile?.role !== 'admin' ? 'text-emerald-500' : ''}`} />
+                <NavLink key={link.to} to={link.to} className={navClass(isActive, profile?.role === 'admin' ? 'admin' : 'student', link)}>
+                  <Icon
+                    className={`h-6 w-6 ${isActive && profile?.role !== 'admin' ? (link as any).activeColor : ''}`}
+                    fill={isActive ? "currentColor" : "none"}
+                  />
                   <span>{link.label}</span>
                 </NavLink>
               );
@@ -268,11 +278,14 @@ export default function Layout() {
                     ? 'bg-slate-900 text-white'
                     : 'text-slate-400'
                   : isActive
-                    ? 'text-emerald-600 bg-emerald-50 border-2 border-emerald-200'
-                    : 'text-slate-400 border-2 border-transparent hover:bg-emerald-50/50'
+                    ? `${(link as any).activeColor} ${(link as any).activeBg} border-2 ${(link as any).activeBorder}`
+                    : 'text-slate-400 border-2 border-transparent hover:bg-slate-50'
                   }`}
               >
-                <Icon className={`h-6 w-6 ${isActive && profile?.role !== 'admin' ? 'text-emerald-500' : ''}`} />
+                <Icon
+                  className={`h-6 w-6 ${isActive && profile?.role !== 'admin' ? (link as any).activeColor : ''}`}
+                  fill={isActive ? "currentColor" : "none"}
+                />
                 <span className="truncate">{link.label}</span>
               </NavLink>
             );
