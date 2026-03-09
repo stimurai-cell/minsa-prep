@@ -1,5 +1,6 @@
 -- ==========================================================
 -- MINSA Prep: Ajustes Finais no Banco de Dados (Supabase)
+-- Versão Corrigida (Fix RLS Syntax)
 -- ==========================================================
 
 -- 1. BUSCA DE AMIGOS (SOCIAL)
@@ -40,9 +41,9 @@ CREATE POLICY "Anyone can upload an avatar" ON storage.objects
 -- Permitir que o usuário atualize seu próprio avatar (Update)
 DROP POLICY IF EXISTS "Users can update their own avatar" ON storage.objects;
 CREATE POLICY "Users can update their own avatar" ON storage.objects
-  FOR UPDATE TO authenticated WITH CHECK (bucket_id = 'avatars');
+  FOR UPDATE TO authenticated USING (bucket_id = 'avatars') WITH CHECK (bucket_id = 'avatars');
 
 -- Permitir que o usuário delete seu próprio avatar (Delete)
 DROP POLICY IF EXISTS "Users can delete their own avatar" ON storage.objects;
 CREATE POLICY "Users can delete their own avatar" ON storage.objects
-  FOR DELETE TO authenticated WITH CHECK (bucket_id = 'avatars');
+  FOR DELETE TO authenticated USING (bucket_id = 'avatars');
