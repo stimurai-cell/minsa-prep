@@ -71,7 +71,7 @@ type PaymentRequest = {
 };
 
 export default function Admin() {
-  const { profile } = useAuthStore();
+  const { profile, signOut } = useAuthStore();
   const { areas, topics, fetchAreas, fetchTopics } = useAppStore();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -1945,10 +1945,10 @@ export default function Admin() {
 
                 <div className="shrink-0">
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (window.confirm('Tem certeza que deseja sair do painel administrativo?')) {
-                        const { signOut } = useAuthStore.getState();
-                        signOut().then(() => window.location.href = '/login');
+                        await signOut();
+                        window.location.href = '/login';
                       }
                     }}
                     className="group flex flex-col items-center justify-center gap-2 w-32 h-32 rounded-[2rem] bg-rose-50 border-2 border-rose-100 text-rose-600 hover:bg-rose-600 hover:text-white transition-all shadow-lg shadow-rose-200/50 hover:shadow-rose-500/30"
