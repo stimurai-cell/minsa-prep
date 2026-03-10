@@ -1,4 +1,4 @@
-const CACHE_NAME = 'minsa-prep-v1.0.5';
+const CACHE_NAME = 'minsa-prep-v1.0.6';
 const DATA_CACHE_NAME = 'minsa-prep-data-v1';
 
 const ASSETS_TO_CACHE = [
@@ -34,6 +34,11 @@ self.addEventListener('fetch', (event) => {
     const { request } = event;
     const { url, method } = request;
 
+    // Não interceptar requests push/notificações do supabase realtime
+    if (url.includes('realtime') || url.includes('supabase.co/realtime')) {
+        return;
+    }
+
     // Caching de Dados da API (GET)
     if (url.includes('supabase.co') || url.includes('/api/')) {
         if (method === 'GET') {
@@ -66,25 +71,54 @@ self.addEventListener('fetch', (event) => {
     );
 });
 
-// Mensagens Push
+// ─── Push Notifications ──────────────────────────────────────────────────────
 self.addEventListener('push', (event) => {
-    const data = event.data ? event.data.json() : {
-        title: 'MINSA Prep',
-        body: 'Continue seus estudos para a aprovação!'
-    };
+    let data = { title: 'MINSA Prep', body: 'Tens uma nova notificação!', url: '/dashboard' };
+
+    if (event.data) {
+        try { data = { ...data, ...event.data.json() }; }
+        catch (e) { data.body = event.data.text() || data.body; }
+    }
 
     const options = {
         body: data.body,
-        icon: 'https://res.cloudinary.com/dzvusz0u4/image/upload/v1773045071/fgfjriydrec3rytqbodo.png',
-        badge: 'https://res.cloudinary.com/dzvusz0u4/image/upload/v1773045071/fgfjriydrec3rytqbodo.png',
-        vibrate: [100, 50, 100],
-        data: { url: data.url || '/dashboard' }
+        icon: 'https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png',
+        badge: 'https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png',
+        vibrate: [200, 100, 200],
+        requireInteraction: false,
+        data: { url: data.url || '/dashboard' },
+        actions: [
+            { action: 'open', title: 'Abrir App' },
+            { action: 'close', title: 'Fechar' }
+        ]
     };
 
-    event.waitUntil(self.registration.showNotification(data.title, options));
+    event.waitUntil(
+        self.registration.showNotification(data.title, options)
+    );
 });
 
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    event.waitUntil(clients.openWindow(event.notification.data.url));
+
+    if (event.action === 'close') return;
+
+    const urlToOpen = event.notification.data?.url || '/dashboard';
+
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+            // Se o app já está aberto, focar nele e navegar
+            for (const client of clientList) {
+                if ('focus' in client) {
+                    client.focus();
+                    if ('navigate' in client) client.navigate(urlToOpen);
+                    return;
+                }
+            }
+            // Senão abrir nova janela
+            if (clients.openWindow) {
+                return clients.openWindow(urlToOpen);
+            }
+        })
+    );
 });

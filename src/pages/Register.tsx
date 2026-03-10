@@ -12,7 +12,6 @@ export default function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [areaId, setAreaId] = useState('');
   const [prepTime, setPrepTime] = useState('1');
-  const [studentNumber, setStudentNumber] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [goal, setGoal] = useState('');
   const [loading, setLoading] = useState(false);
@@ -30,7 +29,6 @@ export default function Register() {
     const profilePayload = {
       id: userId,
       full_name: fullName,
-      student_number: studentNumber || null,
       phone: phoneNumber,
       selected_area_id: areaId || null,
       preparation_time_months: parseInt(prepTime, 10),
@@ -245,16 +243,6 @@ export default function Register() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700">Número do estudante (opcional)</label>
-              <input
-                type="text"
-                value={studentNumber}
-                onChange={(e) => setStudentNumber(e.target.value)}
-                className="mt-1 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
-              />
-            </div>
-
-            <div>
               <label className="block text-sm font-medium text-slate-700">Qual o seu foco principal?</label>
               <select
                 required
@@ -270,19 +258,21 @@ export default function Register() {
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Tempo de preparação</label>
-              <select
-                required
-                value={prepTime}
-                onChange={(e) => setPrepTime(e.target.value)}
-                className="mt-1 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
-              >
-                <option value="1">1 Mês (Mensal - Intensivo)</option>
-                <option value="3">3 Meses (Trimestral - Recomendado)</option>
-                <option value="6">6 Meses (Semestral - Completo)</option>
-              </select>
-            </div>
+            {goal === 'Passar no concurso publico' && (
+              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                <label className="block text-sm font-medium text-slate-700">Tempo de preparação</label>
+                <select
+                  required
+                  value={prepTime}
+                  onChange={(e) => setPrepTime(e.target.value)}
+                  className="mt-1 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+                >
+                  <option value="1">1 Mês (Mensal - Intensivo)</option>
+                  <option value="3">3 Meses (Trimestral - Recomendado)</option>
+                  <option value="6">6 Meses (Semestral - Completo)</option>
+                </select>
+              </div>
+            )}
 
             <button
               type="submit"

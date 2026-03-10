@@ -16,11 +16,15 @@ export const getDifficultyLabel = (difficulty?: string) => {
 export const getRoleLabel = (role?: string) => {
   switch (role) {
     case 'admin':
-      return 'Administrador';
+      return 'Administrador (MAX)';
+    case 'elite':
+      return 'Elite (Aprovação)';
     case 'premium':
-      return 'Premium';
+      return 'Premium (Preparação Real)';
+    case 'basic':
+      return 'Basic (Estudante)';
     case 'free':
-      return 'Estudante';
+      return 'Gratuito';
     default:
       return 'Utilizador';
   }

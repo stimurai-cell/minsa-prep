@@ -58,7 +58,14 @@ export default function Profile() {
     // We get the selected color from profile or provide a fallback color.
     // Ensure we can extract background color reliably
     const selectedColorClass = profile?.avatar_style || AVATAR_COLORS[1];
-    const userRole = profile?.role === 'premium' ? 'Premium' : profile?.role === 'admin' ? 'MAX' : 'Free';
+    const roleLabels: Record<string, string> = {
+        'free': 'Free',
+        'basic': 'Basic',
+        'premium': 'Premium',
+        'elite': 'Elite',
+        'admin': 'MAX'
+    };
+    const userRoleLabel = roleLabels[profile?.role || 'free'] || 'Free';
 
     // Just mapping the selected bg for the header
     const headerBgMap: Record<string, string> = {
@@ -90,14 +97,24 @@ export default function Profile() {
                     </div>
                 </div>
 
-                {userRole === 'MAX' && (
+                {profile?.role === 'admin' && (
                     <div className="absolute right-6 top-20 bg-black text-white px-3 py-1 font-black text-sm rounded-lg uppercase tracking-widest z-10 border-2 border-transparent shadow-[0_4px_0_0_rgba(0,0,0,1)]">
                         MAX
                     </div>
                 )}
-                {userRole === 'Premium' && (
+                {profile?.role === 'elite' && (
+                    <div className="absolute right-6 top-20 bg-purple-600 text-white px-3 py-1 font-black text-sm rounded-lg uppercase tracking-widest z-10 shadow-[0_4px_0_0_#4c1d95]">
+                        ELITE
+                    </div>
+                )}
+                {profile?.role === 'premium' && (
                     <div className="absolute right-6 top-20 bg-yellow-400 text-yellow-900 px-3 py-1 font-black text-sm rounded-lg uppercase tracking-widest z-10 shadow-[0_4px_0_0_#ca8a04]">
                         PREMIUM
+                    </div>
+                )}
+                {profile?.role === 'basic' && (
+                    <div className="absolute right-6 top-20 bg-emerald-500 text-white px-3 py-1 font-black text-sm rounded-lg uppercase tracking-widest z-10 shadow-[0_4px_0_0_#065f46]">
+                        BASIC
                     </div>
                 )}
 

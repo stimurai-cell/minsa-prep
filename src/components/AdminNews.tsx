@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { sendPushNotification } from '../lib/pushNotifications';
 import {
     Send,
     Megaphone,
@@ -42,7 +43,7 @@ export default function AdminNews() {
             setSearchingUsers(true);
             const { data } = await supabase
                 .from('profiles')
-                .select('id, full_name, student_number')
+                .select('id, full_name')
                 .ilike('full_name', `%${userSearchQuery}%`)
                 .limit(8);
             setUserSearchResults(data || []);
@@ -94,6 +95,14 @@ export default function AdminNews() {
             });
 
             if (error) throw error;
+
+            // Disparar push notification real nos dispositivos Android
+            await sendPushNotification({
+                title: notifTitle,
+                body: notifBody,
+                url: '/news',
+                userId: broadcast ? undefined : selectedUser.id,
+            });
 
             alert(`✅ Notificação enviada${broadcast ? ' para todos' : ` para ${selectedUser.full_name}`}!`);
             setNotifTitle('');
@@ -236,7 +245,6 @@ export default function AdminNews() {
                                 <div className="flex items-center justify-between bg-amber-50 border-2 border-amber-200 rounded-2xl px-4 py-3">
                                     <div>
                                         <p className="text-sm font-black text-slate-900">{selectedUser.full_name}</p>
-                                        {selectedUser.student_number && <p className="text-xs text-slate-400 font-bold">Nº {selectedUser.student_number}</p>}
                                     </div>
                                     <button
                                         onClick={() => { setSelectedUser(null); setUserSearchQuery(''); }}
@@ -270,7 +278,6 @@ export default function AdminNews() {
                                                         className="w-full text-left px-4 py-3 hover:bg-amber-50 transition-colors flex items-center justify-between border-b border-slate-50 last:border-0"
                                                     >
                                                         <span className="text-sm font-black text-slate-900">{u.full_name}</span>
-                                                        {u.student_number && <span className="text-xs text-slate-400 font-bold">Nº {u.student_number}</span>}
                                                     </button>
                                                 ))
                                             )}

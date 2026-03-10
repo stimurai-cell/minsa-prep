@@ -70,6 +70,7 @@ export default function Premium() {
   const [successMessage, setSuccessMessage] = useState('');
   const [latestRequest, setLatestRequest] = useState<PaymentRequest | null>(null);
   const [copiedBank, setCopiedBank] = useState<string | null>(null);
+  const [prepTime, setPrepTime] = useState('3');
   const copyToClipboard = async (val: string) => {
     try {
       await navigator.clipboard.writeText(val);
@@ -81,7 +82,10 @@ export default function Premium() {
   };
   const [searchParams] = useSearchParams();
 
-  const selectedPlan = paidPlans.find((plan) => plan.id === selectedPlanId) || paidPlans[0];
+  const selectedPlan = useMemo(() => {
+    const all = [...premiumPlans, ...extraPackages];
+    return (all.find((plan) => plan.id === selectedPlanId) || premiumPlans[1]) as any;
+  }, [selectedPlanId]);
 
   useEffect(() => {
     setPayerName(profile?.full_name || '');
@@ -141,9 +145,9 @@ export default function Premium() {
         user_id: profile.id,
         payer_name: payerName.trim(),
         plan_id: selectedPlan.id,
-        plan_name: `${selectedPlan.name} (${selectedPeriod})`,
-        amount_kwanza: selectedPlan.prices[selectedPeriod].amount,
-        duration_months: selectedPeriod === 'monthly' ? 1 : selectedPeriod === 'quarterly' ? 3 : 6,
+        plan_name: selectedPlan.id === 'pacote_concurso' ? selectedPlan.name : `${selectedPlan.name} (${selectedPeriod})`,
+        amount_kwanza: selectedPlan.id === 'pacote_concurso' ? selectedPlan.priceAmount : selectedPlan.prices[selectedPeriod].amount,
+        duration_months: selectedPlan.id === 'pacote_concurso' ? parseInt(prepTime) : (selectedPeriod === 'monthly' ? 1 : selectedPeriod === 'quarterly' ? 3 : 6),
         payment_reference: paymentReference.trim(),
         proof_url: publicUrlData.publicUrl,
         proof_storage_path: filePath,
@@ -247,8 +251,8 @@ export default function Premium() {
             <div
               key={plan.id}
               className={`rounded-[1.8rem] border p-5 ${plan.highlight
-                  ? 'border-amber-300 bg-[linear-gradient(180deg,#fff4d6_0%,#ffffff_100%)] shadow-[0_24px_70px_-44px_rgba(245,158,11,0.45)]'
-                  : 'border-slate-200 bg-slate-50'
+                ? 'border-amber-300 bg-[linear-gradient(180deg,#fff4d6_0%,#ffffff_100%)] shadow-[0_24px_70px_-44px_rgba(245,158,11,0.45)]'
+                : 'border-slate-200 bg-slate-50'
                 }`}
             >
               <div className="flex items-center justify-between gap-3">
@@ -278,8 +282,8 @@ export default function Premium() {
                 type="button"
                 onClick={() => selectPlanAndScroll(plan.id)}
                 className={`mt-5 w-full rounded-2xl px-4 py-4 text-sm font-black uppercase tracking-[0.12em] transition ${plan.highlight
-                    ? 'bg-[linear-gradient(90deg,#facc15_0%,#34d399_100%)] text-slate-950 hover:opacity-90'
-                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+                  ? 'bg-[linear-gradient(90deg,#facc15_0%,#34d399_100%)] text-slate-950 hover:opacity-90'
+                  : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
                   }`}
               >
                 Pedir ativação deste plano
@@ -307,7 +311,7 @@ export default function Premium() {
                 ))}
               </ul>
               <button
-                onClick={() => alert('Entrar em contacto com admin para adicionar pacotes adicionais ou aguardar a próxima atualização que automatizará esto.')}
+                onClick={() => selectPlanAndScroll(pkg.id)}
                 className="w-full rounded-xl bg-white border border-sky-200 py-2 text-sm font-bold text-sky-700 hover:bg-sky-100 transition"
               >
                 Solicitar Pacote
@@ -384,8 +388,8 @@ export default function Premium() {
                   type="button"
                   onClick={() => setSelectedPlanId(plan.id)}
                   className={`rounded-[1.4rem] border px-4 py-4 text-left transition ${selectedPlanId === plan.id
-                      ? 'border-emerald-500 bg-emerald-50'
-                      : 'border-slate-200 bg-slate-50'
+                    ? 'border-emerald-500 bg-emerald-50'
+                    : 'border-slate-200 bg-slate-50'
                     }`}
                 >
                   <p className="text-lg font-black text-slate-900">{plan.name}</p>
@@ -428,6 +432,22 @@ export default function Premium() {
                   />
                 </label>
               </div>
+
+              {selectedPlanId === 'pacote_concurso' && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">Tempo de preparação desejado</label>
+                  <select
+                    value={prepTime}
+                    onChange={(e) => setPrepTime(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500 bg-slate-50 font-bold"
+                  >
+                    <option value="1">1 Mês (Intensivo)</option>
+                    <option value="3">3 Meses (Recomendado)</option>
+                    <option value="6">6 Meses (Completo)</option>
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="mb-2 block text-sm font-semibold text-slate-700">Observação opcional</label>
                 <textarea

@@ -16,7 +16,8 @@ import {
   LogOut,
   Menu,
   Download,
-  Megaphone
+  Megaphone,
+  Zap
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
@@ -49,6 +50,7 @@ export default function Layout() {
 
   const adminLinks = [
     { to: '/admin?tab=dashboard', label: 'Visao geral', icon: LayoutDashboard, key: 'dashboard' },
+    { to: '/admin?tab=payments', label: 'Pagamentos', icon: Zap, key: 'payments' },
     { to: '/admin?tab=content', label: 'Conteudo e IA', icon: FolderTree, key: 'content' },
     { to: '/admin?tab=users', label: 'Utilizadores', icon: Users, key: 'users' },
   ];

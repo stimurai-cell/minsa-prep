@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
-import { Bell, X, Check, ArrowRight, Info, Zap, Trophy, Megaphone } from 'lucide-react';
+import { Bell, X, Check, ArrowRight, Info, Zap, Trophy, Megaphone, BellOff } from 'lucide-react';
+import { requestNotificationPermission } from '../lib/pushNotifications';
 
 type Notification = {
     id: string;
@@ -18,10 +19,17 @@ export default function NotificationCenter() {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isOpen, setIsOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>(
+        'Notification' in window ? Notification.permission : 'denied'
+    );
 
     useEffect(() => {
         if (profile?.id) {
             fetchNotifications();
+
+            // Subscrever para push notifications automaticamente
+            requestNotificationPermission(profile.id).then(setPermissionStatus);
+
             const subscription = supabase
                 .channel('user_notifications')
                 .on('postgres_changes', {
@@ -147,10 +155,21 @@ export default function NotificationCenter() {
                             )}
                         </div>
 
-                        <div className="p-4 bg-slate-50 text-center">
-                            <button className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors">
-                                Ver todas as notificações
-                            </button>
+                        <div className="p-4 bg-slate-50 text-center space-y-2">
+                            {permissionStatus === 'denied' && (
+                                <div className="flex items-center gap-2 justify-center text-[10px] font-bold text-rose-500 uppercase tracking-widest">
+                                    <BellOff className="w-3 h-3" />
+                                    Notificações bloqueadas — active nas definições do browser
+                                </div>
+                            )}
+                            {permissionStatus === 'default' && profile?.id && (
+                                <button
+                                    onClick={() => requestNotificationPermission(profile.id).then(setPermissionStatus)}
+                                    className="text-[10px] font-black text-emerald-600 uppercase tracking-widest hover:underline flex items-center gap-1 mx-auto"
+                                >
+                                    <Bell className="w-3 h-3" /> Ativar notificações push
+                                </button>
+                            )}
                         </div>
                     </div>
                 </>

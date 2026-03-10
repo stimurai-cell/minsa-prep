@@ -31,7 +31,7 @@ import {
   Layout as LayoutIcon,
   Activity,
   LifeBuoy,
-  Megaphone
+  Megaphone as MegaphoneIcon
 } from 'lucide-react';
 import AdminBackup from '../components/AdminBackup';
 import AdminNews from '../components/AdminNews';
@@ -99,7 +99,7 @@ export default function Admin() {
   const [savingContent, setSavingContent] = useState(false);
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
-  const [paymentFilter, setPaymentFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
+  const [paymentFilter, setPaymentFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('all'); // Changed default to 'all' to be safer
   const [adminPaymentNotes, setAdminPaymentNotes] = useState<Record<string, string>>({});
 
   // Monitoring State
@@ -145,12 +145,12 @@ export default function Admin() {
     console.log('Fetching users from profiles table...');
     const { data, error } = await supabase
       .from('profiles')
-      .select('*, areas(name), student_number, last_active, total_xp')
+      .select('*, areas(name), last_active, total_xp')
       .order('last_active', { ascending: false, nullsFirst: false });
 
     if (error) {
       console.error('CRITICAL: Error fetching users:', error);
-      // alert(`Erro ao carregar usuários: ${error.message}\nVerifique se rodou o script SQL das colunas student_number e last_active.`);
+      // alert(`Erro ao carregar usuários: ${error.message}\nVerifique se rodou o script SQL da coluna last_active.`);
     }
     if (!error && data) {
       console.log('Users fetched successfully. Count:', data.length);
@@ -357,7 +357,7 @@ export default function Admin() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'payments' || activeTab === 'dashboard') {
+    if (activeTab === 'payments' || activeTab === 'dashboard' || activeTab === 'users') {
       void fetchPaymentRequests();
     }
   }, [activeTab, paymentFilter]);
@@ -382,7 +382,7 @@ export default function Admin() {
       // Fetch recent global activity logs
       const { data: activities } = await supabase
         .from('activity_logs')
-        .select('*, profiles(full_name, student_number)')
+        .select('*, profiles(full_name)')
         .order('created_at', { ascending: false })
         .limit(30);
 
@@ -800,9 +800,18 @@ export default function Admin() {
         if (profileError) throw profileError;
       }
 
+      // Small delay to ensure DB propagation
+      await new Promise(r => setTimeout(r, 800));
       await fetchStats();
       await fetchPaymentRequests();
       await fetchUsers();
+
+      // Clear the local notes for this request
+      setAdminPaymentNotes(prev => {
+        const next = { ...prev };
+        delete next[request.id];
+        return next;
+      });
     } catch (error: any) {
       alert(error?.message || 'Erro ao rever pagamento.');
     } finally {
@@ -832,6 +841,13 @@ export default function Admin() {
             >
               <LayoutIcon className="h-4 w-4" />
               Geral
+            </button>
+            <button
+              onClick={() => changeTab('users')}
+              className={`flex shrink-0 items-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition-all ${activeTab === 'users' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50'}`}
+            >
+              <Users className="h-4 w-4" />
+              Utilizadores
             </button>
             <button
               onClick={() => changeTab('payments')}
@@ -872,7 +888,7 @@ export default function Admin() {
               onClick={() => changeTab('social')}
               className={`flex shrink-0 items-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition-all ${activeTab === 'social' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50'}`}
             >
-              <Megaphone className="h-4 w-4" />
+              <MegaphoneIcon className="h-4 w-4" />
               News & Alertas
             </button>
           </div>
@@ -1098,7 +1114,8 @@ export default function Admin() {
                           <button
                             type="button"
                             onClick={() => handleReviewPayment(request, 'approved')}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white"
+                            disabled={loadingPayments}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
                           >
                             <CheckCircle2 className="h-4 w-4" />
                             Aprovar
@@ -1106,7 +1123,8 @@ export default function Admin() {
                           <button
                             type="button"
                             onClick={() => handleReviewPayment(request, 'rejected')}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600"
+                            disabled={loadingPayments}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600 disabled:opacity-50"
                           >
                             <XCircle className="h-4 w-4" />
                             Rejeitar
@@ -1680,8 +1698,12 @@ export default function Admin() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
 
-            {/* Section 2: User management - Moved outside Section 1 grid */}
+        {activeTab === 'users' && (
+          <div className="space-y-8 animate-in fade-in duration-500">
+            {/* Section 2: User management */}
             <div className="bg-white rounded-[2.2rem] border border-slate-200 shadow-xl shadow-slate-200/40 overflow-hidden">
               <div className="p-8 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-center gap-6 bg-[radial-gradient(circle_at_top_right,#f8fafc,transparent)]">
                 <div>
@@ -1696,7 +1718,7 @@ export default function Admin() {
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                     <input
                       type="text"
-                      placeholder="Filtrar por nome ou nº de estudante..."
+                      placeholder="Filtrar por nome de utilizador..."
                       value={userSearchQuery}
                       onChange={(e) => setUserSearchQuery(e.target.value)}
                       className="w-full pl-12 pr-4 py-3.5 rounded-2xl border border-slate-200 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-50/50 transition-all font-bold text-slate-700 text-sm shadow-sm"
@@ -1719,7 +1741,6 @@ export default function Admin() {
                     <tr>
                       <th className="px-6 py-4 rounded-l-2xl">NOME / ID</th>
                       <th className="px-6 py-4">CARGO</th>
-                      <th className="px-6 py-4 text-center">Nº ESTUDANTE</th>
                       <th className="px-6 py-4">ÁREA ATUAL</th>
                       <th className="px-6 py-4">ÚLT. ATIVO</th>
                       <th className="px-6 py-4 text-right rounded-r-2xl">ACÇÕES</th>
@@ -1729,15 +1750,13 @@ export default function Admin() {
                     {loadingUsers ? (
                       <tr><td colSpan={6} className="px-6 py-32 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-emerald-500" /></td></tr>
                     ) : userList.filter(u =>
-                      u.full_name?.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
-                      (u.student_number?.toLowerCase().includes(userSearchQuery.toLowerCase()))
+                      u.full_name?.toLowerCase().includes(userSearchQuery.toLowerCase())
                     ).length === 0 ? (
                       <tr><td colSpan={6} className="px-6 py-32 text-center text-slate-400 font-bold uppercase tracking-widest italic opacity-40">Nenhum rastro encontrado...</td></tr>
                     ) : (
                       userList
                         .filter(u =>
-                          u.full_name?.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
-                          (u.student_number?.toLowerCase().includes(userSearchQuery.toLowerCase()))
+                          u.full_name?.toLowerCase().includes(userSearchQuery.toLowerCase())
                         )
                         .map((u) => (
                           <tr key={u.id} className="bg-slate-50/20 hover:bg-white transition-all group hover:shadow-xl hover:shadow-slate-200/50">
@@ -1758,19 +1777,17 @@ export default function Admin() {
                                 onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
                                 className={`text-[9px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl border-2 transition-all outline-none
                                 ${u.role === 'admin' ? 'bg-purple-50 text-purple-700 border-purple-100' :
-                                    u.role === 'premium' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                                    u.role === 'premium' || u.role === 'elite' ? 'bg-amber-50 text-amber-700 border-amber-100' :
                                       'bg-slate-100 text-slate-600 border-slate-200'}`}
                               >
-                                <option value="free">Livre</option>
-                                <option value="premium">Premium</option>
-                                <option value="admin">Administrador</option>
+                                <option value="free">Gratuito</option>
+                                <option value="basic">Basic (Estudante)</option>
+                                <option value="premium">Premium (Preparação Real)</option>
+                                <option value="elite">Elite (Aprovação)</option>
+                                <option value="admin">Administrador (MAX)</option>
                               </select>
                             </td>
-                            <td className="px-6 py-5 text-center">
-                              <div className="inline-block px-3 py-1 bg-white border border-slate-200 rounded-xl shadow-sm text-xs font-black text-slate-600 ring-2 ring-slate-50">
-                                {u.student_number || '---'}
-                              </div>
-                            </td>
+
                             <td className="px-6 py-5">
                               <div className="flex flex-col">
                                 <span className="text-xs font-black text-slate-800 uppercase tracking-tight">{u.areas?.name || 'Não definida'}</span>
