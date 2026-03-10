@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Sparkles, Brain, Target, ArrowRight, Lock, Loader2, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
@@ -13,6 +14,7 @@ interface AIAnalysis {
 }
 
 export default function AIMentor() {
+    const navigate = useNavigate();
     const { profile } = useAuthStore();
     const { areas } = useAppStore();
     const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
@@ -103,7 +105,10 @@ export default function AIMentor() {
                     </div>
                     <h3 className="text-xl font-black text-slate-800 mb-2 tracking-tight">Mentora IA</h3>
                     <p className="text-sm text-slate-600 mb-6 max-w-[240px] leading-relaxed">A análise inteligente de desempenho está disponível nos planos pagos.</p>
-                    <button className="bg-amber-500 hover:bg-amber-600 text-white font-black px-8 py-3.5 rounded-2xl shadow-[0_4px_0_0_#b45309] active:shadow-none active:translate-y-1 transition-all uppercase tracking-widest text-[10px]">
+                    <button
+                        onClick={() => navigate('/premium')}
+                        className="bg-amber-500 hover:bg-amber-600 text-white font-black px-8 py-3.5 rounded-2xl shadow-[0_4px_0_0_#b45309] active:shadow-none active:translate-y-1 transition-all uppercase tracking-widest text-[10px]"
+                    >
                         Ver Planos Premium
                     </button>
                 </div>
