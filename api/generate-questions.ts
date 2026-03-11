@@ -25,7 +25,7 @@ const buildQuestionsPrompt = ({
 
   REGRAS CRITICAS:
   1. Use portugues correto com todos os acentos e pontuacao.
-  2. Cada questao deve ter exatamente 5 alternativas (A, B, C, D, E).
+  2. Cada questao deve ter exatamente 4 alternativas (A, B, C, D).
   3. Estilo de escrita: Use termos angolanos.
   4. O nivel de dificuldade deve ser "${difficulty}".
   5. Baseie-se no seguinte conteudo de referencia (se fornecido):
@@ -40,8 +40,7 @@ const buildQuestionsPrompt = ({
           {"text": "Opcao A", "isCorrect": false},
           {"text": "Opcao B", "isCorrect": false},
           {"text": "Opcao C", "isCorrect": true},
-          {"text": "Opcao D", "isCorrect": false},
-          {"text": "Opcao E", "isCorrect": false}
+          {"text": "Opcao D", "isCorrect": false}
         ],
         "explanation": "Explicacao detalhada.",
         "difficulty": "${difficulty}"
@@ -86,21 +85,37 @@ export default async function handler(req: any, res: any) {
 
       // Se for novo tópico, criar primeiro
       if (!finalTopicId && generated_data.custom_topic_name && generated_data.area_id) {
-        const { data: newTopic, error: topicError } = await supabase
+        // Verificar se o tópico já existe para evitar duplicatas acidentais
+        const { data: existingTopic } = await supabase
           .from('topics')
-          .insert({
-            name: generated_data.custom_topic_name,
-            area_id: generated_data.area_id
-          })
-          .select()
-          .single();
+          .select('id')
+          .eq('area_id', generated_data.area_id)
+          .eq('name', generated_data.custom_topic_name)
+          .maybeSingle();
 
-        if (topicError) throw topicError;
-        finalTopicId = newTopic.id;
+        if (existingTopic) {
+          finalTopicId = existingTopic.id;
+        } else {
+          const { data: newTopic, error: topicError } = await supabase
+            .from('topics')
+            .insert({
+              name: generated_data.custom_topic_name,
+              area_id: generated_data.area_id,
+              description: `Gerado automaticamente via IA para ${generated_data.area_name || 'Especialidade'}`
+            })
+            .select()
+            .single();
+
+          if (topicError) throw topicError;
+          finalTopicId = newTopic.id;
+        }
       }
+
+      if (!finalTopicId) throw new Error('ID do tópico não identificado.');
 
       let savedCount = 0;
       for (const q of generated_data.questions) {
+        // 1. Inserir a Pergunta
         const { data: quest, error: qError } = await supabase
           .from('questions')
           .insert({
@@ -114,7 +129,7 @@ export default async function handler(req: any, res: any) {
 
         if (qError) throw qError;
 
-        // Inserir Alternativas
+        // 2. Inserir Alternativas
         const alternatives = q.alternatives.map((alt: any) => ({
           question_id: quest.id,
           content: alt.text,
@@ -124,19 +139,22 @@ export default async function handler(req: any, res: any) {
         const { error: aError } = await supabase.from('alternatives').insert(alternatives);
         if (aError) throw aError;
 
-        // Inserir Explicação
+        // 3. Inserir Explicação
         if (q.explanation) {
-          await supabase.from('question_explanations').insert({
+          const { error: eError } = await supabase.from('question_explanations').insert({
             question_id: quest.id,
             content: q.explanation
           });
+          // Não bloqueamos se a explicação falhar, mas logamos
+          if (eError) console.error('Erro ao salvar explicação:', eError.message);
         }
         savedCount++;
       }
 
-      return res.status(200).json({ saved_count: savedCount });
+      return res.status(200).json({ saved_count: savedCount, topic_id: finalTopicId });
     } catch (err: any) {
-      return res.status(500).json({ error: err.message });
+      console.error('Save error details:', err);
+      return res.status(500).json({ error: err.message || 'Erro interno ao salvar no Supabase' });
     }
   }
 
