@@ -8,31 +8,24 @@ import { requestFirebaseNotificationPermission } from './firebase';
 export async function subscribeToPush(userId: string): Promise<boolean> {
     try {
         if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-            console.warn('[Push] Service Worker ou PushManager não suportado.');
-            return false;
+            throw new Error('Notificações não são suportadas neste navegador.');
         }
 
         console.log('[Push] A solicitar token FCM para utilizador:', userId);
 
-        // Verificar permissão antes de tentar obter token
+        // Verificar permissão
         if (Notification.permission === 'denied') {
-            alert('📢 Permissão Negada: Você bloqueou as notificações. Vá às definições do navegador para permitir.');
-            return false;
+            throw new Error('Bloqueado: Precisas de permitir as notificações nas definições do teu navegador/telemóvel.');
         }
 
         const token = await requestFirebaseNotificationPermission();
 
         if (!token) {
-            console.error('[Push] Falha ao obter Token FCM.');
-            return false;
+            throw new Error('Não foi possível obter a chave de ligação (Token FCM).');
         }
 
-        console.log('[Push] Token obtido, a guardar na base de dados (Supabase)...');
-        // Guardar/actualizar na DB
-        const subscriptionJson = {
-            endpoint: token,
-            fcm: true
-        };
+        console.log('[Push] Token obtido, a guardar no Supabase...');
+        const subscriptionJson = { endpoint: token, fcm: true };
 
         const { error } = await supabase
             .from('push_subscriptions')
@@ -47,15 +40,16 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
             );
 
         if (error) {
-            console.error('[Push] Erro ao guardar token FCM na BD:', error);
-            return false;
+            console.error('[Push] Erro Supabase:', error);
+            throw new Error(`Falha ao guardar na base de dados: ${error.message}`);
         }
 
-        console.log('[Push] Sucesso: Firebase Cloud Messaging Token guardado e ativo.');
+        console.log('[Push] Sucesso: Ligação ativa ✅');
         return true;
-    } catch (err) {
-        console.error('[Push] Erro crítico ao subscrever FCM:', err);
-        return false;
+    } catch (err: any) {
+        console.error('[Push] Erro na subscrição:', err);
+        // Relançamos o erro para ser capturado pelo alert no Profile.tsx
+        throw err;
     }
 }
 

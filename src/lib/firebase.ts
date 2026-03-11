@@ -28,34 +28,33 @@ export const requestFirebaseNotificationPermission = async () => {
         console.log('[Firebase] Permissão de notificação:', permission);
 
         if (permission === 'granted') {
-            console.log('[Firebase] Permissão concedida. A procurar Service Worker principal (/sw.js)...');
+            console.log('[Firebase] Permissão concedida. A aguardar Service Worker principal (/sw.js)...');
 
-            // Usar o Service Worker principal (sw.js) que já é registado no index.html e agora contém o Firebase
-            let registration = await navigator.serviceWorker.getRegistration();
+            // Garantir que o Service Worker está pronto antes de continuar (evita hang/timeout)
+            const registration = await navigator.serviceWorker.ready;
 
             if (!registration) {
-                console.log('[Firebase] SW não encontrado, a registar /sw.js...');
-                registration = await navigator.serviceWorker.register('/sw.js');
+                throw new Error('O motor da App (Service Worker) não está pronto ou falhou.');
             }
 
             const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || import.meta.env.VITE_FIREBASE_VAPID_KEY;
 
             if (!vapidKey) {
-                throw new Error('VAPID Key ausente no ambiente');
+                throw new Error('Chave de segurança (VAPID) não encontrada no ambiente.');
             }
 
+            console.log('[Firebase] A obter token com VAPID Key...');
             const token = await getToken(messaging, {
                 vapidKey: vapidKey,
                 serviceWorkerRegistration: registration
             });
 
-            if (!token) throw new Error('O Firebase não devolveu nenhum token.');
+            if (!token) throw new Error('O Firebase não devolveu um token de ligação.');
 
             console.log('[Firebase] Token FCM obtido com sucesso ✅');
             return token;
         }
-        console.warn('[Firebase] Permissão negada pelo utilizador.');
-        return null;
+        throw new Error('Permissão Negada: Tens de permitir as notificações no navegador.');
     } catch (error) {
         console.error('[Firebase] Erro ao obter token FCM:', error);
         return null;
