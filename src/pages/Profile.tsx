@@ -248,8 +248,9 @@ export default function Profile() {
                                 } else {
                                     setPushStatus('error');
                                 }
-                            } catch (err) {
+                            } catch (err: any) {
                                 console.error('Error testing push:', err);
+                                alert(`⚠️ Erro Técnico: ${err.message || 'Falha desconhecida'}`);
                                 setPushStatus('error');
                             }
                         }}

@@ -28,15 +28,20 @@ export const requestFirebaseNotificationPermission = async () => {
         console.log('[Firebase] Permissão de notificação:', permission);
 
         if (permission === 'granted') {
-            console.log('[Firebase] Permissão concedida. Registando Service Worker...');
-            // Registar o SW sem scope restritivo para evitar erros de "out of scope" em alguns browsers
-            const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+            console.log('[Firebase] Permissão concedida. A procurar Service Worker principal (/sw.js)...');
+
+            // Usar o Service Worker principal (sw.js) que já é registado no index.html e agora contém o Firebase
+            let registration = await navigator.serviceWorker.getRegistration();
+
+            if (!registration) {
+                console.log('[Firebase] SW não encontrado, a registar /sw.js...');
+                registration = await navigator.serviceWorker.register('/sw.js');
+            }
 
             const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || import.meta.env.VITE_FIREBASE_VAPID_KEY;
 
             if (!vapidKey) {
-                console.error('[Firebase] VAPID Key não encontrada no ambiente!');
-                return null;
+                throw new Error('VAPID Key ausente no ambiente');
             }
 
             const token = await getToken(messaging, {
@@ -44,7 +49,9 @@ export const requestFirebaseNotificationPermission = async () => {
                 serviceWorkerRegistration: registration
             });
 
-            console.log('[Firebase] Token FCM obtido:', token ? 'Sucesso ✅' : 'Falha ❌');
+            if (!token) throw new Error('O Firebase não devolveu nenhum token.');
+
+            console.log('[Firebase] Token FCM obtido com sucesso ✅');
             return token;
         }
         console.warn('[Firebase] Permissão negada pelo utilizador.');

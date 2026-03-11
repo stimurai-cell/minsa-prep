@@ -1,4 +1,20 @@
-const CACHE_NAME = 'minsa-prep-v1.0.6';
+importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-messaging-compat.js');
+
+const firebaseConfig = {
+    apiKey: "AIzaSyAuwBXj9rJM6o4U9AAUTMhQTsbY_-LcrKI",
+    authDomain: "farmolink-28.firebaseapp.com",
+    projectId: "farmolink-28",
+    storageBucket: "farmolink-28.firebasestorage.app",
+    messagingSenderId: "845647802142",
+    appId: "1:845647802142:web:47c11bd7fd9ae06be6a30f",
+    measurementId: "G-L9SM8DDHCP"
+};
+
+firebase.initializeApp(firebaseConfig);
+const messaging = firebase.messaging();
+
+const CACHE_NAME = 'minsa-prep-v1.0.7';
 const DATA_CACHE_NAME = 'minsa-prep-data-v1';
 
 const ASSETS_TO_CACHE = [
