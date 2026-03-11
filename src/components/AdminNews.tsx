@@ -69,7 +69,12 @@ export default function AdminNews() {
 
             if (error) throw error;
 
-            alert('✅ Novidade publicada no feed!');
+            // Disparar push notification global para a nova novidade
+            await sendPushNotification({
+                title: newsTitle,
+                body: newsBody,
+                url: '/news'
+            });
             setNewsTitle('');
             setNewsBody('');
             setImageUrl('');

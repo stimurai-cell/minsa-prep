@@ -1,4 +1,4 @@
-import { useEffect, ReactNode } from 'react';
+import { useEffect, ReactNode, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/useAuthStore';
 
@@ -37,6 +37,8 @@ import { useVersionCheck } from './hooks/useVersionCheck';
 import { RefreshCw } from 'lucide-react';
 import PaymentNotificationListener from './components/PaymentNotificationListener';
 
+import { WifiOff } from 'lucide-react';
+
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuthStore();
 
@@ -58,6 +60,28 @@ function RootRedirect() {
 export default function App() {
   const { user, loading, checkSession, updateLastActive } = useAuthStore();
   const { needsUpdate } = useVersionCheck();
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [showOfflineAlert, setShowOfflineAlert] = useState(false);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      setShowOfflineAlert(false);
+    };
+    const handleOffline = () => {
+      setIsOffline(true);
+      setShowOfflineAlert(true);
+      setTimeout(() => setShowOfflineAlert(false), 5000);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
     checkSession();
@@ -84,6 +108,14 @@ export default function App() {
     <BrowserRouter>
       <OfflineSync />
       <PaymentNotificationListener />
+      {showOfflineAlert && (
+        <div className="fixed top-0 left-0 right-0 z-[100] bg-orange-500 p-2 text-center text-sm font-bold text-white shadow-lg animate-in slide-in-from-top duration-300">
+          <div className="flex items-center justify-center gap-2">
+            <WifiOff className="h-4 w-4" />
+            Você está offline. Algumas funcionalidades podem estar limitadas.
+          </div>
+        </div>
+      )}
       {needsUpdate && (
         <div className="fixed top-0 left-0 right-0 z-[100] bg-yellow-400 p-2 text-center text-sm font-bold text-slate-900 shadow-lg">
           <div className="flex items-center justify-center gap-2">
