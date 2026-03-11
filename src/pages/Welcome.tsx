@@ -49,8 +49,8 @@ export default function Welcome() {
                             {showInstallHelp && (
                                 <div className="mt-2 max-w-xs rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-[10px] text-emerald-100 text-left animate-in fade-in duration-300">
                                     <p className="font-bold mb-1 uppercase tracking-tight text-center">Como instalar:</p>
-                                    <p className="mb-1"><strong>iOS:</strong> Compartilhar > Adicionar à Tela de Início.</p>
-                                    <p><strong>Android:</strong> Menu (...) > Instalar aplicativo.</p>
+                                    <p className="mb-1"><strong>iOS:</strong> Compartilhar &gt; Adicionar à Tela de Início.</p>
+                                    <p><strong>Android:</strong> Menu (...) &gt; Instalar aplicativo.</p>
                                 </div>
                             )}
                         </motion.div>
