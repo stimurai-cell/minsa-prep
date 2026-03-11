@@ -4,11 +4,16 @@ import type { IncomingMessage, ServerResponse } from 'http';
 
 // Usar o service account gerado pelo Firebase
 if (!admin.apps.length) {
+    const rawKey = process.env.FIREBASE_PRIVATE_KEY || "";
+    const cleanKey = rawKey.startsWith('"') && rawKey.endsWith('"')
+        ? rawKey.substring(1, rawKey.length - 1)
+        : rawKey;
+
     admin.initializeApp({
         credential: admin.credential.cert({
             projectId: "farmolink-28",
             clientEmail: "firebase-adminsdk-fbsvc@farmolink-28.iam.gserviceaccount.com",
-            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n') || ""
+            privateKey: cleanKey.replace(/\\n/g, '\n')
         })
     });
 }

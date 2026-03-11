@@ -40,10 +40,12 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
 
         if (error) {
             console.error('[Push] Erro ao guardar token FCM na BD:', error);
+            alert('⚠️ Erro ao registar dispositivo para notificações. Por favor, tente novamente.');
             return false;
         }
 
         console.log('[Push] Firebase Cloud Messaging Token guardado com sucesso.');
+        // Opcional: Alerta de sucesso se o utilizador clicou no botão
         return true;
     } catch (err) {
         console.error('[Push] Erro ao subscrever FCM:', err);
