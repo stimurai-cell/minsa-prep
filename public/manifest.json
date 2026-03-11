@@ -1,5 +1,6 @@
 {
     "name": "MINSA Prep",
+    "gcm_sender_id": "845647802142",
     "short_name": "MINSAPrep",
     "description": "Preparação inteligente para concursos públicos de saúde em Angola.",
     "start_url": "/dashboard",

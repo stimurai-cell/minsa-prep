@@ -13,10 +13,17 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
         }
 
         console.log('[Push] A solicitar token FCM para utilizador:', userId);
+
+        // Verificar permissão antes de tentar obter token
+        if (Notification.permission === 'denied') {
+            alert('📢 Permissão Negada: Você bloqueou as notificações. Vá às definições do navegador para permitir.');
+            return false;
+        }
+
         const token = await requestFirebaseNotificationPermission();
 
         if (!token) {
-            console.error('[Push] Falha ao obter Token FCM (permissão negada ou erro técnico).');
+            console.error('[Push] Falha ao obter Token FCM.');
             return false;
         }
 
@@ -41,7 +48,6 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
 
         if (error) {
             console.error('[Push] Erro ao guardar token FCM na BD:', error);
-            alert('⚠️ Erro ao registar dispositivo para notificações. Por favor, tente novamente.');
             return false;
         }
 

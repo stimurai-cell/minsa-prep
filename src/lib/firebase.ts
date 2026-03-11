@@ -28,19 +28,26 @@ export const requestFirebaseNotificationPermission = async () => {
         console.log('[Firebase] Permissão de notificação:', permission);
 
         if (permission === 'granted') {
-            // Em ambientes PWA/Vite, às vezes é necessário esperar o SW ou registrá-lo explicitamente
-            const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-                scope: '/firebase-cloud-messaging-push-scope'
-            });
+            console.log('[Firebase] Permissão concedida. Registando Service Worker...');
+            // Registar o SW sem scope restritivo para evitar erros de "out of scope" em alguns browsers
+            const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+
+            const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || import.meta.env.VITE_FIREBASE_VAPID_KEY;
+
+            if (!vapidKey) {
+                console.error('[Firebase] VAPID Key não encontrada no ambiente!');
+                return null;
+            }
 
             const token = await getToken(messaging, {
-                vapidKey: import.meta.env.VITE_VAPID_PUBLIC_KEY || import.meta.env.VITE_FIREBASE_VAPID_KEY,
+                vapidKey: vapidKey,
                 serviceWorkerRegistration: registration
             });
 
-            console.log('[Firebase] Token FCM obtido:', token ? 'Sucesso' : 'Falha');
+            console.log('[Firebase] Token FCM obtido:', token ? 'Sucesso ✅' : 'Falha ❌');
             return token;
         }
+        console.warn('[Firebase] Permissão negada pelo utilizador.');
         return null;
     } catch (error) {
         console.error('[Firebase] Erro ao obter token FCM:', error);
