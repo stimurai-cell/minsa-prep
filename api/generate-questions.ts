@@ -1,6 +1,11 @@
 import { GoogleGenAI, Type } from '@google/genai';
+import { createClient } from '@supabase/supabase-js';
 
 const defaultGeminiModel = 'gemini-2.5-flash';
+
+const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 const buildQuestionsPrompt = ({
   area,
@@ -20,12 +25,11 @@ const buildQuestionsPrompt = ({
 
   REGRAS CRITICAS:
   1. Use portugues correto com todos os acentos e pontuacao.
-  2. Cada questao deve ter exatamente 4 alternativas.
-  3. Nao inclua letras como "a.", "b.", "c." ou "d." no texto das alternativas.
+  2. Cada questao deve ter exatamente 5 alternativas (A, B, C, D, E).
+  3. Estilo de escrita: Use termos angolanos.
   4. O nivel de dificuldade deve ser "${difficulty}".
   5. Baseie-se no seguinte conteudo de referencia (se fornecido):
   ${rawContent}
-  6. Varie a posicao da alternativa correta entre as 4 opcoes.
 
   Retorne apenas um JSON valido seguindo estritamente este formato:
   {
@@ -33,12 +37,13 @@ const buildQuestionsPrompt = ({
       {
         "question": "Texto da pergunta",
         "alternatives": [
-          {"text": "Texto da alternativa", "isCorrect": false},
-          {"text": "Texto da alternativa", "isCorrect": true},
-          {"text": "Texto da alternativa", "isCorrect": false},
-          {"text": "Texto da alternativa", "isCorrect": false}
+          {"text": "Opcao A", "isCorrect": false},
+          {"text": "Opcao B", "isCorrect": false},
+          {"text": "Opcao C", "isCorrect": true},
+          {"text": "Opcao D", "isCorrect": false},
+          {"text": "Opcao E", "isCorrect": false}
         ],
-        "explanation": "Explicacao detalhada de por que a alternativa correta e a certa e as outras estao erradas.",
+        "explanation": "Explicacao detalhada.",
         "difficulty": "${difficulty}"
       }
     ]
@@ -49,17 +54,10 @@ const getErrorMessage = (error: unknown) => {
   if (!(error instanceof Error)) {
     return 'Falha desconhecida ao comunicar com o Gemini.';
   }
-
   const message = error.message;
-
   if (message.includes('RESOURCE_EXHAUSTED') || message.includes('"code":429')) {
-    return 'A chave do Gemini foi encontrada, mas a quota dela acabou ou esse projeto nao tem acesso ao modelo solicitado.';
+    return 'A quota do Gemini acabou.';
   }
-
-  if (message.includes('API key') || message.includes('invalid')) {
-    return 'A chave do Gemini parece invalida.';
-  }
-
   return message;
 };
 
@@ -68,77 +66,118 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Metodo nao permitido.' });
   }
 
+  const { action, area_id, topic_id, custom_topic_name, count, difficulty, context, generated_data, area_name, topic_name } = req.body || {};
   const apiKey = process.env.GEMINI_API_KEY;
   const modelName = process.env.GEMINI_MODEL || defaultGeminiModel;
 
-  if (!apiKey) {
-    return res.status(500).json({
-      error: 'GEMINI_API_KEY nao configurada no servidor.',
-    });
+  // Status Action
+  if (action === 'status') {
+    return res.status(200).json({ model: modelName, mode: 'Vercel API' });
   }
 
-  const { area, topic, count, difficulty, rawContent } = req.body || {};
-
-  if (!area || !topic || !count || !difficulty) {
-    return res.status(400).json({
-      error: 'Parametros obrigatorios ausentes para gerar questoes.',
-    });
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
-
-  try {
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: buildQuestionsPrompt({
-        area,
-        topic,
-        count,
-        difficulty,
-        rawContent: rawContent || '',
-      }),
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            questions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  question: { type: Type.STRING },
-                  alternatives: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        text: { type: Type.STRING },
-                        isCorrect: { type: Type.BOOLEAN },
-                      },
-                      required: ['text', 'isCorrect'],
-                    },
-                  },
-                  explanation: { type: Type.STRING },
-                  difficulty: { type: Type.STRING },
-                },
-                required: ['question', 'alternatives', 'explanation', 'difficulty'],
-              },
-            },
-          },
-          required: ['questions'],
-        },
-      },
-    });
-
-    if (!response.text) {
-      return res.status(502).json({ error: 'O Gemini respondeu sem corpo de texto.' });
+  // Save Action
+  if (action === 'save') {
+    if (!generated_data || !generated_data.questions) {
+      return res.status(400).json({ error: 'Dados para guardar ausentes.' });
     }
 
-    return res.status(200).json(JSON.parse(response.text));
-  } catch (error) {
-    const message = getErrorMessage(error);
-    console.error('Error generating questions with Gemini:', error);
-    return res.status(500).json({ error: message });
+    try {
+      let finalTopicId = generated_data.topic_id;
+
+      // Se for novo tópico, criar primeiro
+      if (!finalTopicId && generated_data.custom_topic_name && generated_data.area_id) {
+        const { data: newTopic, error: topicError } = await supabase
+          .from('topics')
+          .insert({
+            name: generated_data.custom_topic_name,
+            area_id: generated_data.area_id
+          })
+          .select()
+          .single();
+
+        if (topicError) throw topicError;
+        finalTopicId = newTopic.id;
+      }
+
+      let savedCount = 0;
+      for (const q of generated_data.questions) {
+        const { data: quest, error: qError } = await supabase
+          .from('questions')
+          .insert({
+            topic_id: finalTopicId,
+            content: q.question,
+            difficulty: q.difficulty || 'medium',
+            is_contest_highlight: generated_data.is_contest_highlight || false
+          })
+          .select()
+          .single();
+
+        if (qError) throw qError;
+
+        // Inserir Alternativas
+        const alternatives = q.alternatives.map((alt: any) => ({
+          question_id: quest.id,
+          content: alt.text,
+          is_correct: alt.isCorrect
+        }));
+
+        const { error: aError } = await supabase.from('alternatives').insert(alternatives);
+        if (aError) throw aError;
+
+        // Inserir Explicação
+        if (q.explanation) {
+          await supabase.from('question_explanations').insert({
+            question_id: quest.id,
+            content: q.explanation
+          });
+        }
+        savedCount++;
+      }
+
+      return res.status(200).json({ saved_count: savedCount });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
   }
+
+  // Generate Action
+  if (action === 'generate') {
+    if (!apiKey) return res.status(500).json({ error: 'GEMINI_API_KEY nao configurada.' });
+
+    const ai = new GoogleGenAI({ apiKey });
+    try {
+      const targetArea = area_name || 'Saude';
+      const targetTopic = topic_name || custom_topic_name || 'Geral';
+
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: buildQuestionsPrompt({
+          area: targetArea,
+          topic: targetTopic,
+          count: count || 5,
+          difficulty: difficulty || 'medium',
+          rawContent: context || '',
+        }),
+        config: {
+          responseMimeType: 'application/json',
+        },
+      });
+
+      if (!response.text) throw new Error('O Gemini respondeu vazio.');
+
+      const parsed = JSON.parse(response.text);
+      // Incluir metadados para o salvamento posterior
+      return res.status(200).json({
+        ...parsed,
+        area_id,
+        topic_id,
+        custom_topic_name,
+        is_contest_highlight: req.body.is_contest_highlight
+      });
+    } catch (error) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  }
+
+  return res.status(400).json({ error: 'Acao invalida.' });
 }

@@ -50,10 +50,13 @@ export default function AdminContent() {
 
     const fetchGeminiStatus = async () => {
         try {
-            const { data, error } = await supabase.functions.invoke('generate-questions', {
-                body: { action: 'status' }
+            const res = await fetch('/api/generate-questions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'status' })
             });
-            if (!error && data) {
+            const data = await res.json();
+            if (res.ok && data) {
                 setGeminiModel(data.model || 'Desconhecido');
                 setGeminiMode(data.mode || 'N/A');
             }
@@ -154,21 +157,28 @@ export default function AdminContent() {
         setGenResult(null);
 
         try {
-            const { data, error } = await supabase.functions.invoke('generate-questions', {
-                body: {
+            const areaName = areas.find(a => a.id === genArea)?.name;
+            const topicName = !isCustomTopic ? topics.find(t => t.id === targetTopic)?.name : null;
+
+            const res = await fetch('/api/generate-questions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
                     action: 'generate',
                     area_id: genArea,
+                    area_name: areaName,
                     topic_id: isCustomTopic ? null : targetTopic,
+                    topic_name: topicName,
                     custom_topic_name: isCustomTopic ? targetTopic : null,
                     count: genCount,
                     difficulty: genDiff,
                     context: genContent || null,
                     is_contest_highlight: genContestHighlight
-                }
+                })
             });
 
-            if (error) throw new Error(error.message || 'Erro na Edge Function');
-            if (data.error) throw new Error(data.error);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro na API');
 
             setGenResult(data);
             alert(`A IA gerou ${data.questions?.length || 0} perguntas com sucesso! Reveja e guarde.`);
@@ -183,15 +193,17 @@ export default function AdminContent() {
         if (!genResult || !genResult.questions) return;
         setGenerating(true);
         try {
-            const { data, error } = await supabase.functions.invoke('generate-questions', {
-                body: {
+            const res = await fetch('/api/generate-questions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
                     action: 'save',
                     generated_data: genResult
-                }
+                })
             });
 
-            if (error) throw new Error(error.message);
-            if (data.error) throw new Error(data.error);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro ao guardar');
 
             alert(`✅ ${data.saved_count} perguntas guardadas com sucesso no banco de dados!`);
             setGenResult(null);
