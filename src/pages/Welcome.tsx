@@ -1,14 +1,61 @@
-import { ShieldCheck, Zap, ArrowRight, UserPlus, LogIn, Sparkles, BookOpen, Target } from 'lucide-react';
+import { ShieldCheck, Zap, ArrowRight, UserPlus, LogIn, Sparkles, BookOpen, Target, Download } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
+import { useState, useEffect } from 'react';
 
 export default function Welcome() {
+    const [isStandalone, setIsStandalone] = useState(false);
+    const [showInstallHelp, setShowInstallHelp] = useState(false);
+
+    useEffect(() => {
+        if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) {
+            setIsStandalone(true);
+        }
+    }, []);
+
+    const handleInstallClick = async () => {
+        const promptEvent = (window as any).deferredPrompt;
+        if (promptEvent) {
+            promptEvent.prompt();
+            const { outcome } = await promptEvent.userChoice;
+            if (outcome === 'accepted') {
+                (window as any).deferredPrompt = null;
+            }
+        } else {
+            setShowInstallHelp(true);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-minsa-gradient flex flex-col items-center justify-center p-4 text-white overflow-hidden relative">
             {/* Elementos corporativos de fundo sem luz estourada */}
 
             <main className="max-w-4xl w-full z-10 space-y-12">
                 <header className="text-center space-y-6">
+                    {!isStandalone && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.6 }}
+                            className="flex flex-col items-center gap-2 mb-8"
+                        >
+                            <button
+                                onClick={handleInstallClick}
+                                className="inline-flex items-center gap-2 rounded-2xl bg-white px-6 py-3 text-xs font-black text-slate-900 transition-all hover:bg-slate-100 uppercase tracking-widest shadow-xl"
+                            >
+                                <Download className="h-4 w-4" />
+                                Baixar App (PWA)
+                            </button>
+                            {showInstallHelp && (
+                                <div className="mt-2 max-w-xs rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-[10px] text-emerald-100 text-left animate-in fade-in duration-300">
+                                    <p className="font-bold mb-1 uppercase tracking-tight text-center">Como instalar:</p>
+                                    <p className="mb-1"><strong>iOS:</strong> Compartilhar > Adicionar à Tela de Início.</p>
+                                    <p><strong>Android:</strong> Menu (...) > Instalar aplicativo.</p>
+                                </div>
+                            )}
+                        </motion.div>
+                    )}
+
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -65,7 +112,7 @@ export default function Welcome() {
                             className="group flex w-full items-center justify-center gap-3 rounded-[2rem] bg-emerald-500 px-8 py-5 text-lg font-black uppercase tracking-tight text-white shadow-xl shadow-emerald-500/20 hover:bg-emerald-400 transition-all hover:scale-[1.02]"
                         >
                             <UserPlus className="h-6 w-6" />
-                            Começar Agora
+                            Criar conta
                             <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
                         </Link>
                     </motion.div>

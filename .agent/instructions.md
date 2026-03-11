@@ -39,5 +39,10 @@ This document contains critical rules to prevent regressions and "basic" bugs. A
   - Use `rounded-[2rem]` for main containers and `rounded-xl` for inner elements.
   - Always add micro-animations: `animate-in fade-in duration-500`.
 
-## 6. Communication
+## 6. Language & Communication
+- **Portuguese Only**: Always use Portuguese for everything. This includes:
+  - Communications with the USER.
+  - Code comments and documentation.
+  - Console logs and error messages.
+  - Artifacts (`task.md`, `implementation_plan.md`, `walkthrough.md`).
 - **Updates**: When finishing a task, always update `task.md` and provide a `walkthrough.md` with file links.

@@ -114,6 +114,26 @@ export default function Login() {
         <h2 className="mt-8 text-center text-3xl font-black tracking-tight text-white">
           Entrar na sua conta
         </h2>
+
+        {!isStandalone && (
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={handleInstallClick}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-4 text-xs font-black text-slate-900 transition-all hover:bg-slate-100 uppercase tracking-widest shadow-xl"
+            >
+              <Download className="h-4 w-4" />
+              Baixar App (PWA)
+            </button>
+            {showInstallHelp && (
+              <div className="mt-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-4 text-xs text-emerald-100 text-left animate-in fade-in duration-300">
+                <p className="font-bold mb-2 uppercase tracking-tight text-center">Como instalar manualmente:</p>
+                <p className="mb-2"><strong>iOS (iPhone):</strong> Toque no ícone "Compartilhar" e selecione "Adicionar à Tela de Início".</p>
+                <p><strong>Android:</strong> Menu do navegador e selecione "Instalar aplicativo".</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md z-10">
@@ -214,25 +234,6 @@ export default function Login() {
             </Link>
           </div>
 
-          {!isStandalone && (
-            <>
-              <button
-                type="button"
-                onClick={handleInstallClick}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-4 text-xs font-black text-slate-900 transition-all hover:bg-slate-100 uppercase tracking-widest shadow-xl"
-              >
-                <Download className="h-4 w-4" />
-                Baixar App (PWA)
-              </button>
-              {showInstallHelp && (
-                <div className="mt-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-4 text-xs text-emerald-100 text-left animate-in fade-in duration-300">
-                  <p className="font-bold mb-2 uppercase tracking-tight text-center">Como instalar manualmente:</p>
-                  <p className="mb-2"><strong>iOS (iPhone):</strong> Toque no ícone "Compartilhar" (quadrado com seta para cima) e selecione "Adicionar à Tela de Início".</p>
-                  <p><strong>Android / Outros:</strong> Toque no menu do seu navegador (geralmente três pontos no canto superior direito) e selecione "Instalar aplicativo" ou "Adicionar à tela inicial".</p>
-                </div>
-              )}
-            </>
-          )}
         </div>
       </div>
     </div>

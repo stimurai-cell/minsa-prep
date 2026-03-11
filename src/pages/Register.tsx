@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
-import { Activity, Eye, EyeOff } from 'lucide-react';
+import { Activity, Eye, EyeOff, Download } from 'lucide-react';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
@@ -16,6 +16,8 @@ export default function Register() {
   const [goal, setGoal] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
 
   const navigate = useNavigate();
   const { checkSession } = useAuthStore();
@@ -23,7 +25,24 @@ export default function Register() {
 
   useEffect(() => {
     fetchAreas();
+
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) {
+      setIsStandalone(true);
+    }
   }, [fetchAreas]);
+
+  const handleInstallClick = async () => {
+    const promptEvent = (window as any).deferredPrompt;
+    if (promptEvent) {
+      promptEvent.prompt();
+      const { outcome } = await promptEvent.userChoice;
+      if (outcome === 'accepted') {
+        (window as any).deferredPrompt = null;
+      }
+    } else {
+      setShowInstallHelp(true);
+    }
+  };
 
   const ensureProfile = async (userId: string) => {
     const profilePayload = {
@@ -145,6 +164,26 @@ export default function Register() {
         <p className="mt-2 text-center text-sm text-slate-400 font-medium">
           Acesse os melhores treinos de Angola.
         </p>
+
+        {!isStandalone && (
+          <div className="mt-6 flex flex-col items-center gap-2">
+            <button
+              type="button"
+              onClick={handleInstallClick}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-4 text-xs font-black text-slate-900 transition-all hover:bg-slate-100 uppercase tracking-widest shadow-xl"
+            >
+              <Download className="h-4 w-4" />
+              Baixar App (PWA)
+            </button>
+            {showInstallHelp && (
+              <div className="mt-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-4 text-xs text-emerald-100 text-left animate-in fade-in duration-300">
+                <p className="font-bold mb-2 uppercase tracking-tight text-center">Como instalar manualmente:</p>
+                <p className="mb-2"><strong>iOS (iPhone):</strong> Toque no ícone "Compartilhar" e selecione "Adicionar à Tela de Início".</p>
+                <p><strong>Android:</strong> Menu do navegador e selecione "Instalar aplicativo".</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-lg z-10">
@@ -253,7 +292,7 @@ export default function Register() {
                 disabled={loading}
                 className="group flex w-full items-center justify-center gap-3 rounded-2xl bg-emerald-500 py-5 text-base font-black uppercase tracking-tight text-white shadow-xl shadow-emerald-500/20 hover:bg-emerald-400 disabled:opacity-50 transition-all hover:scale-[1.02]"
               >
-                {loading ? 'Processando...' : 'Começar Gratuitamente'}
+                {loading ? 'Processando...' : 'Criar conta'}
               </button>
             </div>
           </form>

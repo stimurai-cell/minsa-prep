@@ -20,9 +20,8 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
 
         const token = await requestFirebaseNotificationPermission();
 
-        if (!token) {
-            throw new Error('Não foi possível obter a chave de ligação (Token FCM).');
-        }
+        // O requestFirebaseNotificationPermission já lança erros detalhados se falhar
+        if (!token) return false;
 
         console.log('[Push] Token obtido, a guardar no Supabase...');
         const subscriptionJson = { endpoint: token, fcm: true };
