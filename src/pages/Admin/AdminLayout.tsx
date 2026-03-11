@@ -2,7 +2,8 @@ import { ReactNode, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, Users, Database, CreditCard,
-    LifeBuoy, User, LogOut, Menu, X, ChevronRight, Activity
+    LifeBuoy, User, LogOut, Menu, X, ChevronRight, Activity,
+    Megaphone
 } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 
@@ -51,7 +52,7 @@ export default function AdminLayout({ children, activeTab, onTabChange }: AdminL
             title: "Conteúdo e Sistema",
             items: [
                 { id: 'content', label: 'Gerir Questões', icon: Database },
-                { id: 'news', label: 'Lançar Novidades', icon: Database }
+                { id: 'news', label: 'Notificações e Novidades', icon: Megaphone }
             ]
         },
         {
@@ -72,6 +73,7 @@ export default function AdminLayout({ children, activeTab, onTabChange }: AdminL
     const mobileQuickLinks = [
         { id: 'dashboard', icon: LayoutDashboard, label: 'Resumo' },
         { id: 'users', icon: Users, label: 'Membros' },
+        { id: 'news', icon: Megaphone, label: 'Alertas' },
         { id: 'payments', icon: CreditCard, label: 'Finanças' },
     ];
 
@@ -105,8 +107,8 @@ export default function AdminLayout({ children, activeTab, onTabChange }: AdminL
                                         <button
                                             onClick={() => handleTabClick(item.id)}
                                             className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-bold transition-all ${activeTab === item.id
-                                                    ? 'bg-slate-900 text-white shadow-md'
-                                                    : 'text-slate-600 hover:bg-slate-100'
+                                                ? 'bg-slate-900 text-white shadow-md'
+                                                : 'text-slate-600 hover:bg-slate-100'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-3">
@@ -203,8 +205,8 @@ export default function AdminLayout({ children, activeTab, onTabChange }: AdminL
                                             key={item.id}
                                             onClick={() => handleTabClick(item.id)}
                                             className={`flex flex-col items-center justify-center p-4 rounded-2xl border ${activeTab === item.id
-                                                    ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
-                                                    : 'border-slate-200 bg-white text-slate-700 active:bg-slate-50'
+                                                ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
+                                                : 'border-slate-200 bg-white text-slate-700 active:bg-slate-50'
                                                 }`}
                                         >
                                             <item.icon className={`w-8 h-8 mb-2 ${activeTab === item.id ? 'text-emerald-400' : 'text-slate-400'}`} />
