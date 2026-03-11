@@ -102,14 +102,19 @@ export default function AdminNews() {
             if (error) throw error;
 
             // Disparar push notification real nos dispositivos Android
-            await sendPushNotification({
+            const pushResult = await sendPushNotification({
                 title: notifTitle,
                 body: notifBody,
                 url: '/news',
                 userId: broadcast ? undefined : selectedUser.id,
             });
 
-            alert(`✅ Notificação enviada${broadcast ? ' para todos' : ` para ${selectedUser.full_name}`}!`);
+            if (pushResult.sent > 0) {
+                alert(`✅ Notificação enviada${broadcast ? ' para todos' : ` para ${selectedUser.full_name}`}! Os dispositivos foram notificados.`);
+            } else {
+                alert(`⚠️ Atenção: O aviso foi guardado na plataforma para ${broadcast ? 'todos' : selectedUser.full_name}, mas nenhum dispositivo recebeu a notificação (provavelmente porque o aluno não ativou o sistema "Push" no telemóvel dele).`);
+            }
+
             setNotifTitle('');
             setNotifBody('');
             setSelectedUser(null);

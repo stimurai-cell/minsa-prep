@@ -33,6 +33,8 @@ import PublicExam from './pages/PublicExam';
 import Leagues from './pages/Leagues';
 import UserProfileView from './pages/UserProfileView';
 import Welcome from './pages/Welcome';
+import Notifications from './pages/Notifications';
+import ToastNotification from './components/ToastNotification';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { RefreshCw } from 'lucide-react';
 import PaymentNotificationListener from './components/PaymentNotificationListener';
@@ -108,6 +110,7 @@ export default function App() {
     <BrowserRouter>
       <OfflineSync />
       <PaymentNotificationListener />
+      <ToastNotification />
       {showOfflineAlert && (
         <div className="fixed top-0 left-0 right-0 z-[100] bg-orange-500 p-2 text-center text-sm font-bold text-white shadow-lg animate-in slide-in-from-top duration-300">
           <div className="flex items-center justify-center gap-2">
@@ -162,6 +165,7 @@ export default function App() {
             <Route path="leagues" element={<Leagues />} />
             <Route path="ranking" element={<Ranking />} />
             <Route path="premium" element={<Premium />} />
+            <Route path="notifications" element={<Notifications />} />
             <Route path="admin" element={<Admin />} />
           </Route>
         </Routes>

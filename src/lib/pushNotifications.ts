@@ -70,22 +70,22 @@ export async function requestNotificationPermission(userId: string): Promise<Not
     return permission;
 }
 
-/**
- * Envia uma push notification via API backend.
- */
 export async function sendPushNotification(params: {
     title: string;
     body: string;
     url?: string;
     userId?: string;
-}): Promise<void> {
+}): Promise<{ sent: number; reason?: string }> {
     try {
-        await fetch('/api/send-push', {
+        const response = await fetch('/api/send-push', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(params),
         });
+        const data = await response.json();
+        return { sent: data.sent ?? 0, reason: data.reason };
     } catch (err) {
         console.error('[Push] Erro ao enviar push:', err);
+        return { sent: 0, reason: 'error_occurred' };
     }
 }

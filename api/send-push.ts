@@ -58,7 +58,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
         if (error) throw error;
         if (!subscriptions || subscriptions.length === 0) {
-            return send(res, 200, { sent: 0, message: 'No subscriptions found' });
+            return send(res, 200, { sent: 0, reason: 'no_subscriptions', message: 'User has no push subscriptions' });
         }
 
         // Filtra apenas FCM tokens válidos (geralmente não são URLs, ao contrário das antigas endpoint VAPID)
@@ -67,7 +67,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             .filter(t => t && !t.startsWith('http'));
 
         if (tokens.length === 0) {
-            return send(res, 200, { sent: 0, message: 'No valid FCM tokens found' });
+            return send(res, 200, { sent: 0, reason: 'no_valid_tokens', message: 'No valid FCM tokens found' });
         }
 
         const message = {

@@ -15,30 +15,30 @@ export default function Login() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const { checkSession } = useAuthStore();
-  const [canInstall, setCanInstall] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
 
   useEffect(() => {
-    // Verificar se o evento de instalação está disponível
-    const checkInstall = () => {
-      if ((window as any).deferredPrompt) {
-        setCanInstall(true);
+    // Verificar se já está instalado (standalone)
+    const checkStandalone = () => {
+      if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) {
+        setIsStandalone(true);
       }
     };
 
-    checkInstall();
-    const interval = setInterval(checkInstall, 1000);
-    return () => clearInterval(interval);
+    checkStandalone();
   }, []);
 
   const handleInstallClick = async () => {
     const promptEvent = (window as any).deferredPrompt;
-    if (!promptEvent) return;
-
-    promptEvent.prompt();
-    const { outcome } = await promptEvent.userChoice;
-    if (outcome === 'accepted') {
-      (window as any).deferredPrompt = null;
-      setCanInstall(false);
+    if (promptEvent) {
+      promptEvent.prompt();
+      const { outcome } = await promptEvent.userChoice;
+      if (outcome === 'accepted') {
+        (window as any).deferredPrompt = null;
+      }
+    } else {
+      setShowInstallHelp(true);
     }
   };
 
@@ -214,15 +214,24 @@ export default function Login() {
             </Link>
           </div>
 
-          {canInstall && (
-            <button
-              type="button"
-              onClick={handleInstallClick}
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-4 text-xs font-black text-slate-900 transition-all hover:bg-slate-100 uppercase tracking-widest shadow-xl"
-            >
-              <Download className="h-4 w-4" />
-              Baixar App (PWA)
-            </button>
+          {!isStandalone && (
+            <>
+              <button
+                type="button"
+                onClick={handleInstallClick}
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-4 text-xs font-black text-slate-900 transition-all hover:bg-slate-100 uppercase tracking-widest shadow-xl"
+              >
+                <Download className="h-4 w-4" />
+                Baixar App (PWA)
+              </button>
+              {showInstallHelp && (
+                <div className="mt-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-4 text-xs text-emerald-100 text-left animate-in fade-in duration-300">
+                  <p className="font-bold mb-2 uppercase tracking-tight text-center">Como instalar manualmente:</p>
+                  <p className="mb-2"><strong>iOS (iPhone):</strong> Toque no ícone "Compartilhar" (quadrado com seta para cima) e selecione "Adicionar à Tela de Início".</p>
+                  <p><strong>Android / Outros:</strong> Toque no menu do seu navegador (geralmente três pontos no canto superior direito) e selecione "Instalar aplicativo" ou "Adicionar à tela inicial".</p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

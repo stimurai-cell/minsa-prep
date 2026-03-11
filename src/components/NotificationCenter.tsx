@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
-import { Bell, X, Check, ArrowRight, Info, Zap, Trophy, Megaphone, BellOff } from 'lucide-react';
+import { Bell, X, Check, ArrowRight, Info, Zap, Trophy, Megaphone, BellOff, CheckCheck, ExternalLink } from 'lucide-react';
 import { requestNotificationPermission } from '../lib/pushNotifications';
+import { Link } from 'react-router-dom';
 
 type Notification = {
     id: string;
@@ -70,6 +71,16 @@ export default function NotificationCenter() {
         fetchNotifications();
     };
 
+    const markAllAsRead = async () => {
+        if (!profile?.id) return;
+        await supabase
+            .from('user_notifications')
+            .update({ is_read: true })
+            .eq('user_id', profile.id)
+            .eq('is_read', false);
+        fetchNotifications();
+    };
+
     const getIcon = (type: string) => {
         switch (type) {
             case 'marketing': return <Zap className="w-4 h-4 text-orange-500" />;
@@ -97,12 +108,23 @@ export default function NotificationCenter() {
                     <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
                     <div className="absolute right-0 mt-2 w-80 md:w-96 bg-white rounded-[2rem] border border-slate-200 shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
                         <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                            <h3 className="font-black text-slate-800 uppercase tracking-widest text-xs flex items-center gap-2">
-                                <Bell className="w-4 h-4" /> Alertas
+                            <h3 className="font-black text-slate-800 uppercase tracking-widest text-[10px] flex items-center gap-2">
+                                <Bell className="w-3.5 h-3.5" /> Notificações
                             </h3>
-                            <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-slate-200 rounded-lg text-slate-400">
-                                <X className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                                {unreadCount > 0 && (
+                                    <button
+                                        onClick={markAllAsRead}
+                                        className="p-1.5 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors group/btn"
+                                        title="Marcar todas como lidas"
+                                    >
+                                        <CheckCheck className="w-4 h-4" />
+                                    </button>
+                                )}
+                                <button onClick={() => setIsOpen(false)} className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-400 transition-colors">
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
 
                         <div className="max-h-[400px] overflow-y-auto no-scrollbar">
@@ -152,6 +174,16 @@ export default function NotificationCenter() {
                                         </div>
                                     </div>
                                 ))
+                            )}
+
+                            {notifications.length > 0 && (
+                                <Link
+                                    to="/notifications"
+                                    onClick={() => setIsOpen(false)}
+                                    className="flex items-center justify-center gap-2 p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest hover:bg-slate-50 border-t border-slate-50 transition-colors"
+                                >
+                                    Ver todas as notificações <ExternalLink className="w-3 h-3" />
+                                </Link>
                             )}
                         </div>
 
