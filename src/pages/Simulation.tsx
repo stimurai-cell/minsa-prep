@@ -152,7 +152,6 @@ export default function Simulation() {
   };
 
   const bootSimulationSession = async (difficulty: DifficultyPreference) => {
-    // Safety check: force medium if non-premium tries to access hard
     const safeDifficulty = !hasPremiumAccess && difficulty === 'hard' ? 'medium' : difficulty;
     const sessionType = searchParams.get('type');
 
@@ -162,33 +161,47 @@ export default function Simulation() {
 
     try {
       let qData: any[] = [];
+      const count = sessionType === 'simulado_geral' ? 50 : 30;
 
       if (sessionType && ['legis_geral', 'etica_deon', 'simulado_geral'].includes(sessionType)) {
-        // Modo Concurso Especializado
-        let query = supabase
+        // 1. Fetch IDs for the specific contest type
+        let idsQuery = supabase
+          .from('questions')
+          .select(`id, topics!inner (name)`)
+          .eq('is_contest_highlight', true);
+
+        if (sessionType === 'legis_geral') {
+          idsQuery = idsQuery.eq('topics.name', 'Legislação Geral');
+        } else if (sessionType === 'etica_deon') {
+          idsQuery = idsQuery.eq('topics.name', 'Ética e Deontologia');
+        }
+
+        const { data: idData, error: idError } = await idsQuery;
+        if (idError) throw idError;
+
+        if (!idData || idData.length === 0) {
+          alert('Nenhuma questão de concurso encontrada.');
+          navigate('/simulation', { replace: true });
+          return;
+        }
+
+        const shuffledIds = idData.map(q => q.id).sort(() => Math.random() - 0.5).slice(0, count);
+
+        // 2. Fetch full data
+        const { data, error } = await supabase
           .from('questions')
           .select(`
             id, content, difficulty, topic_id, is_contest_highlight,
             alternatives (id, content, is_correct),
             question_explanations (content),
-            topics!inner (area_id, name)
+            topics (area_id, name)
           `)
-          .eq('is_contest_highlight', true);
+          .in('id', shuffledIds);
 
-        if (sessionType === 'legis_geral') {
-          query = query.eq('topics.name', 'Legislação Geral');
-        } else if (sessionType === 'etica_deon') {
-          query = query.eq('topics.name', 'Ética e Deontologia');
-        } else {
-          // simulado_geral: mistura tudo que é destaque de concurso, mas prioriza a área do usuário + legislação
-          // Para simplificar agora, pegamos todos os destaques de concurso
-        }
-
-        const { data, error } = await query.limit(200);
         if (error) throw error;
-        qData = data || [];
+        qData = shuffledIds.map(id => data.find(q => q.id === id)).filter(Boolean);
       } else {
-        // Fluxo Normal por Área do usuário
+        // Fluxo Normal por Área
         const { data: topics } = await supabase
           .from('topics')
           .select('id')
@@ -201,42 +214,55 @@ export default function Simulation() {
         }
 
         const topicIds = topics.map((topic) => topic.id);
-        let query = supabase
+
+        // 1. Fetch IDs
+        let idsQuery = supabase
           .from('questions')
-          .select(
-            `
+          .select('id')
+          .in('topic_id', topicIds);
+
+        if (safeDifficulty !== 'mixed') {
+          idsQuery = idsQuery.eq('difficulty', safeDifficulty);
+        }
+
+        const { data: idData, error: idError } = await idsQuery;
+        if (idError) throw idError;
+
+        if (!idData || idData.length === 0) {
+          alert('Não há questões suficientes para esta área.');
+          navigate('/simulation', { replace: true });
+          return;
+        }
+
+        const shuffledIds = idData.map(q => q.id).sort(() => Math.random() - 0.5).slice(0, count);
+
+        // 2. Fetch full data
+        const { data, error } = await supabase
+          .from('questions')
+          .select(`
             id, content, difficulty, topic_id,
             alternatives (id, content, is_correct),
             question_explanations (content)
-          `
-          )
-          .in('topic_id', topicIds)
-          .limit(240);
+          `)
+          .in('id', shuffledIds);
 
-        if (safeDifficulty !== 'mixed') {
-          query = query.eq('difficulty', safeDifficulty);
-        }
-
-        const { data, error } = await query;
         if (error) throw error;
-        qData = data || [];
+        qData = shuffledIds.map(id => data.find(q => q.id === id)).filter(Boolean);
       }
 
       if (qData && qData.length > 0) {
         resetSimulationSession();
-        const count = sessionType === 'simulado_geral' ? 50 : 30;
-        const selectedQuestions = prepareQuestionSet(pickQuestionsForSession(qData, count, difficulty));
-        setQuestions(selectedQuestions);
+        // Since we already shuffled and picked the IDs, we just need to prepare the question set
+        setQuestions(prepareQuestionSet(qData));
         setSessionStartedAt(Date.now());
         setShowIntro(true);
 
-        // Pre-register the attempt
         const { data: attempt } = await supabase
           .from('quiz_attempts')
           .insert({
             user_id: profile?.id,
-            area_id: profile?.selected_area_id || qData[0]?.topics?.area_id,
-            total_questions: selectedQuestions.length,
+            area_id: profile?.selected_area_id || (qData[0] as any)?.topics?.area_id,
+            total_questions: qData.length,
             is_completed: false,
             package: profile?.role || 'free',
           })

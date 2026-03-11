@@ -53,32 +53,11 @@ export default function Welcome() {
                     </motion.p>
                 </header>
 
-                <section className="grid md:grid-cols-4 gap-4">
-                    {[
-                        { icon: BookOpen, title: "Aprender e Rever", desc: "Consolide conceitos fundamentais da saúde." },
-                        { icon: Zap, title: "Treino e Lazer", desc: "Pratique de forma dinâmica e descontraída." },
-                        { icon: Target, title: "Testar Habilidades", desc: "Avalie seu nível técnico com precisão." },
-                        { icon: ShieldCheck, title: "Foco no Concurso", desc: "Simulados 100% fiéis aos editais MINSA." }
-                    ].map((item, i) => (
-                        <motion.div
-                            key={i}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.5, delay: 0.8 + (i * 0.1) }}
-                            className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-[2rem] hover:bg-white/10 transition-colors group"
-                        >
-                            <item.icon className="h-8 w-8 text-emerald-400 mb-4 group-hover:scale-110 transition-transform" />
-                            <h3 className="text-base font-bold mb-2">{item.title}</h3>
-                            <p className="text-xs text-slate-400 leading-relaxed">{item.desc}</p>
-                        </motion.div>
-                    ))}
-                </section>
-
-                <footer className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                     <motion.div
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.6, delay: 1.2 }}
+                        transition={{ duration: 0.6, delay: 0.8 }}
                         className="w-full sm:w-auto"
                     >
                         <Link
@@ -94,7 +73,7 @@ export default function Welcome() {
                     <motion.div
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.6, delay: 1.2 }}
+                        transition={{ duration: 0.6, delay: 0.8 }}
                         className="w-full sm:w-auto"
                     >
                         <Link
@@ -105,7 +84,28 @@ export default function Welcome() {
                             Já tenho conta
                         </Link>
                     </motion.div>
-                </footer>
+                </div>
+
+                <section className="grid md:grid-cols-4 gap-4">
+                    {[
+                        { icon: BookOpen, title: "Aprender e Rever", desc: "Consolide conceitos fundamentais da saúde." },
+                        { icon: Zap, title: "Treino e Lazer", desc: "Pratique de forma dinâmica e descontraída." },
+                        { icon: Target, title: "Testar Habilidades", desc: "Avalie seu nível técnico com precisão." },
+                        { icon: ShieldCheck, title: "Foco no Concurso", desc: "Simulados 100% fiéis aos editais MINSA." }
+                    ].map((item, i) => (
+                        <motion.div
+                            key={i}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5, delay: 1.0 + (i * 0.1) }}
+                            className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-[2rem] hover:bg-white/10 transition-colors group"
+                        >
+                            <item.icon className="h-8 w-8 text-emerald-400 mb-4 group-hover:scale-110 transition-transform" />
+                            <h3 className="text-base font-bold mb-2">{item.title}</h3>
+                            <p className="text-xs text-slate-400 leading-relaxed">{item.desc}</p>
+                        </motion.div>
+                    ))}
+                </section>
 
                 <div className="flex flex-col items-center gap-4">
                     <motion.p

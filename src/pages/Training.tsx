@@ -224,38 +224,52 @@ export default function Training() {
       }
     }
 
-    // Safety check: force medium if non-premium tries to access hard
     const safeDifficulty = !hasPremiumAccess && difficulty === 'hard' ? 'medium' : difficulty;
     setLoading(true);
 
     try {
-      let query = supabase
+      // 1. Fetch ALL IDs for the topic/difficulty to ensure total randomness
+      let idsQuery = supabase
         .from('questions')
-        .select(
-          `
+        .select('id')
+        .eq('topic_id', topicId);
+
+      if (safeDifficulty !== 'mixed') {
+        idsQuery = idsQuery.eq('difficulty', safeDifficulty);
+      }
+
+      const { data: idData, error: idError } = await idsQuery;
+      if (idError) throw idError;
+
+      if (!idData || idData.length === 0) {
+        alert('Nenhuma questão encontrada para este tópico.');
+        navigate('/training', { replace: true });
+        return;
+      }
+
+      // 2. Shuffle and pick IDs
+      const shuffledIds = idData.map(q => q.id).sort(() => Math.random() - 0.5).slice(0, 20);
+
+      // 3. Fetch full data for these IDs
+      const { data: qData, error: qError } = await supabase
+        .from('questions')
+        .select(`
           id, content, difficulty,
           alternatives (id, content, is_correct),
           question_explanations (content)
-        `
-        )
-        .eq('topic_id', topicId)
-        .limit(20);
-
-      if (safeDifficulty !== 'mixed') {
-        query = query.eq('difficulty', safeDifficulty);
-      }
-
-      const { data: qData, error: qError } = await query;
+        `)
+        .in('id', shuffledIds);
 
       if (qError) throw qError;
 
       if (qData && qData.length > 0) {
         resetTrainingSession();
-        setQuestions(prepareQuestionSet(pickQuestionsForSession(qData, 10, difficulty)));
+        // Maintain the shuffled order
+        const orderedQuestions = shuffledIds.map(id => qData.find(q => q.id === id)).filter(Boolean);
+        setQuestions(prepareQuestionSet(orderedQuestions));
         setSessionStartedAt(Date.now());
         setShowIntro(true);
 
-        // Registrar início de treino (Log detalhado)
         try {
           await supabase.from('activity_logs').insert({
             user_id: profile.id,
@@ -269,7 +283,7 @@ export default function Training() {
           console.error('Erro ao registar início de treino:', logErr);
         }
       } else {
-        alert('Nenhuma questão encontrada para este tópico.');
+        alert('Erro ao carregar questões.');
         navigate('/training', { replace: true });
       }
     } catch (error) {

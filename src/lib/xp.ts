@@ -19,11 +19,11 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
     try {
         const newTotal = (currentTotalXp || 0) + xpAmount;
 
-        // 1. Update Profile Total XP
-        const { error: profileError } = await supabase
-            .from('profiles')
-            .update({ total_xp: newTotal })
-            .eq('id', userId);
+        // 1. Update Profile Total XP atomically
+        const { error: profileError } = await supabase.rpc('increment_total_xp', {
+            p_user_id: userId,
+            p_xp: xpAmount
+        });
 
         if (profileError) throw profileError;
 
