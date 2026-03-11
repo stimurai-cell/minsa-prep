@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Home,
@@ -61,11 +61,23 @@ export default function Layout() {
     { to: '/social', label: 'Amigos', icon: UsersRound, activeColor: 'text-rose-500', activeBg: 'bg-rose-100', activeBorder: 'border-rose-200' },
     { to: '/leagues', label: 'Ligas', icon: ShieldCheck, activeColor: 'text-indigo-500', activeBg: 'bg-indigo-100', activeBorder: 'border-indigo-200' },
     { to: '/profile', label: 'Perfil', icon: UserRound, activeColor: 'text-teal-500', activeBg: 'bg-teal-100', activeBorder: 'border-teal-200' },
-    { to: '/premium', label: 'Loja', icon: Crown, activeColor: 'text-yellow-500', activeBg: 'bg-yellow-100', activeBorder: 'border-yellow-200' },
-    { to: '/news', label: 'Novidades', icon: Megaphone, activeColor: 'text-blue-500', activeBg: 'bg-blue-100', activeBorder: 'border-blue-200' },
+    { to: '/premium', label: 'Loja', icon: Crown, activeColor: 'text-yellow-500', activeBg: 'bg-yellow-100', activeBorder: 'border-yellow-200', isExtra: true },
+    { to: '/news', label: 'Novidades', icon: Megaphone, activeColor: 'text-blue-500', activeBg: 'bg-blue-100', activeBorder: 'border-blue-200', isExtra: true },
   ];
 
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const links = profile?.role === 'admin' ? adminLinks : studentLinks;
+
+  const visibleLinks = useMemo(() => {
+    if (profile?.role === 'admin') return adminLinks;
+    // On mobile, if we have limited space, filter "isExtra" items for the "More" menu
+    return studentLinks.filter(l => !l.isExtra);
+  }, [profile?.role]);
+
+  const extraLinks = useMemo(() => {
+    return studentLinks.filter(l => l.isExtra);
+  }, []);
+
   const currentAdminTab = new URLSearchParams(location.search).get('tab') || 'dashboard';
   const isImmersiveSession =
     (location.pathname === '/training' || location.pathname === '/simulation' || location.pathname === '/speed-mode') &&
@@ -98,9 +110,9 @@ export default function Layout() {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#eef7f1_52%,#f6fbf7_100%)] text-slate-900">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
       <div className="mx-auto flex min-h-screen max-w-[1600px]">
-        <aside className={`hidden w-80 shrink-0 border-r border-white/70 bg-[linear-gradient(180deg,#ffffff_0%,#f4fbf7_100%)] xl:flex xl:flex-col ${isImmersiveSession ? 'xl:hidden' : ''}`}>
+        <aside className={`hidden w-80 shrink-0 border-r border-slate-200 bg-white xl:flex xl:flex-col ${isImmersiveSession ? 'xl:hidden' : ''}`}>
           <div className="border-b border-slate-100 px-7 py-8">
             <div className="flex flex-col items-center">
               <div className="flex h-24 w-full items-center justify-center rounded-[2rem] bg-white shadow-xl shadow-emerald-900/5 border border-slate-100 p-4 transition-transform hover:scale-[1.02]">
@@ -227,7 +239,7 @@ export default function Layout() {
                 </div>
               </div>
 
-              <div className="mt-4 flex items-center gap-3 rounded-[1.5rem] border border-white/70 bg-[linear-gradient(135deg,#ffffff_0%,#f3fbf6_100%)] px-4 py-3 shadow-[0_20px_60px_-46px_rgba(15,23,42,0.35)]">
+              <div className="mt-4 flex items-center gap-3 rounded-[1.5rem] border border-slate-200 bg-white px-4 py-3 shadow-sm">
                 <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-xl font-black shadow-sm overflow-hidden ${!profile?.avatar_url ? (profile?.avatar_style || 'bg-emerald-100 text-emerald-700') : 'bg-white'}`}>
                   {profile?.avatar_url ? (
                     <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
@@ -284,8 +296,8 @@ export default function Layout() {
       </div>
 
       <nav className={`fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur xl:hidden ${isImmersiveSession ? 'hidden' : ''}`}>
-        <div className={`mx-auto grid max-w-xl gap-2 ${profile?.role === 'admin' ? 'grid-cols-4' : 'grid-cols-7'}`}>
-          {links.map((link) => {
+        <div className={`mx-auto grid max-w-xl gap-2 ${profile?.role === 'admin' ? 'grid-cols-4' : 'grid-cols-6'}`}>
+          {visibleLinks.map((link) => {
             const Icon = link.icon;
             const isActive = getLinkActive(link);
 
@@ -310,6 +322,38 @@ export default function Layout() {
               </NavLink>
             );
           })}
+
+          {profile?.role !== 'admin' && (
+            <div className="relative">
+              <button
+                onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+                className={`flex w-full min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-bold transition border-2 ${moreMenuOpen ? 'bg-slate-100 border-slate-200 text-slate-900' : 'text-slate-400 border-transparent'}`}
+              >
+                <Menu className="h-6 w-6" />
+                <span>Mais</span>
+              </button>
+
+              {moreMenuOpen && (
+                <div className="absolute bottom-full right-0 mb-4 w-48 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white p-2 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
+                  {extraLinks.map((link) => {
+                    const Icon = link.icon;
+                    const isActive = getLinkActive(link);
+                    return (
+                      <NavLink
+                        key={link.to}
+                        to={link.to}
+                        onClick={() => setMoreMenuOpen(false)}
+                        className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition ${isActive ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}
+                      >
+                        <Icon className="h-5 w-5" />
+                        <span>{link.label}</span>
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </nav>
     </div>

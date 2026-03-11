@@ -126,10 +126,12 @@ export default function Register() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col justify-center bg-[radial-gradient(circle_at_top,#dff7ea,transparent_34%),linear-gradient(180deg,#f8fffb_0%,#eff6ff_100%)] px-4 py-12 font-sans sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+    <div className="flex min-h-screen flex-col justify-center bg-minsa-gradient px-4 py-8 font-sans sm:px-6 lg:px-8 relative overflow-hidden">
+      {/* Elementos decorativos removidos para evitar tela embranquiçada */}
+
+      <div className="sm:mx-auto sm:w-full sm:max-w-md z-10">
         <div className="flex justify-center">
-          <div className="flex h-24 w-full items-center justify-center rounded-[2.5rem] bg-white shadow-xl shadow-emerald-500/10 border border-emerald-50 p-4">
+          <div className="flex h-16 w-40 items-center justify-center rounded-[1.5rem] bg-white shadow-xl border border-white/20 p-3">
             <img
               src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/abj60fbildawqtq47qgu.png"
               alt="MINSA Prep Logo"
@@ -137,157 +139,130 @@ export default function Register() {
             />
           </div>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold tracking-tight text-slate-900">
+        <h2 className="mt-6 text-center text-2xl font-black tracking-tight text-white">
           Crie a sua conta
         </h2>
-        <p className="mt-2 text-center text-sm text-slate-600">
-          Treine como se fosse o concurso real.
+        <p className="mt-2 text-center text-sm text-slate-400 font-medium">
+          Acesse os melhores treinos de Angola.
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="rounded-[2rem] border border-white/80 bg-white p-6 shadow-[0_28px_90px_-52px_rgba(15,23,42,0.35)] sm:px-8">
-          <form className="space-y-6" onSubmit={handleRegister}>
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-lg z-10">
+        <div className="rounded-[2.5rem] border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-2xl sm:px-10">
+          <form className="space-y-4" onSubmit={handleRegister}>
             {error && (
-              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+              <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
                 {error}
               </div>
             )}
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Nome completo</label>
-              <input
-                type="text"
-                required
-                autoComplete="name"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="mt-1 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Email</label>
-              <input
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Senha</label>
-              <div className="relative mt-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-300 ml-1">Nome Completo</label>
                 <input
-                  type={showPassword ? 'text' : 'password'}
+                  type="text"
                   required
-                  autoComplete="new-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 pr-14 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+                  placeholder="Seu nome aqui"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="block w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-5 text-sm text-white outline-none transition focus:border-emerald-500 focus:bg-white/10"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-3 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100"
-                  aria-label={showPassword ? 'Esconder senha' : 'Mostrar senha'}
-                >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-300 ml-1">Email</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="exemplo@gmail.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="block w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-5 text-sm text-white outline-none transition focus:border-emerald-500 focus:bg-white/10"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-300 ml-1">Telefone</label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="+244 9..."
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  className="block w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-5 text-sm text-white outline-none transition focus:border-emerald-500 focus:bg-white/10"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-300 ml-1">Senha</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="block w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-5 pr-14 text-sm text-white outline-none transition focus:border-emerald-500 focus:bg-white/10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 h-10 w-10 flex items-center justify-center rounded-xl text-slate-400 hover:bg-white/10"
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Área de estudo</label>
-              <select
-                required={areas.length > 0}
-                value={areaId}
-                onChange={(e) => setAreaId(e.target.value)}
-                className="mt-1 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
-              >
-                <option value="" disabled>
-                  Selecione uma área
-                </option>
-                {areas.length > 0 ? (
-                  areas.map((area) => (
-                    <option key={area.id} value={area.id}>
-                      {area.name}
-                    </option>
-                  ))
-                ) : (
-                  <option value="" disabled>
-                    Carregando áreas...
-                  </option>
-                )}
-              </select>
-              {areas.length === 0 && !appLoading && (
-                <p className="mt-2 text-xs text-orange-600">
-                  Nenhuma area encontrada. Execute o script SQL no Supabase para configurar o banco.
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Número de Telefone</label>
-              <input
-                type="tel"
-                required
-                placeholder="Ex: +244 9..."
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                className="mt-1 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Qual o seu foco principal?</label>
-              <select
-                required
-                value={goal}
-                onChange={(e) => setGoal(e.target.value)}
-                className="mt-1 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
-              >
-                <option value="" disabled>Selecione um objetivo</option>
-                <option value="Aprender e rever conceitos">Aprender e rever conceitos</option>
-                <option value="Passar no concurso publico">Passar no concurso público</option>
-                <option value="Descontrair e treinar">Descontrair e treinar</option>
-                <option value="Testar minhas habilidades">Testar minhas habilidades</option>
-              </select>
-            </div>
-
-            {goal === 'Passar no concurso publico' && (
-              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                <label className="block text-sm font-medium text-slate-700">Tempo de preparação</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-300 ml-1">Área de Estudo</label>
                 <select
                   required
-                  value={prepTime}
-                  onChange={(e) => setPrepTime(e.target.value)}
-                  className="mt-1 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+                  value={areaId}
+                  onChange={(e) => setAreaId(e.target.value)}
+                  className="block w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-5 text-sm text-white outline-none appearance-none transition focus:border-emerald-500 focus:bg-white/10"
                 >
-                  <option value="1">1 Mês (Mensal - Intensivo)</option>
-                  <option value="3">3 Meses (Trimestral - Recomendado)</option>
-                  <option value="6">6 Meses (Semestral - Completo)</option>
+                  <option value="" disabled className="text-slate-900">Selecione...</option>
+                  {areas.map((area) => (
+                    <option key={area.id} value={area.id} className="text-slate-900">{area.name}</option>
+                  ))}
                 </select>
               </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex w-full justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {loading ? 'Criando conta...' : 'Começar a treinar'}
-            </button>
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-300 ml-1">Seu Objetivo</label>
+                <select
+                  required
+                  value={goal}
+                  onChange={(e) => setGoal(e.target.value)}
+                  className="block w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-5 text-sm text-white outline-none appearance-none transition focus:border-emerald-500 focus:bg-white/10"
+                >
+                  <option value="" disabled className="text-slate-900">Selecione...</option>
+                  <option value="Aprender e rever conceitos" className="text-slate-900">Aprender/Rever</option>
+                  <option value="Passar no concurso publico" className="text-slate-900">Passar no Concurso</option>
+                  <option value="Descontrair e treinar" className="text-slate-900">Descontrair/Treinar</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="pt-4">
+              <button
+                type="submit"
+                disabled={loading}
+                className="group flex w-full items-center justify-center gap-3 rounded-2xl bg-emerald-500 py-5 text-base font-black uppercase tracking-tight text-white shadow-xl shadow-emerald-500/20 hover:bg-emerald-400 disabled:opacity-50 transition-all hover:scale-[1.02]"
+              >
+                {loading ? 'Processando...' : 'Começar Gratuitamente'}
+              </button>
+            </div>
           </form>
 
           <div className="mt-6 text-center">
-            <p className="text-sm text-slate-600">
-              Já tem uma conta?{' '}
-              <Link to="/login" className="font-semibold text-emerald-600 hover:text-emerald-500">
-                Faça login
+            <p className="text-sm font-medium text-slate-400">
+              Já faz parte da nossa comunidade?{' '}
+              <Link to="/login" className="font-bold text-emerald-400 hover:text-emerald-300">
+                Fazer Login
               </Link>
             </p>
           </div>

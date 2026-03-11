@@ -32,6 +32,7 @@ import PrivacyPolicy from './pages/PrivacyPolicy';
 import PublicExam from './pages/PublicExam';
 import Leagues from './pages/Leagues';
 import UserProfileView from './pages/UserProfileView';
+import Welcome from './pages/Welcome';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { RefreshCw } from 'lucide-react';
 import PaymentNotificationListener from './components/PaymentNotificationListener';
@@ -40,15 +41,16 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuthStore();
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div></div>;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/welcome" replace />;
 
   return <>{children}</>;
 }
 
 function RootRedirect() {
-  const { profile, loading } = useAuthStore();
+  const { user, profile, loading } = useAuthStore();
 
   if (loading) return null;
+  if (!user) return <Navigate to="/welcome" replace />;
   if (profile?.role === 'admin') return <Navigate to="/admin" replace />;
   return <Navigate to="/dashboard" replace />;
 }
@@ -98,6 +100,7 @@ export default function App() {
       )}
       <ErrorBoundary>
         <Routes>
+          <Route path="/welcome" element={<Welcome />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />

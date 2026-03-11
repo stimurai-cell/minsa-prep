@@ -138,4 +138,12 @@ export const extraPackages: ExtraPackage[] = [
     priceLabel: '5.000 Kz',
     features: ['Simulados de Legislação e Ética', 'Cronómetro e ambiente de prova real', 'Destaques do edital atualizado'],
   },
+  {
+    id: 'pacote_offline',
+    name: 'Pacote Offline (PWA)',
+    description: 'Estude em qualquer lugar, mesmo sem internet ou dados móveis.',
+    priceAmount: 900,
+    priceLabel: '900 Kz',
+    features: ['Download de questões para uso offline', 'Sincronização automática ao reconectar', 'Acesso ilimitado ao treino diário offline'],
+  },
 ];

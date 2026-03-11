@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { sendPushNotification } from './pushNotifications';
 
 export interface XpAwardResult {
     success: boolean;
@@ -39,12 +40,13 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
                 }
             });
 
-        // 3. Sync with weekly_league_stats
-        // Calcular o início da semana (Segunda-feira) de forma robusta
-        const date = new Date();
-        const day = date.getDay();
-        const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-        const monday = new Date(date.setDate(diff)).toISOString().split('T')[0];
+        // 3. Sync with weekly_league_stats via RPC for atomic increment
+        // Calcular o início da semana (Segunda-feira) de forma robusta e independente de UTC shift
+        const now = new Date();
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+        const mondayDate = new Date(now.getFullYear(), now.getMonth(), diff);
+        const monday = `${mondayDate.getFullYear()}-${String(mondayDate.getMonth() + 1).padStart(2, '0')}-${String(mondayDate.getDate()).padStart(2, '0')}`;
 
         console.log(`[XP] Sincronizando liga para usuário ${userId}. Semana: ${monday}, XP: ${xpAmount}`);
 
@@ -56,37 +58,76 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
 
         const leagueName = profileData?.current_league || 'Bronze';
 
-        // Tenta fazer o upsert - O Postgres usará a restrição UNIQUE(user_id, week_start_date)
-        const { error: leagueError } = await supabase
-            .from('weekly_league_stats')
-            .upsert({
+        // Usa a função RPC increment_weekly_xp definida no banco de dados para evitar sobrescrita e race conditions
+        const { error: leagueError } = await supabase.rpc('increment_weekly_xp', {
+            p_user_id: userId,
+            p_league_name: leagueName,
+            p_week_start: monday,
+            p_xp: xpAmount
+        });
+
+        if (leagueError) {
+            console.error('[XP] Erro ao sincronizar liga via RPC:', leagueError);
+        }
+
+        // --- 4. GAMIFICATION: Verificação de Marcos Simbólicos (Milestones) ---
+        const milestones = [1000, 5000, 10000, 25000, 50000, 100000];
+        const crossedMilestone = milestones.find(m => currentTotalXp < m && newTotal >= m);
+
+        if (crossedMilestone) {
+            console.log(`[Gamification] Usuário ${userId} alcançou o marco de ${crossedMilestone} XP!`);
+
+            // a) Gerar Publicação Automática no Feed
+            const { error: feedError } = await supabase.from('feed_items').insert({
                 user_id: userId,
-                league_name: leagueName,
-                week_start_date: monday,
-                xp_earned: xpAmount // Nota: Este campo precisa ser acumulado se já existir
-            }, {
-                onConflict: 'user_id,week_start_date'
+                type: 'achievement',
+                content: {
+                    title: 'Novo Marco Alcançado! 🎉',
+                    body: `Alcançou incríveis ${crossedMilestone.toLocaleString()} XP acumulados. Continue assim, o limite é o céu!`,
+                    score: crossedMilestone
+                }
             });
 
-        // Como o upsert substitui, precisamos de uma estratégia para incrementar.
-        // Se o upsert acima não suportar incremento nativo (depende da config de RLS/DB),
-        // usamos a lógica manual com verificação de erro.
-        if (!leagueError) {
-            // Recuperar o valor atual para somar corretamente no frontend ou usar RPC
-            const { data: currentWeek } = await supabase
-                .from('weekly_league_stats')
-                .select('xp_earned')
-                .eq('user_id', userId)
-                .eq('week_start_date', monday)
-                .maybeSingle();
+            if (feedError) console.error('[Gamification] Erro ao postar no feed:', feedError);
 
-            await supabase
-                .from('weekly_league_stats')
-                .update({ xp_earned: (currentWeek?.xp_earned || 0) + xpAmount })
-                .eq('user_id', userId)
-                .eq('week_start_date', monday);
-        } else {
-            console.error('[XP] Erro ao sincronizar liga:', leagueError);
+            // b) Disparar Push Notification Persuasiva e Motivadora
+            await sendPushNotification({
+                userId,
+                title: 'Parabéns, Campeão! 👑',
+                body: `Acabaste de bater a meta fantástica de ${crossedMilestone.toLocaleString()} XP. O teu esforço está a dar frutos!`,
+                url: '/news'
+            });
+        }
+
+        // --- 5. GAMIFICATION: Verificação da Ofensiva (Streak) ---
+        const { data: profileAfter } = await supabase
+            .from('profiles')
+            .select('streak_count')
+            .eq('id', userId)
+            .maybeSingle();
+
+        const currentStreak = profileAfter?.streak_count || 0;
+        const streakMilestones = [3, 7, 14, 30, 50, 100, 365]; // Dias
+
+        // Só alertar se a ofensiva for exatamente igual a um marco (para não repetir)
+        if (streakMilestones.includes(currentStreak)) {
+            // Verificar se já não demos parabéns por isto recentemente (opcional, mas como "currentStreak" exato é difícil repetir, é seguro)
+            await supabase.from('feed_items').insert({
+                user_id: userId,
+                type: 'streak',
+                content: {
+                    title: 'Ofensiva Lendária! 🔥',
+                    body: `Impressionante! Mantiveste o teu foco durante ${currentStreak} dias consecutivos. És uma verdadeira inspiração!`,
+                    streak_days: currentStreak
+                }
+            });
+
+            await sendPushNotification({
+                userId,
+                title: `${currentStreak} Dias de Foco! 🔥`,
+                body: `Estás imbatível! Alcançaste a ofesiva monumental de ${currentStreak} dias consecutivos. Parabéns!`,
+                url: '/news'
+            });
         }
 
         return {

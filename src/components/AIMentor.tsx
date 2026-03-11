@@ -158,7 +158,7 @@ export default function AIMentor() {
                     >
                         <Brain className="w-16 h-16 text-indigo-100 mx-auto mb-4" />
                         <h4 className="text-slate-800 font-black mb-2">Pronto para sua mentoria?</h4>
-                        <p className="text-sm text-slate-500 mb-6 max-w-[280px] mx-auto">Vou analisar todos os seus erros e acertos para traçar o melhor caminho médico.</p>
+                        <p className="text-sm text-slate-500 mb-6 max-w-[280px] mx-auto">Vou analisar todos os seus erros e acertos para traçar o seu melhor caminho.</p>
                         <button
                             onClick={fetchAnalysis}
                             className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-8 py-3.5 rounded-2xl shadow-[0_4px_0_0_#3730a3] active:shadow-none active:translate-y-1 transition-all"

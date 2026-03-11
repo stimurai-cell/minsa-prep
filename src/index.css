@@ -1,1 +1,46 @@
 @import "tailwindcss";
+
+@layer base {
+  :root {
+    --primary-bg: #08121d;
+    --secondary-bg: #102033;
+    --accent-emerald: #114534;
+    --minsa-gold: #facc15;
+    --minsa-white: #f8fafc;
+  }
+
+  body {
+    background-color: var(--primary-bg);
+    color: var(--minsa-white);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  /* Fallback para dispositivos que não suportam gradientes complexos */
+  .bg-minsa-gradient {
+    background-color: var(--secondary-bg);
+    background-image: radial-gradient(circle at top left, #fff3c4, transparent 28%), 
+                      linear-gradient(135deg, #08121d 0%, #102033 56%, #114534 100%);
+  }
+
+  /* Fallback simples de cor sólida */
+  .fallback-bg-dark {
+    background-color: #08121d !important;
+  }
+
+  .fallback-text-white {
+    color: #ffffff !important;
+  }
+}
+
+/* Ajustes de renderização para navegadores antigos */
+* {
+  min-width: 0;
+  min-height: 0;
+}
+
+
+/* Light Mode Hack */
+html.light-theme { filter: invert(1) hue-rotate(180deg); background-color: #f7ede2; }
+html.light-theme img, html.light-theme video { filter: invert(1) hue-rotate(180deg); }

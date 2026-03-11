@@ -13,7 +13,10 @@ import {
   Zap,
   Flame,
   ShieldCheck,
-  Download
+  Download,
+  WifiOff,
+  CreditCard,
+  ArrowRight
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { createStudyPlanForUser } from '../lib/studyPlan';
@@ -21,11 +24,13 @@ import { premiumPlans } from '../lib/premium';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import AreaLockCard from '../components/AreaLockCard';
-import { UserPlus, Sparkles, ArrowRight, Award as AwardIcon } from 'lucide-react';
+import { UserPlus, Sparkles, Award as AwardIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DailyTasks from '../components/DailyTasks';
 import AIMentor from '../components/AIMentor';
 import NotificationCenter from '../components/NotificationCenter';
+import { useOfflineStore } from '../store/useOfflineStore';
+import { usePermissions } from '../lib/permissions';
 
 const DAILY_TIPS = [
   "Treinar 15 minutos todos os dias gera mais resultado do que estudar 3 horas só no domingo!",
@@ -39,6 +44,9 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { profile } = useAuthStore();
   const { areas, fetchAreas } = useAppStore();
+  const { isOfflineMode, downloadedQuestions } = useOfflineStore();
+  const perms = usePermissions();
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [stats, setStats] = useState({
     totalQuestions: 0,
     avgScore: 0,
@@ -56,6 +64,14 @@ export default function Dashboard() {
   const dailyTip = useMemo(() => {
     const day = new Date().getDay();
     return DAILY_TIPS[day % DAILY_TIPS.length];
+  }, []);
+
+  useEffect(() => {
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => { window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); };
   }, []);
 
   useEffect(() => {
@@ -273,6 +289,33 @@ export default function Dashboard() {
           >
             {savingGoal ? 'A guardar...' : 'Confirmar Objetivo'}
           </button>
+        </div>
+      )}
+
+      {/* Banner Pacote Offline — mostra para todos que ainda não compraram o pacote */}
+      {isOnline && !perms.hasOfflinePackage && profile?.role !== 'admin' && (
+        <div
+          onClick={() => navigate('/premium?package=pacote_offline')}
+          className="cursor-pointer rounded-[2rem] overflow-hidden border border-slate-200 bg-gradient-to-r from-slate-800 to-slate-700 p-5 md:p-6 shadow-xl flex flex-col sm:flex-row items-center gap-5 hover:shadow-2xl transition-all group"
+        >
+          <div className="relative shrink-0">
+            <div className="w-16 h-16 rounded-[1.5rem] bg-emerald-500/20 border-2 border-emerald-400/30 flex items-center justify-center">
+              <WifiOff className="w-8 h-8 text-emerald-400" />
+            </div>
+            <div className="absolute -top-1 -right-1 w-5 h-5 bg-amber-400 rounded-full border-2 border-slate-800 flex items-center justify-center">
+              <Zap className="w-3 h-3 text-slate-900 fill-current" />
+            </div>
+          </div>
+          <div className="flex-1 text-center sm:text-left">
+            <h3 className="text-lg font-black text-white tracking-tight">Estude Sem Limites de Dados</h3>
+            <p className="mt-1 text-slate-300 text-sm font-medium">
+              Ative o <span className="text-emerald-400 font-bold">Pacote Offline (900 Kz)</span> e treine mesmo sem internet ou saldo de dados. Ideal para viagens ou locais com sinal fraco.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 rounded-[1.5rem] bg-white px-6 py-3 text-sm font-black uppercase tracking-tight text-slate-900 shadow-lg hover:scale-105 active:scale-95 transition-all shrink-0 group-hover:bg-emerald-50">
+            <CreditCard className="h-4 w-4" />
+            Ativar Agora
+          </div>
         </div>
       )}
 

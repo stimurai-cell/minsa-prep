@@ -1,7 +1,11 @@
 -- MINSA Prep - Database Schema & Initial Data (Ultra-Robust & Consolidated Version)
--- Este arquivo unifica todas as funcionalidades implementadas até agora.
+-- Versão Consolidada: Fevereiro/Março 2025
+-- Este arquivo unifica TODAS as funcionalidades: Core, Ligas, Social, SRS, Duelos, Mentor IA, Notificações e Admin.
 
--- 1. Create Types (with existence check)
+-- 1. EXTENSIONS
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 2. CREATE TYPES
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
@@ -15,7 +19,7 @@ BEGIN
     END IF;
 END$$;
 
--- 2. Core Tables
+-- 3. CORE TABLES
 CREATE TABLE IF NOT EXISTS public.areas (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL UNIQUE,
@@ -54,13 +58,14 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
 
--- 3. Content Tables
+-- 4. CONTENT TABLES
 CREATE TABLE IF NOT EXISTS public.questions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   topic_id UUID REFERENCES public.topics(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   difficulty difficulty_level DEFAULT 'medium',
   exam_year INT,
+  is_contest_highlight BOOLEAN DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
 
@@ -79,7 +84,7 @@ CREATE TABLE IF NOT EXISTS public.question_explanations (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
 
--- 4. Activity and Gamification
+-- 5. ACTIVITY AND GAMIFICATION
 CREATE TABLE IF NOT EXISTS public.activity_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -102,8 +107,8 @@ CREATE TABLE IF NOT EXISTS public.weekly_league_stats (
 CREATE TABLE IF NOT EXISTS public.user_activities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
-  activity_type TEXT NOT NULL,
-  content TEXT,
+  activity_type TEXT NOT NULL, -- 'achievement', 'goal_reached', 'level_up', 'streak_day', 'exam_passed'
+  content TEXT, -- Flexible content
   description TEXT,
   xp_earned INT DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
@@ -127,6 +132,7 @@ CREATE TABLE IF NOT EXISTS public.user_badges (
   UNIQUE(user_id, badge_id)
 );
 
+-- 6. SOCIAL SYSTEM
 CREATE TABLE IF NOT EXISTS public.user_follows (
     follower_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
     following_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -134,7 +140,44 @@ CREATE TABLE IF NOT EXISTS public.user_follows (
     PRIMARY KEY (follower_id, following_id)
 );
 
--- 5. Quiz and Battle
+CREATE TABLE IF NOT EXISTS public.feed_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    type TEXT NOT NULL, -- 'achievement', 'news', 'battle', 'streak'
+    content JSONB NOT NULL DEFAULT '{}',
+    image_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+CREATE TABLE IF NOT EXISTS public.feed_reactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    feed_item_id UUID REFERENCES public.feed_items(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    emoji TEXT NOT NULL DEFAULT '❤️',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
+    UNIQUE(feed_item_id, user_id, emoji)
+);
+
+CREATE TABLE IF NOT EXISTS public.feed_comments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    feed_item_id UUID REFERENCES public.feed_items(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+CREATE TABLE IF NOT EXISTS public.user_notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE, -- Null means broadcast
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    type TEXT DEFAULT 'system',
+    link TEXT,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+-- 7. QUIZ, SRS AND BATTLE
 CREATE TABLE IF NOT EXISTS public.quiz_attempts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -183,17 +226,7 @@ CREATE TABLE IF NOT EXISTS public.battle_matches (
   completed_at TIMESTAMP WITH TIME ZONE
 );
 
--- 6. Administrative
-CREATE TABLE IF NOT EXISTS public.subscriptions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
-  plan_type TEXT NOT NULL,
-  start_date TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
-  end_date TIMESTAMP WITH TIME ZONE,
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
-);
-
+-- 8. ADMINISTRATIVE AND SUPPORT
 CREATE TABLE IF NOT EXISTS public.payment_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -212,16 +245,9 @@ CREATE TABLE IF NOT EXISTS public.payment_requests (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
 
-CREATE TABLE IF NOT EXISTS public.study_plans (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
-  plan_json JSONB NOT NULL,
-  generated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
-);
-
 CREATE TABLE IF NOT EXISTS public.support_messages (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
   subject TEXT NOT NULL,
   description TEXT NOT NULL,
@@ -240,7 +266,7 @@ CREATE TABLE IF NOT EXISTS public.ai_mentor_logs (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
 
--- 7. Functions
+-- 9. FUNCTIONS & SECURITY HELPERS
 CREATE OR REPLACE FUNCTION public.is_current_user_admin()
 RETURNS boolean
 LANGUAGE plpgsql SECURITY DEFINER AS $$
@@ -250,20 +276,6 @@ BEGIN
   );
 END;
 $$;
-
-CREATE OR REPLACE FUNCTION public.protect_profile_updates()
-RETURNS trigger AS $$
-BEGIN
-  IF auth.uid() IS NULL THEN RETURN NEW; END IF;
-  IF OLD.id = auth.uid() AND NOT public.is_current_user_admin() THEN
-    IF NEW.role IS DISTINCT FROM OLD.role THEN RAISE EXCEPTION 'Não pode alterar o cargo do próprio perfil.'; END IF;
-    IF OLD.selected_area_id IS NOT NULL AND NEW.selected_area_id IS DISTINCT FROM OLD.selected_area_id THEN
-      RAISE EXCEPTION 'A área de estudo fica bloqueada após a primeira definição.';
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 CREATE OR REPLACE FUNCTION increment_weekly_xp(p_user_id UUID, p_league_name TEXT, p_week_start DATE, p_xp INTEGER)
 RETURNS VOID AS $$
@@ -275,128 +287,103 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 8. Triggers
-DROP TRIGGER IF EXISTS protect_profile_updates_trigger ON public.profiles;
-CREATE TRIGGER protect_profile_updates_trigger
-  BEFORE UPDATE ON public.profiles
-  FOR EACH ROW EXECUTE FUNCTION public.protect_profile_updates();
+-- 10. ROW LEVEL SECURITY (RLS)
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.areas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.topics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.alternatives ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.question_explanations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.weekly_league_stats ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_activities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.badges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_badges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_follows ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.feed_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.feed_reactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.feed_comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.quiz_attempts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.quiz_attempt_answers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_question_srs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.battle_matches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payment_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.support_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ai_mentor_logs ENABLE ROW LEVEL SECURITY;
 
--- 9. RLS & Policies
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_topic_progress ENABLE ROW LEVEL SECURITY;
-ALTER TABLE quiz_attempts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE quiz_attempt_answers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE payment_requests ENABLE ROW LEVEL SECURITY;
-ALTER TABLE areas ENABLE ROW LEVEL SECURITY;
-ALTER TABLE topics ENABLE ROW LEVEL SECURITY;
-ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE alternatives ENABLE ROW LEVEL SECURITY;
-ALTER TABLE question_explanations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE weekly_league_stats ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_follows ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_activities ENABLE ROW LEVEL SECURITY;
-ALTER TABLE support_messages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE badges ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_badges ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_question_srs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ai_mentor_logs ENABLE ROW LEVEL SECURITY;
-
--- Reset policies safely
+-- 11. POLICIES (Reset and Apply)
 DO $$
 BEGIN
-    -- Profiles
-    DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
-    DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON profiles;
-    DROP POLICY IF EXISTS "Users can insert own profile" ON profiles;
-    DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
-    DROP POLICY IF EXISTS "Admins can view all profiles" ON profiles;
-    DROP POLICY IF EXISTS "Admins can update all profiles" ON profiles;
-    
-    -- Leagues
-    DROP POLICY IF EXISTS "Users can view all league stats" ON weekly_league_stats;
-    DROP POLICY IF EXISTS "Users can update their own weekly stats" ON weekly_league_stats;
-    DROP POLICY IF EXISTS "Users can insert their own weekly stats" ON weekly_league_stats;
-    
-    -- Social
-    DROP POLICY IF EXISTS "Anyone can view follows" ON user_follows;
-    DROP POLICY IF EXISTS "Users can follow others" ON user_follows;
-    DROP POLICY IF EXISTS "Users can unfollow others" ON user_follows;
-    DROP POLICY IF EXISTS "Anyone can view activities" ON user_activities;
-    DROP POLICY IF EXISTS "Users can create activities" ON user_activities;
-    
-    -- Support
-    DROP POLICY IF EXISTS "Users can insert support messages" ON support_messages;
-    DROP POLICY IF EXISTS "Admins can view support messages" ON support_messages;
-    DROP POLICY IF EXISTS "Admins can update support messages" ON support_messages;
-
-    -- New Features
-    DROP POLICY IF EXISTS "Anyone can view badges" ON badges;
-    DROP POLICY IF EXISTS "Users can view own earned badges" ON user_badges;
-    DROP POLICY IF EXISTS "Users can view own SRS data" ON user_question_srs;
-    DROP POLICY IF EXISTS "Users can update own SRS data" ON user_question_srs;
-    DROP POLICY IF EXISTS "Users can view own mentor logs" ON ai_mentor_logs;
+    -- Reset all
+    EXECUTE (
+        SELECT string_agg('DROP POLICY IF EXISTS ' || quote_ident(policyname) || ' ON ' || quote_ident(tablename) || ';', ' ')
+        FROM pg_policies WHERE schemaname = 'public'
+    );
 END$$;
 
--- Applying Consolidated Policies
+-- PROFILES
 CREATE POLICY "Public profiles are viewable by everyone" ON profiles FOR SELECT USING (true);
 CREATE POLICY "Users can insert own profile" ON profiles FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
 CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Admins can view all profiles" ON profiles FOR SELECT USING (public.is_current_user_admin());
-CREATE POLICY "Admins can update all profiles" ON profiles FOR UPDATE USING (public.is_current_user_admin());
+CREATE POLICY "Admins can manage all profiles" ON profiles FOR ALL USING (public.is_current_user_admin());
 
+-- CONTENT (Read public, Write admin)
+CREATE POLICY "Public read areas" ON areas FOR SELECT USING (true);
+CREATE POLICY "Admins manage areas" ON areas FOR ALL USING (public.is_current_user_admin());
+
+CREATE POLICY "Public read topics" ON topics FOR SELECT USING (true);
+CREATE POLICY "Admins manage topics" ON topics FOR ALL USING (public.is_current_user_admin());
+
+CREATE POLICY "Public read questions" ON questions FOR SELECT USING (true);
+CREATE POLICY "Admins manage questions" ON questions FOR ALL USING (public.is_current_user_admin());
+
+CREATE POLICY "Public read alternatives" ON alternatives FOR SELECT USING (true);
+CREATE POLICY "Admins manage alternatives" ON alternatives FOR ALL USING (public.is_current_user_admin());
+
+-- LEAGUES & STATS
 CREATE POLICY "Users can view all league stats" ON weekly_league_stats FOR SELECT USING (true);
-CREATE POLICY "Users can update their own weekly stats" ON weekly_league_stats FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert their own weekly stats" ON weekly_league_stats FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users manage own stats" ON weekly_league_stats FOR ALL USING (auth.uid() = user_id);
 
+-- SOCIAL
 CREATE POLICY "Anyone can view follows" ON user_follows FOR SELECT USING (true);
-CREATE POLICY "Users can follow others" ON user_follows FOR INSERT WITH CHECK (auth.uid() = follower_id);
-CREATE POLICY "Users can unfollow others" ON user_follows FOR DELETE USING (auth.uid() = follower_id);
+CREATE POLICY "Users manage own follows" ON user_follows FOR ALL USING (auth.uid() = follower_id);
 
 CREATE POLICY "Anyone can view activities" ON user_activities FOR SELECT USING (true);
-CREATE POLICY "Users can create activities" ON user_activities FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users create activities" ON user_activities FOR INSERT WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can insert support messages" ON support_messages FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Admins can view support messages" ON support_messages FOR SELECT USING (public.is_current_user_admin());
-CREATE POLICY "Admins can update support messages" ON support_messages FOR UPDATE USING (public.is_current_user_admin());
+CREATE POLICY "Public feed" ON feed_items FOR SELECT USING (true);
+CREATE POLICY "Admins manage feed" ON feed_items FOR ALL USING (public.is_current_user_admin());
 
-CREATE POLICY "Anyone can view badges" ON badges FOR SELECT USING (true);
-CREATE POLICY "Users can view own earned badges" ON user_badges FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can view own SRS data" ON user_question_srs FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can update own SRS data" ON user_question_srs FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can view own mentor logs" ON ai_mentor_logs FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Authenticated react feed" ON feed_reactions FOR ALL USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Comment feed" ON feed_comments FOR ALL USING (auth.uid() IS NOT NULL);
 
--- Core Read Policies
-CREATE POLICY "Public read areas" ON areas FOR SELECT USING (true);
-CREATE POLICY "Public read topics" ON topics FOR SELECT USING (true);
-CREATE POLICY "Public read questions" ON questions FOR SELECT USING (true);
-CREATE POLICY "Public read alternatives" ON alternatives FOR SELECT USING (true);
-CREATE POLICY "Public read explanations" ON question_explanations FOR SELECT USING (true);
+-- NOTIFICATIONS
+CREATE POLICY "Users view own notifications" ON user_notifications FOR SELECT USING (user_id = auth.uid() OR user_id IS NULL);
+CREATE POLICY "Admins manage notifications" ON user_notifications FOR ALL USING (public.is_current_user_admin());
 
--- 10. Initial Data Seed (Areas & Topics)
+-- SRS & BATTLE
+CREATE POLICY "Users own SRS" ON user_question_srs FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "View matches" ON battle_matches FOR SELECT USING (auth.uid() = challenger_id OR auth.uid() = opponent_id);
+
+-- 12. TRIGGERS
+CREATE OR REPLACE FUNCTION public.create_feed_item_from_activity()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.activity_type = 'completed_simulation' AND (NEW.activity_metadata->>'score')::decimal >= 80 THEN
+        INSERT INTO public.feed_items (user_id, type, content)
+        VALUES (NEW.user_id, 'achievement', jsonb_build_object('title', 'Ação Heroica!', 'body', 'Acabou de realizar um simulado com pontuação incrível.'));
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trigger_activity_to_feed ON public.activity_logs;
+CREATE TRIGGER trigger_activity_to_feed AFTER INSERT ON public.activity_logs FOR EACH ROW EXECUTE FUNCTION public.create_feed_item_from_activity();
+
+-- 13. INITIAL SEED
 INSERT INTO areas (name, description) VALUES
 (U&'Farm\00E1cia', U&'\00C1rea focada em medicamentos, farmacologia e assistência farmacêutica.'),
-('Enfermagem', U&'\00C1rea focada em cuidados ao paciente, procedimentos e saúde pública.')
-ON CONFLICT (name) DO NOTHING;
-
-INSERT INTO topics (area_id, name) 
-SELECT id, 'Farmacologia Geral' FROM areas WHERE name = U&'Farm\00E1cia' UNION ALL
-SELECT id, U&'Legisla\00E7\00E3o Farmac\00EAutica' FROM areas WHERE name = U&'Farm\00E1cia' UNION ALL
-SELECT id, U&'Farm\00E1cia Cl\00EDnica' FROM areas WHERE name = U&'Farm\00E1cia' UNION ALL
-SELECT id, U&'Gest\00E3o e Assist\00EAncia Farmac\00EAutica' FROM areas WHERE name = U&'Farm\00E1cia'
-ON CONFLICT (area_id, name) DO NOTHING;
-
-INSERT INTO topics (area_id, name) 
-SELECT id, 'Anatomia e Fisiologia' FROM areas WHERE name = 'Enfermagem' UNION ALL
-SELECT id, U&'Sa\00FAde da Mulher e da Crian\00E7a' FROM areas WHERE name = 'Enfermagem' UNION ALL
-SELECT id, U&'\00C9tica e Deontologia' FROM areas WHERE name = 'Enfermagem'
-ON CONFLICT (area_id, name) DO NOTHING;
-
--- Initial Badges
-INSERT INTO public.badges (name, description, criteria_type, criteria_value) VALUES
-('Corujão', 'Estudou após às 22h.', 'time', 22),
-('Madrugador', 'Estudou antes das 7h.', 'time', 7),
-('Mestre de Enfermagem', 'Acertou 50 questões de Enfermagem.', 'count', 50),
-('Mestre de Farmácia', 'Acertou 50 questões de Farmácia.', 'count', 50),
-('Sequência de Fogo', 'Manteve uma sequência de 7 dias.', 'streak', 7)
+('Enfermagem', U&'\00C1rea focada em cuidados ao paciente, procedimentos e saúde pública.'),
+(U&'Legisla\00E7\00E3o, \00C9tica e Deontologia', 'Conteúdo focado nas leis do setor da saúde em Angola e conduta profissional.')
 ON CONFLICT (name) DO NOTHING;

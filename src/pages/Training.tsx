@@ -13,6 +13,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { playSuccessSound, playErrorSound } from '../lib/sounds';
 import { getDifficultyLabel } from '../lib/labels';
+import { WifiOff, Download, CreditCard, RefreshCw } from 'lucide-react';
+import { useOfflineStore } from '../store/useOfflineStore';
 import {
   calculateTrainingXp,
   getAlternativeLabel,
@@ -58,8 +60,23 @@ export default function Training() {
   const [resultHistory, setResultHistory] = useState<boolean[]>([]);
   const [earnedBadges, setEarnedBadges] = useState<Badge[]>([]);
   const [showBadge, setShowBadge] = useState<Badge | null>(null);
+  const { downloadedQuestions, isOfflineMode, setOfflineMode, addQuestions } = useOfflineStore();
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
   const hasPremiumAccess = ['premium', 'elite', 'admin'].includes(profile?.role || '');
   const hasBasicAccess = ['basic', 'premium', 'elite', 'admin'].includes(profile?.role || '');
+  const hasOfflinePackage = profile?.active_packages?.includes('pacote_offline');
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const sessionActive = searchParams.get('session') === '1';
   const sessionTopicId = searchParams.get('topic') || '';
@@ -192,6 +209,21 @@ export default function Training() {
   };
 
   const bootTrainingSession = async (topicId: string, difficulty: DifficultyPreference) => {
+    // Modo Offline Prioritário
+    if (isOfflineMode && downloadedQuestions.length > 0) {
+      const topicQuestions = downloadedQuestions.filter(q => topicId === 'random' || q.topic_id === topicId);
+      if (topicQuestions.length > 0) {
+        resetTrainingSession();
+        setQuestions(prepareQuestionSet(pickQuestionsForSession(topicQuestions, 10, difficulty)));
+        setSessionStartedAt(Date.now());
+        setShowIntro(true);
+        return;
+      } else {
+        alert('Sem questões offline para este tópico. Por favor, conecte-se para baixar mais.');
+        setOfflineMode(false);
+      }
+    }
+
     // Safety check: force medium if non-premium tries to access hard
     const safeDifficulty = !hasPremiumAccess && difficulty === 'hard' ? 'medium' : difficulty;
     setLoading(true);
@@ -243,6 +275,36 @@ export default function Training() {
     } catch (error) {
       console.error('Error starting training:', error);
       navigate('/training', { replace: true });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadQuestionsForOffline = async () => {
+    if (!profile?.id || !isOnline) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('questions')
+        .select(`
+          id, topic_id, content, difficulty,
+          alternatives (id, content, is_correct),
+          question_explanations (content)
+        `)
+        .limit(100); // Baixa as 100 mais relevantes/recentes para o cache
+
+      if (error) throw error;
+      if (data) {
+        const formatted = data.map(q => ({
+          ...q,
+          explanation: (Array.isArray(q.question_explanations) ? q.question_explanations?.[0]?.content : (q.question_explanations as any)?.content)
+        }));
+        addQuestions(formatted as any);
+        alert('Download concluído! Você já pode treinar offline.');
+      }
+    } catch (err) {
+      console.error('Erro ao baixar questões:', err);
+      alert('Erro ao baixar questões para uso offline.');
     } finally {
       setLoading(false);
     }
@@ -310,8 +372,8 @@ export default function Training() {
       actualTopic = topicIds[Math.floor(Math.random() * topicIds.length)];
     }
 
-    // Limite para utilizadores free: 30 questões por dia
-    if (!hasBasicAccess && profile?.id) {
+    // Limite para utilizadores free: 30 questões por dia (Ignorado em Modo Offline com Pacote)
+    if (!hasBasicAccess && profile?.id && !isOfflineMode) {
       const today = new Date().toISOString().slice(0, 10);
       void (async () => {
         try {
@@ -364,7 +426,7 @@ export default function Training() {
     setIsAnswered(true);
     setResultHistory((prev) => [...prev, isCorrect]);
 
-    if (profile?.id && selectedTopic) {
+    if (profile?.id && selectedTopic && !isOfflineMode) {
       try {
         const { data: progress } = await supabase
           .from('user_topic_progress')
@@ -746,7 +808,69 @@ export default function Training() {
             </div>
           </div>
         </div>
+
+        {hasOfflinePackage && isOnline && (
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button
+              onClick={downloadQuestionsForOffline}
+              disabled={loading}
+              className="flex items-center gap-2 rounded-2xl bg-white border-2 border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:border-emerald-500 hover:text-emerald-500 transition-all"
+            >
+              <Download className="h-4 w-4" />
+              {loading ? 'Baixando...' : 'Atualizar questões offline'}
+            </button>
+            <button
+              onClick={() => setOfflineMode(!isOfflineMode)}
+              className={`flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-bold transition-all ${isOfflineMode
+                ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
+                : 'bg-white border-2 border-slate-200 text-slate-600'
+                }`}
+            >
+              <WifiOff className="h-4 w-4" />
+              Modo Offline: {isOfflineMode ? 'Ativo' : 'Inativo'}
+            </button>
+          </div>
+        )}
       </section>
+
+      {!isOnline && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="rounded-[2rem] border-2 border-orange-500/20 bg-orange-500/10 p-6 shadow-xl backdrop-blur-md"
+        >
+          <div className="flex flex-col md:flex-row items-center gap-6">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/20">
+              <WifiOff className="h-8 w-8" />
+            </div>
+            <div className="flex-1 text-center md:text-left">
+              <h3 className="text-xl font-black text-orange-200">Você está offline</h3>
+              <p className="mt-1 text-slate-300">
+                {hasOfflinePackage
+                  ? "Seu pacote offline está ativo! Você pode continuar treinando com as questões baixadas."
+                  : "Não fique parado! Com o Pacote Offline (900kz), você treina mesmo sem internet ou saldo."}
+              </p>
+            </div>
+            {!hasOfflinePackage ? (
+              <Link
+                to="/premium?package=pacote_offline"
+                className="flex items-center gap-2 rounded-2xl bg-white px-6 py-4 text-sm font-black uppercase tracking-tight text-slate-900 transition-all hover:scale-105"
+              >
+                <CreditCard className="h-4 w-4" />
+                Ativar por 900 Kz
+              </Link>
+            ) : (
+              <button
+                onClick={() => setOfflineMode(true)}
+                className="flex items-center gap-2 rounded-2xl bg-emerald-500 px-6 py-4 text-sm font-black uppercase tracking-tight text-white transition-all hover:scale-105 shadow-lg shadow-emerald-500/20"
+              >
+                <Download className="h-4 w-4" />
+                Treinar Offline
+              </button>
+            )}
+          </div>
+        </motion.div>
+      )}
 
       <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.35)] md:p-6">

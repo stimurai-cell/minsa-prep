@@ -98,10 +98,12 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col justify-center bg-[radial-gradient(circle_at_top,#dff7ea,transparent_34%),linear-gradient(180deg,#f8fffb_0%,#eff6ff_100%)] px-4 py-12 font-sans sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+    <div className="flex min-h-screen flex-col justify-center bg-minsa-gradient px-4 py-12 font-sans sm:px-6 lg:px-8 relative overflow-hidden">
+      {/* Elementos decorativos removidos para evitar tela embranquiçada */}
+
+      <div className="sm:mx-auto sm:w-full sm:max-w-md z-10">
         <div className="flex justify-center">
-          <div className="flex h-24 w-full items-center justify-center rounded-[2.5rem] bg-white shadow-xl shadow-emerald-500/10 border border-emerald-50 p-4">
+          <div className="flex h-20 w-48 items-center justify-center rounded-[2rem] bg-white shadow-xl border border-white/20 p-4">
             <img
               src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/abj60fbildawqtq47qgu.png"
               alt="MINSA Prep Logo"
@@ -109,108 +111,119 @@ export default function Login() {
             />
           </div>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold tracking-tight text-slate-900">
-          Entrar no MINSA Prep
+        <h2 className="mt-8 text-center text-3xl font-black tracking-tight text-white">
+          Entrar na sua conta
         </h2>
-        <p className="mt-2 text-center text-sm text-slate-600">
-          Ou{' '}
-          <Link to="/register" className="font-semibold text-emerald-600 hover:text-emerald-500">
-            crie a sua conta gratuitamente
-          </Link>
-        </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="rounded-[2rem] border border-white/80 bg-white p-6 shadow-[0_28px_90px_-52px_rgba(15,23,42,0.35)] sm:px-8">
-          <form className="space-y-6" onSubmit={handleLogin}>
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md z-10">
+        <div className="rounded-[2.5rem] border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-2xl sm:px-8">
+          <form className="space-y-5" onSubmit={handleLogin}>
             {error && (
-              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+              <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
                 {error}
               </div>
             )}
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Email</label>
-              <div className="relative mt-1">
+            <div className="space-y-1">
+              <label className="block text-sm font-bold text-slate-300 ml-1">Email Profissional</label>
+              <div className="relative">
                 <Mail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                 <input
                   type="email"
                   required
                   autoComplete="email"
+                  placeholder="exemplo@gmail.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-12 pr-4 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+                  className="block w-full rounded-2xl border border-white/10 bg-white/5 py-4 pl-12 pr-4 text-sm text-white outline-none transition focus:border-emerald-500 focus:bg-white/10"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Senha</label>
-              <div className="relative mt-1">
+            <div className="space-y-1">
+              <label className="block text-sm font-bold text-slate-300 ml-1">Senha de Acesso</label>
+              <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
                   autoComplete="current-password"
+                  placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 pr-14 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+                  className="block w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 pr-14 text-sm text-white outline-none transition focus:border-emerald-500 focus:bg-white/10"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-3 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100"
-                  aria-label={showPassword ? 'Esconder senha' : 'Mostrar senha'}
+                  className="absolute right-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl text-slate-400 transition hover:bg-white/10"
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
               <div className="mt-2 flex justify-end">
-                <Link to="/forgot-password" title="Esqueceu a senha?" className="text-xs font-semibold text-emerald-600 hover:text-emerald-500">
-                  Esqueceu a sua senha?
+                <Link to="/forgot-password" title="Esqueceu a senha?" className="text-xs font-bold text-emerald-400 hover:text-emerald-300">
+                  Esqueceu a senha?
                 </Link>
               </div>
             </div>
 
-            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <label className="flex items-start gap-3 rounded-2xl border border-white/5 bg-white/5 px-4 py-4 cursor-pointer hover:bg-white/10 transition">
               <input
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                className="mt-1 h-5 w-5 rounded-lg border-white/20 bg-white/5 text-emerald-500 focus:ring-emerald-500"
               />
-              <span className="text-sm text-slate-600">
-                Guardar o meu email neste dispositivo e deixar o navegador sugerir a senha na proxima entrada.
+              <span className="text-xs font-medium text-slate-300 leading-tight">
+                Lembrar meus dados para acesso rápido neste dispositivo.
               </span>
             </label>
-
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-              <div className="flex items-start gap-3">
-                <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
-                <p>
-                  Se nao terminar a sessao manualmente, o acesso continua guardado e normalmente nao precisa de voltar a iniciar sessao.
-                </p>
-              </div>
-            </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+              className="group flex w-full items-center justify-center gap-3 rounded-2xl bg-emerald-500 px-4 py-4 text-base font-black uppercase tracking-tight text-white shadow-xl shadow-emerald-500/20 hover:bg-emerald-400 disabled:opacity-50 transition-all hover:scale-[1.02]"
             >
-              {loading ? 'Entrando...' : 'Entrar'}
+              {loading ? (
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              ) : (
+                <>
+                  Entrar na Plataforma
+                  <ShieldCheck className="h-5 w-5" />
+                </>
+              )}
             </button>
-
-            {canInstall && (
-              <button
-                type="button"
-                onClick={handleInstallClick}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 border-2 border-slate-800 px-4 py-4 text-sm font-black text-white transition-all hover:bg-black shadow-[0_4px_0_0_#1e293b] active:translate-y-1 active:shadow-none uppercase tracking-widest"
-              >
-                <Download className="h-5 w-5 text-emerald-400" />
-                Baixar Aplicativo (Recomendado)
-              </button>
-            )}
           </form>
+
+          <div className="mt-8 space-y-4">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/10" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase tracking-widest font-bold">
+                <span className="bg-transparent px-4 text-slate-500">Novo por aqui?</span>
+              </div>
+            </div>
+
+            <Link
+              to="/register"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-emerald-500/30 bg-emerald-500/10 px-4 py-4 text-sm font-black uppercase tracking-tight text-emerald-400 hover:bg-emerald-500/20 transition-all"
+            >
+              Criar Conta Gratuitamente
+            </Link>
+          </div>
+
+          {canInstall && (
+            <button
+              type="button"
+              onClick={handleInstallClick}
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-4 text-xs font-black text-slate-900 transition-all hover:bg-slate-100 uppercase tracking-widest shadow-xl"
+            >
+              <Download className="h-4 w-4" />
+              Baixar App (PWA)
+            </button>
+          )}
         </div>
       </div>
     </div>

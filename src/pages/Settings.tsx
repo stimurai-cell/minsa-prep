@@ -1,10 +1,21 @@
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
-import { ChevronRight, LogOut, ExternalLink, Settings as SettingsIcon } from 'lucide-react';
+import { ChevronRight, LogOut, ExternalLink, Settings as SettingsIcon, Sun, Moon } from 'lucide-react';
 
 export default function Settings() {
     const { signOut } = useAuthStore();
     const navigate = useNavigate();
+    const [theme, setTheme] = useState(localStorage.getItem('minsa-theme') || 'dark');
+
+    useEffect(() => {
+        if (theme === 'light') {
+            document.documentElement.classList.add('light-theme');
+        } else {
+            document.documentElement.classList.remove('light-theme');
+        }
+        localStorage.setItem('minsa-theme', theme);
+    }, [theme]);
 
     const handleSignOut = async () => {
         await signOut();
@@ -26,6 +37,21 @@ export default function Settings() {
                         <span className="font-bold text-slate-700">Perfil</span>
                         <ChevronRight className="w-5 h-5 text-slate-400" />
                     </Link>
+
+                    {/* Theme Toggle */}
+                    <button
+                        onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                        className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors active:bg-slate-100 text-left"
+                    >
+                        <span className="font-bold text-slate-700 flex items-center gap-3">
+                            {theme === 'dark' ? <Moon className="w-5 h-5 text-indigo-500" /> : <Sun className="w-5 h-5 text-amber-500" />}
+                            Aparência: {theme === 'dark' ? 'Modo Escuro' : 'Modo Claro'}
+                        </span>
+                        <div className={`w-12 h-6 rounded-full p-1 transition-colors ${theme === 'light' ? 'bg-amber-400' : 'bg-slate-300'}`}>
+                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${theme === 'light' ? 'translate-x-6' : 'translate-x-0'}`} />
+                        </div>
+                    </button>
+
                     <button className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors active:bg-slate-100 text-left">
                         <span className="font-bold text-slate-700">Notificações</span>
                         <ChevronRight className="w-5 h-5 text-slate-400" />

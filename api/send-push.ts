@@ -1,12 +1,17 @@
-import webpush from 'web-push';
+import admin from 'firebase-admin';
 import { createClient } from '@supabase/supabase-js';
 import type { IncomingMessage, ServerResponse } from 'http';
 
-webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || 'mailto:admin@minsaprep.ao',
-    (process.env.VAPID_PUBLIC_KEY || process.env.VITE_VAPID_PUBLIC_KEY)!,
-    process.env.VAPID_PRIVATE_KEY!
-);
+// Usar o service account gerado pelo Firebase
+if (!admin.apps.length) {
+    admin.initializeApp({
+        credential: admin.credential.cert({
+            projectId: "farmolink-28",
+            clientEmail: "firebase-adminsdk-fbsvc@farmolink-28.iam.gserviceaccount.com",
+            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n') || ""
+        })
+    });
+}
 
 const supabase = createClient(
     process.env.VITE_SUPABASE_URL!,
@@ -43,7 +48,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
 
     try {
-        let query = supabase.from('push_subscriptions').select('subscription, user_id');
+        // Ao invés da subscription completa, guardaremos o Token FCM no campo 'endpoint' na nova lógica
+        let query = supabase.from('push_subscriptions').select('endpoint, user_id');
         if (userId) {
             query = query.eq('user_id', userId);
         }
@@ -55,32 +61,48 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             return send(res, 200, { sent: 0, message: 'No subscriptions found' });
         }
 
-        const payload = JSON.stringify({ title, body, url });
+        // Filtra apenas FCM tokens válidos (geralmente não são URLs, ao contrário das antigas endpoint VAPID)
+        const tokens = subscriptions
+            .map(sub => sub.endpoint)
+            .filter(t => t && !t.startsWith('http'));
 
-        const results = await Promise.allSettled(
-            subscriptions.map(async ({ subscription, user_id }) => {
-                try {
-                    await webpush.sendNotification(subscription, payload);
-                    return { success: true, user_id };
-                } catch (err: any) {
-                    // 410/404 = subscription expirada => remover da DB
-                    if (err.statusCode === 410 || err.statusCode === 404) {
-                        await supabase
-                            .from('push_subscriptions')
-                            .delete()
-                            .eq('user_id', user_id)
-                            .eq('endpoint', subscription.endpoint);
-                    }
-                    return { success: false, user_id, error: err.message };
+        if (tokens.length === 0) {
+            return send(res, 200, { sent: 0, message: 'No valid FCM tokens found' });
+        }
+
+        const message = {
+            notification: {
+                title: title,
+                body: body
+            },
+            data: {
+                url: url
+            },
+            tokens: tokens,
+        };
+
+        const response = await admin.messaging().sendEachForMulticast(message);
+
+        // Limpeza de tokens inválidos
+        if (response.failureCount > 0) {
+            const failedTokens: string[] = [];
+            response.responses.forEach((resp, idx) => {
+                if (!resp.success) {
+                    failedTokens.push(tokens[idx]);
                 }
-            })
-        );
+            });
 
-        const sent = results.filter(r => r.status === 'fulfilled' && (r.value as any).success).length;
+            if (failedTokens.length > 0) {
+                await supabase
+                    .from('push_subscriptions')
+                    .delete()
+                    .in('endpoint', failedTokens);
+            }
+        }
 
-        return send(res, 200, { sent, total: subscriptions.length });
+        return send(res, 200, { sent: response.successCount, total: tokens.length, failures: response.failureCount });
     } catch (err: any) {
-        console.error('[send-push] Error:', err);
+        console.error('[send-push FCM] Error:', err);
         return send(res, 500, { error: err.message });
     }
 }

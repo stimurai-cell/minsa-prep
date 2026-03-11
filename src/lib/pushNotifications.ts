@@ -1,22 +1,8 @@
 import { supabase } from './supabase';
-
-// VAPID public key do .env
-const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-
-function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
-    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    const buffer = new ArrayBuffer(rawData.length);
-    const view = new Uint8Array(buffer);
-    for (let i = 0; i < rawData.length; ++i) {
-        view[i] = rawData.charCodeAt(i);
-    }
-    return buffer;
-}
+import { requestFirebaseNotificationPermission } from './firebase';
 
 /**
- * Regista o service worker e subscreve para push notifications.
+ * Regista o token FCM para push notifications.
  * Guarda a subscription na tabela push_subscriptions.
  */
 export async function subscribeToPush(userId: string): Promise<boolean> {
@@ -26,27 +12,19 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
             return false;
         }
 
-        if (!VAPID_PUBLIC_KEY) {
-            console.warn('[Push] VITE_VAPID_PUBLIC_KEY não configurado.');
+        const token = await requestFirebaseNotificationPermission();
+
+        if (!token) {
+            console.warn('[Push] Falha ao obter Token FCM.');
             return false;
         }
 
-        const registration = await navigator.serviceWorker.ready;
-
-        // Verificar se já existe uma subscription activa
-        const existingSubscription = await registration.pushManager.getSubscription();
-
-        let subscription = existingSubscription;
-
-        if (!subscription) {
-            subscription = await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-            });
-        }
-
         // Guardar/actualizar na DB
-        const subscriptionJson = subscription.toJSON();
+        // Usamos um formato compatível para a coluna subscription, mas focamo-nos em guardar o FCM token no endpoint
+        const subscriptionJson = {
+            endpoint: token,
+            fcm: true
+        };
 
         const { error } = await supabase
             .from('push_subscriptions')
@@ -54,21 +32,21 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
                 {
                     user_id: userId,
                     subscription: subscriptionJson,
-                    endpoint: subscriptionJson.endpoint,
+                    endpoint: token,
                     updated_at: new Date().toISOString(),
                 },
                 { onConflict: 'user_id,endpoint' }
             );
 
         if (error) {
-            console.error('[Push] Erro ao guardar subscription:', error);
+            console.error('[Push] Erro ao guardar token FCM na BD:', error);
             return false;
         }
 
-        console.log('[Push] Subscription guardada com sucesso.');
+        console.log('[Push] Firebase Cloud Messaging Token guardado com sucesso.');
         return true;
     } catch (err) {
-        console.error('[Push] Erro ao subscrever:', err);
+        console.error('[Push] Erro ao subscrever FCM:', err);
         return false;
     }
 }
