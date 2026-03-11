@@ -319,6 +319,9 @@ export default function Simulation() {
     const xpEarned = calculateSimulationXp(correctCount, questions.length, durationSeconds);
 
     try {
+      // Prioridade: Atribuir XP primeiro para garantir que conta na Liga
+      await awardXp(xpEarned);
+
       if (currentAttemptId) {
         // Update the existing pre-registered attempt
         const { error: attemptError } = await supabase
@@ -366,7 +369,6 @@ export default function Simulation() {
       if (currentAttemptId) {
         await supabase.from('quiz_attempt_answers').insert(answerInserts);
       }
-      await awardXp(xpEarned);
 
       // Registrar atividade detalhada de conclusão
       try {

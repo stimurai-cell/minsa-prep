@@ -33,6 +33,7 @@ export default function AdminNews() {
     const [userSearchResults, setUserSearchResults] = useState<any[]>([]);
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [searchingUsers, setSearchingUsers] = useState(false);
+    const [deviceCount, setDeviceCount] = useState<number | null>(null);
 
     useEffect(() => {
         if (!userSearchQuery || broadcast) {
@@ -51,6 +52,21 @@ export default function AdminNews() {
         }, 400);
         return () => clearTimeout(timer);
     }, [userSearchQuery, broadcast]);
+
+    useEffect(() => {
+        if (!selectedUser) {
+            setDeviceCount(null);
+            return;
+        }
+        const fetchDeviceCount = async () => {
+            const { count } = await supabase
+                .from('push_subscriptions')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', selectedUser.id);
+            setDeviceCount(count);
+        };
+        fetchDeviceCount();
+    }, [selectedUser]);
 
     const handlePostNews = async () => {
         if (!newsTitle || !newsBody) return alert('Preencha o título e o corpo da notícia.');
@@ -253,12 +269,17 @@ export default function AdminNews() {
                             <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Pesquisar Utilizador pelo Nome</label>
                             {selectedUser ? (
                                 <div className="flex items-center justify-between bg-amber-50 border-2 border-amber-200 rounded-2xl px-4 py-3">
-                                    <div>
+                                    <div className="flex flex-col">
                                         <p className="text-sm font-black text-slate-900">{selectedUser.full_name}</p>
+                                        <p className={`text-[10px] font-bold uppercase ${deviceCount && deviceCount > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                            {deviceCount === null ? 'A carregar dispositivos...' :
+                                                deviceCount === 0 ? '⚠️ Nenhum dispositivo registado (Push OFF)' :
+                                                    `✅ ${deviceCount} dispositivo(s) registado(s)`}
+                                        </p>
                                     </div>
                                     <button
                                         onClick={() => { setSelectedUser(null); setUserSearchQuery(''); }}
-                                        className="text-xs font-black text-rose-500 hover:text-rose-700 uppercase tracking-wider"
+                                        className="text-xs font-black text-rose-500 hover:text-rose-700 uppercase tracking-wider h-fit"
                                     >
                                         Alterar
                                     </button>

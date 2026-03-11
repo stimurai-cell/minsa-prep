@@ -12,15 +12,16 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
             return false;
         }
 
+        console.log('[Push] A solicitar token FCM para utilizador:', userId);
         const token = await requestFirebaseNotificationPermission();
 
         if (!token) {
-            console.warn('[Push] Falha ao obter Token FCM.');
+            console.error('[Push] Falha ao obter Token FCM (permissão negada ou erro técnico).');
             return false;
         }
 
+        console.log('[Push] Token obtido, a guardar na base de dados (Supabase)...');
         // Guardar/actualizar na DB
-        // Usamos um formato compatível para a coluna subscription, mas focamo-nos em guardar o FCM token no endpoint
         const subscriptionJson = {
             endpoint: token,
             fcm: true
@@ -44,11 +45,10 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
             return false;
         }
 
-        console.log('[Push] Firebase Cloud Messaging Token guardado com sucesso.');
-        // Opcional: Alerta de sucesso se o utilizador clicou no botão
+        console.log('[Push] Sucesso: Firebase Cloud Messaging Token guardado e ativo.');
         return true;
     } catch (err) {
-        console.error('[Push] Erro ao subscrever FCM:', err);
+        console.error('[Push] Erro crítico ao subscrever FCM:', err);
         return false;
     }
 }

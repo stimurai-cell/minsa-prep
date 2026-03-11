@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
-import { Settings, Share, Flame, Zap, ShieldCheck, Crown, Award } from 'lucide-react';
+import { Settings, Share, Flame, Zap, ShieldCheck, Crown, Award, Bell, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useState, useEffect } from 'react';
+import { subscribeToPush, sendPushNotification } from '../lib/pushNotifications';
 
 const AVATAR_COLORS = [
     'bg-emerald-100 text-emerald-600',
@@ -20,6 +21,7 @@ export default function Profile() {
     const [userBadges, setUserBadges] = useState<any[]>([]);
     const [followingCount, setFollowingCount] = useState(0);
     const [followersCount, setFollowersCount] = useState(0);
+    const [pushStatus, setPushStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
 
     useEffect(() => {
         const fetchBadges = async () => {
@@ -208,6 +210,66 @@ export default function Profile() {
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <hr className="border-slate-200 my-4" />
+
+                {/* Notification Diagnostic Section */}
+                <div className="bg-white border-2 border-slate-200 rounded-[1.8rem] p-6 shadow-sm">
+                    <div className="flex items-center gap-4 mb-4">
+                        <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
+                            <Bell className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-black text-slate-900 leading-tight">Sistema de Alertas</h3>
+                            <p className="text-xs text-slate-500 font-bold uppercase tracking-tight">Diagnóstico de Notificações</p>
+                        </div>
+                    </div>
+
+                    <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+                        Se não recebes as notificações do Admin ou avisos de novos simulados, usa o botão abaixo para testar e restabelecer a tua ligação.
+                    </p>
+
+                    <button
+                        onClick={async () => {
+                            if (!profile?.id) return;
+                            setPushStatus('testing');
+                            try {
+                                const success = await subscribeToPush(profile.id);
+                                if (success) {
+                                    await sendPushNotification({
+                                        userId: profile.id,
+                                        title: 'Teste de Ligação ✅',
+                                        body: 'Se estás a ler isto, as tuas notificações estão 100% funcionais!',
+                                        url: '/profile'
+                                    });
+                                    setPushStatus('success');
+                                    setTimeout(() => setPushStatus('idle'), 3000);
+                                } else {
+                                    setPushStatus('error');
+                                }
+                            } catch (err) {
+                                console.error('Error testing push:', err);
+                                setPushStatus('error');
+                            }
+                        }}
+                        disabled={pushStatus === 'testing'}
+                        className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 transition-all shadow-[0_4px_0_0_rgba(0,0,0,0.1)] active:translate-y-1 active:shadow-none ${pushStatus === 'testing' ? 'bg-slate-100 text-slate-400' :
+                            pushStatus === 'success' ? 'bg-emerald-500 text-white shadow-[#10b981]' :
+                                pushStatus === 'error' ? 'bg-rose-500 text-white shadow-[#f43f5e]' :
+                                    'bg-amber-100 text-amber-700 hover:bg-amber-200 shadow-[#d97706]'
+                            }`}
+                    >
+                        {pushStatus === 'testing' ? (
+                            <><RefreshCw className="w-4 h-4 animate-spin" /> Verificando...</>
+                        ) : pushStatus === 'success' ? (
+                            <><CheckCircle2 className="w-4 h-4" /> Notificação Enviada!</>
+                        ) : pushStatus === 'error' ? (
+                            '❌ Erro ao Ligar. Tenta de novo.'
+                        ) : (
+                            'Testar e Ligar Notificações Push'
+                        )}
+                    </button>
                 </div>
 
                 <hr className="border-slate-200 my-4" />
