@@ -108,8 +108,9 @@ export default function Dashboard() {
       try {
         const { data: progressData } = await supabase
           .from('user_topic_progress')
-          .select('questions_answered, correct_answers, domain_score, topics(name)')
-          .eq('user_id', profile.id);
+          .select('questions_answered, correct_answers, domain_score, topics!inner(name, area_id)')
+          .eq('user_id', profile.id)
+          .eq('topics.area_id', profile.selected_area_id);
 
         let totalQ = 0;
         let totalC = 0;
