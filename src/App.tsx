@@ -1,45 +1,46 @@
-import { useEffect, ReactNode, useState } from 'react';
+import { useEffect, ReactNode, useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/useAuthStore';
 
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import OfflineSync from './components/OfflineSync';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import Training from './pages/Training';
-import Simulation from './pages/Simulation';
-import Ranking from './pages/Ranking';
-import Admin from './pages/Admin';
-import Premium from './pages/Premium';
-import OnboardingQuiz from './pages/OnboardingQuiz';
-import Battle from './pages/Battle';
-import BattleArena from './pages/BattleArena';
-import SpeedMode from './pages/SpeedMode';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import Practice from './pages/Practice';
-import Social from './pages/Social';
-import News from './pages/News';
-import Profile from './pages/Profile';
-import Settings from './pages/Settings';
-import EditProfile from './pages/EditProfile';
-import HelpCenter from './pages/HelpCenter';
-import Feedback from './pages/Feedback';
-import TermsOfUse from './pages/TermsOfUse';
-import PrivacyPolicy from './pages/PrivacyPolicy';
-import PublicExam from './pages/PublicExam';
-import Leagues from './pages/Leagues';
-import UserProfileView from './pages/UserProfileView';
-import Welcome from './pages/Welcome';
-import Notifications from './pages/Notifications';
 import ToastNotification from './components/ToastNotification';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { RefreshCw } from 'lucide-react';
 import PaymentNotificationListener from './components/PaymentNotificationListener';
 
 import { WifiOff } from 'lucide-react';
+
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Training = lazy(() => import('./pages/Training'));
+const Simulation = lazy(() => import('./pages/Simulation'));
+const Ranking = lazy(() => import('./pages/Ranking'));
+const Admin = lazy(() => import('./pages/Admin'));
+const Premium = lazy(() => import('./pages/Premium'));
+const OnboardingQuiz = lazy(() => import('./pages/OnboardingQuiz'));
+const Battle = lazy(() => import('./pages/Battle'));
+const BattleArena = lazy(() => import('./pages/BattleArena'));
+const SpeedMode = lazy(() => import('./pages/SpeedMode'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const Practice = lazy(() => import('./pages/Practice'));
+const Social = lazy(() => import('./pages/Social'));
+const News = lazy(() => import('./pages/News'));
+const Profile = lazy(() => import('./pages/Profile'));
+const Settings = lazy(() => import('./pages/Settings'));
+const EditProfile = lazy(() => import('./pages/EditProfile'));
+const HelpCenter = lazy(() => import('./pages/HelpCenter'));
+const Feedback = lazy(() => import('./pages/Feedback'));
+const TermsOfUse = lazy(() => import('./pages/TermsOfUse'));
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
+const PublicExam = lazy(() => import('./pages/PublicExam'));
+const Leagues = lazy(() => import('./pages/Leagues'));
+const UserProfileView = lazy(() => import('./pages/UserProfileView'));
+const Welcome = lazy(() => import('./pages/Welcome'));
+const Notifications = lazy(() => import('./pages/Notifications'));
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuthStore();
@@ -48,6 +49,14 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   if (!user) return <Navigate to="/welcome" replace />;
 
   return <>{children}</>;
+}
+
+function PageFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600"></div>
+    </div>
+  );
 }
 
 function RootRedirect() {
@@ -134,41 +143,43 @@ export default function App() {
         </div>
       )}
       <ErrorBoundary>
-        <Routes>
-          <Route path="/welcome" element={<Welcome />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            <Route path="/welcome" element={<Welcome />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
-          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<RootRedirect />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="onboarding-quiz" element={<OnboardingQuiz />} />
-            <Route path="training" element={<Training />} />
-            <Route path="simulation" element={<Simulation />} />
-            <Route path="battle" element={<Battle />} />
-            <Route path="battle/:matchId" element={<BattleArena />} />
-            <Route path="speed-mode" element={<SpeedMode />} />
-            <Route path="practice" element={<Practice />} />
-            <Route path="social" element={<Social />} />
-            <Route path="news" element={<News />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="profile/:userId" element={<UserProfileView />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="settings/profile" element={<EditProfile />} />
-            <Route path="help" element={<HelpCenter />} />
-            <Route path="feedback" element={<Feedback />} />
-            <Route path="terms" element={<TermsOfUse />} />
-            <Route path="privacy" element={<PrivacyPolicy />} />
-            <Route path="contest" element={<PublicExam />} />
-            <Route path="leagues" element={<Leagues />} />
-            <Route path="ranking" element={<Ranking />} />
-            <Route path="premium" element={<Premium />} />
-            <Route path="notifications" element={<Notifications />} />
-            <Route path="admin" element={<Admin />} />
-          </Route>
-        </Routes>
+            <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+              <Route index element={<RootRedirect />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="onboarding-quiz" element={<OnboardingQuiz />} />
+              <Route path="training" element={<Training />} />
+              <Route path="simulation" element={<Simulation />} />
+              <Route path="battle" element={<Battle />} />
+              <Route path="battle/:matchId" element={<BattleArena />} />
+              <Route path="speed-mode" element={<SpeedMode />} />
+              <Route path="practice" element={<Practice />} />
+              <Route path="social" element={<Social />} />
+              <Route path="news" element={<News />} />
+              <Route path="profile" element={<Profile />} />
+              <Route path="profile/:userId" element={<UserProfileView />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="settings/profile" element={<EditProfile />} />
+              <Route path="help" element={<HelpCenter />} />
+              <Route path="feedback" element={<Feedback />} />
+              <Route path="terms" element={<TermsOfUse />} />
+              <Route path="privacy" element={<PrivacyPolicy />} />
+              <Route path="contest" element={<PublicExam />} />
+              <Route path="leagues" element={<Leagues />} />
+              <Route path="ranking" element={<Ranking />} />
+              <Route path="premium" element={<Premium />} />
+              <Route path="notifications" element={<Notifications />} />
+              <Route path="admin" element={<Admin />} />
+            </Route>
+          </Routes>
+        </Suspense>
       </ErrorBoundary>
     </BrowserRouter>
   );
