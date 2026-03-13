@@ -15,6 +15,7 @@ import { playSuccessSound, playErrorSound } from '../lib/sounds';
 import { getDifficultyLabel } from '../lib/labels';
 import { WifiOff, Download, CreditCard, RefreshCw } from 'lucide-react';
 import { useOfflineStore } from '../store/useOfflineStore';
+import { usePermissions } from '../lib/permissions';
 import {
   calculateTrainingXp,
   getAlternativeLabel,
@@ -30,6 +31,7 @@ import { savePendingXp, savePendingLog } from '../lib/offlineStore';
 import { calculateNextReview } from '../lib/srs';
 import { checkForBadges, type Badge } from '../lib/badges';
 import BadgeNotification from '../components/BadgeNotification';
+import { exportQuestions } from '../lib/exportQuestions';
 
 type SessionSummary = {
   correctAnswers: number;
@@ -45,6 +47,7 @@ export default function Training() {
   const { areas, topics, fetchAreas, fetchTopics } = useAppStore();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { hasStatisticsPDF } = usePermissions();
 
   const [selectedTopic, setSelectedTopic] = useState('');
   const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyPreference>('mixed');
@@ -62,6 +65,7 @@ export default function Training() {
   const [showBadge, setShowBadge] = useState<Badge | null>(null);
   const { downloadedQuestions, isOfflineMode, setOfflineMode, addQuestions } = useOfflineStore();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [exportingTopic, setExportingTopic] = useState<null | 'pdf' | 'docx'>(null);
 
   const hasPremiumAccess = ['premium', 'elite', 'admin'].includes(profile?.role || '');
   const hasBasicAccess = ['basic', 'premium', 'elite', 'admin'].includes(profile?.role || '');
@@ -154,6 +158,29 @@ export default function Training() {
 
     if (!preserveSummary) {
       setSessionSummary(null);
+    }
+  };
+
+  const handleExportTopic = async (format: 'pdf' | 'docx') => {
+    if (!hasStatisticsPDF) {
+      navigate('/premium?plan=elite#payment-section');
+      return;
+    }
+    if (!selectedTopic || selectedTopic === 'random') {
+      alert('Escolha um tópico específico para exportar.');
+      return;
+    }
+    try {
+      setExportingTopic(format);
+      await exportQuestions(
+        { areaId: profile?.selected_area_id || undefined, topicId: selectedTopic },
+        format
+      );
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || 'Erro ao exportar o tópico.');
+    } finally {
+      setExportingTopic(null);
     }
   };
 
@@ -967,6 +994,42 @@ export default function Training() {
                 </div>
               )}
             </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => handleExportTopic('pdf')}
+                disabled={!selectedTopic || selectedTopic === 'random' || exportingTopic !== null}
+                className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                  hasStatisticsPDF
+                    ? 'border border-slate-200 bg-white text-slate-800 hover:border-emerald-400'
+                    : 'border border-amber-200 bg-amber-50 text-amber-800'
+                } disabled:opacity-50`}
+              >
+                {exportingTopic === 'pdf' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                PDF
+                {!hasStatisticsPDF && <span className="text-[10px] font-black uppercase ml-2">Elite</span>}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExportTopic('docx')}
+                disabled={!selectedTopic || selectedTopic === 'random' || exportingTopic !== null}
+                className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                  hasStatisticsPDF
+                    ? 'border border-slate-200 bg-white text-slate-800 hover:border-emerald-400'
+                    : 'border border-amber-200 bg-amber-50 text-amber-800'
+                } disabled:opacity-50`}
+              >
+                {exportingTopic === 'docx' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                DOCX
+                {!hasStatisticsPDF && <span className="text-[10px] font-black uppercase ml-2">Elite</span>}
+              </button>
+            </div>
+            {!hasStatisticsPDF && (
+              <p className="text-xs text-amber-800">
+                Exports ficam disponíveis no plano Elite (estatísticas em PDF). Seleciona um tópico específico.
+              </p>
+            )}
 
             <button
               type="button"

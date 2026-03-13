@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { UserPlus, Search, Flame, ShieldAlert, Award, UserCheck, MessageSquare } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
+import { useAppStore } from '../store/useAppStore';
 
 export default function Social() {
     const { profile } = useAuthStore();
+    const { areas, fetchAreas } = useAppStore();
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<'friends' | 'feed'>('friends');
     const [loading, setLoading] = useState(true);
@@ -15,7 +17,14 @@ export default function Social() {
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [isSearching, setIsSearching] = useState(false);
 
+    const areaNameById = useMemo(() => {
+        const map = new Map<string, string>();
+        areas.forEach((a: any) => map.set(a.id, a.name));
+        return (id?: string | null) => (id ? map.get(id) || 'Área não definida' : 'Área não definida');
+    }, [areas]);
+
     useEffect(() => {
+        fetchAreas();
         if (!profile?.id) return;
 
         const fetchData = async () => {
@@ -24,7 +33,7 @@ export default function Social() {
                 // 1. Fetch Follows (Friends)
                 const { data: follows, error: followError } = await supabase
                     .from('user_follows')
-                    .select('following_id, profiles!user_follows_following_id_fkey(id, full_name, total_xp, avatar_style, current_league, streak_freeze_active)')
+                    .select('following_id, profiles!user_follows_following_id_fkey(id, full_name, total_xp, avatar_style, avatar_url, selected_area_id, current_league, streak_freeze_active)')
                     .eq('follower_id', profile.id);
 
                 if (followError) throw followError;
@@ -33,7 +42,7 @@ export default function Social() {
                 // 2. Fetch Activities for Feed
                 const { data: acts, error: actError } = await supabase
                     .from('user_activities')
-                    .select('*, profiles(full_name, avatar_style, avatar_url)')
+                    .select('*, profiles(full_name, avatar_style, avatar_url, selected_area_id)')
                     .order('created_at', { ascending: false })
                     .limit(20);
 
@@ -60,7 +69,7 @@ export default function Social() {
         try {
             const { data, error } = await supabase
                 .from('profiles')
-                .select('id, full_name, total_xp, selected_area_id, avatar_url')
+                    .select('id, full_name, total_xp, selected_area_id, avatar_url')
                 .ilike('full_name', `%${query}%`)
                 .neq('id', profile?.id)
                 .limit(5);
@@ -183,7 +192,9 @@ export default function Social() {
                                                 </div>
                                                 <div>
                                                     <p className="font-bold text-slate-900">{user.full_name}</p>
-                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{user.total_xp} XP</p>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                        {areaNameById(user.selected_area_id)} • {user.total_xp} XP
+                                                    </p>
                                                 </div>
                                             </div>
                                             {isFollowing ? (
@@ -263,9 +274,11 @@ export default function Social() {
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <p className="font-black text-slate-900 truncate text-lg group-hover:text-blue-600 transition-colors">{friend.full_name}</p>
-                                            <div className="flex items-center gap-1.5 mt-1">
+                                            <div className="flex items-center gap-2 mt-1 text-xs font-bold text-slate-500 uppercase tracking-widest">
+                                                <span>{areaNameById(friend.selected_area_id)}</span>
+                                                <span className="w-1 h-1 rounded-full bg-slate-300"></span>
                                                 <Flame className="w-4 h-4 text-orange-500 fill-current" />
-                                                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{friend.total_xp} XP</span>
+                                                <span>{friend.total_xp} XP</span>
                                             </div>
                                         </div>
                                     </div>
@@ -312,7 +325,7 @@ export default function Social() {
                                                 act.activity_type === 'achievement' ? 'ganhou uma nova medalha!' : 'acabou de começar um novo treino!'}
                                         </p>
                                         <p className="text-xs font-bold text-slate-400 mt-2 uppercase tracking-widest">
-                                            {new Date(act.created_at).toLocaleDateString()}
+                                            {areaNameById(act.profiles?.selected_area_id)} • {new Date(act.created_at).toLocaleDateString()}
                                         </p>
                                     </div>
                                 </div>

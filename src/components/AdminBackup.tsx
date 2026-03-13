@@ -1,10 +1,39 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Download, Upload, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { exportQuestions } from '../lib/exportQuestions';
 
 export default function AdminBackup() {
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+    const [areas, setAreas] = useState<any[]>([]);
+    const [topics, setTopics] = useState<any[]>([]);
+    const [selectedArea, setSelectedArea] = useState<string>('');
+    const [selectedTopic, setSelectedTopic] = useState<string>('');
+    const [exporting, setExporting] = useState<null | 'pdf' | 'docx'>(null);
+
+    useEffect(() => {
+        void fetchAreasList();
+    }, []);
+
+    useEffect(() => {
+        if (selectedArea) {
+            void fetchTopicsList(selectedArea);
+        } else {
+            setTopics([]);
+            setSelectedTopic('');
+        }
+    }, [selectedArea]);
+
+    const fetchAreasList = async () => {
+        const { data } = await supabase.from('areas').select('id, name').order('name');
+        setAreas(data || []);
+    };
+
+    const fetchTopicsList = async (areaId: string) => {
+        const { data } = await supabase.from('topics').select('id, name').eq('area_id', areaId).order('name');
+        setTopics(data || []);
+    };
 
     const handleExport = async () => {
         setLoading(true);
@@ -84,6 +113,23 @@ export default function AdminBackup() {
         }
     };
 
+    const handleExportFiltered = async (format: 'pdf' | 'docx') => {
+        if (!selectedArea && !selectedTopic) {
+            alert('Selecione uma área ou tópico para exportar.');
+            return;
+        }
+        try {
+            setExporting(format);
+            await exportQuestions({ areaId: selectedArea || undefined, topicId: selectedTopic || undefined }, format);
+            setStatus({ type: 'success', message: `Exportação em ${format.toUpperCase()} concluída.` });
+        } catch (err: any) {
+            console.error(err);
+            setStatus({ type: 'error', message: err.message || 'Erro ao exportar.' });
+        } finally {
+            setExporting(null);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="grid gap-6 md:grid-cols-2">
@@ -135,6 +181,72 @@ export default function AdminBackup() {
                 cursor-pointer disabled:opacity-50"
                         />
                     </label>
+                </div>
+            </div>
+
+            {/* Exportar PDF/DOCX por Área/Tópico */}
+            <div className="rounded-3xl border border-indigo-200 bg-indigo-50 p-6 shadow-sm">
+                <div className="flex items-center gap-4 mb-4">
+                    <div className="p-3 bg-indigo-100 text-indigo-700 rounded-2xl">
+                        <Download className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-900">Exportar PDF / DOCX</h3>
+                        <p className="text-sm text-slate-600">Por área ou por tópico, pronto para partilhar com estudantes.</p>
+                    </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-600 mb-2 ml-1">Área</label>
+                        <select
+                            value={selectedArea}
+                            onChange={(e) => setSelectedArea(e.target.value)}
+                            className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-800 outline-none focus:border-indigo-400"
+                        >
+                            <option value="">Todas</option>
+                            {areas.map((a) => (
+                                <option key={a.id} value={a.id}>{a.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-600 mb-2 ml-1">Tópico (opcional)</label>
+                        <select
+                            value={selectedTopic}
+                            onChange={(e) => setSelectedTopic(e.target.value)}
+                            className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-800 outline-none focus:border-indigo-400"
+                            disabled={!selectedArea}
+                        >
+                            <option value="">Todos os tópicos</option>
+                            {topics.map((t) => (
+                                <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                        </select>
+                        {!selectedArea && (
+                            <p className="mt-1 text-[11px] text-slate-500">Selecione uma área para listar os tópicos.</p>
+                        )}
+                    </div>
+                </div>
+
+                <div className="mt-4 flex gap-3 flex-wrap">
+                    <button
+                        onClick={() => handleExportFiltered('pdf')}
+                        disabled={exporting !== null}
+                        className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white hover:bg-slate-800 transition disabled:opacity-60"
+                    >
+                        {exporting === 'pdf' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        Exportar PDF
+                    </button>
+                    <button
+                        onClick={() => handleExportFiltered('docx')}
+                        disabled={exporting !== null}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 hover:border-slate-400 transition disabled:opacity-60"
+                    >
+                        {exporting === 'docx' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        Exportar DOCX
+                    </button>
+                    <p className="text-xs text-slate-500 mt-2">O ficheiro já sai com respostas corretas assinaladas e explicações.</p>
                 </div>
             </div>
 

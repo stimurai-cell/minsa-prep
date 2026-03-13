@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, TrendingUp, Trophy, Flame, ChevronRight, Info } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { motion } from 'motion/react';
+import { useAppStore } from '../store/useAppStore';
 
 const LEAGUE_COLORS: Record<string, string> = {
     'Bronze': 'from-amber-400 to-orange-600',
@@ -20,11 +21,14 @@ const LEAGUE_ICONS: Record<string, string> = {
 export default function Leagues() {
     const navigate = useNavigate();
     const { profile } = useAuthStore();
+    const { areas, fetchAreas } = useAppStore();
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState<any[]>([]);
     const [timeLeft, setTimeLeft] = useState('');
 
     useEffect(() => {
+        fetchAreas();
+
         const fetchLeagueData = async () => {
             if (!profile?.id) return;
 
@@ -37,7 +41,7 @@ export default function Leagues() {
             try {
                 const { data, error } = await supabase
                     .from('weekly_league_stats')
-                    .select('user_id, xp_earned, profiles(full_name, avatar_style, avatar_url)')
+                    .select('user_id, xp_earned, profiles(full_name, avatar_style, avatar_url, selected_area_id)')
                     .eq('league_name', profile.current_league || 'Bronze')
                     .eq('week_start_date', monday)
                     .order('xp_earned', { ascending: false })
@@ -73,6 +77,12 @@ export default function Leagues() {
         const interval = setInterval(updateTimer, 60000);
         return () => clearInterval(interval);
     }, [profile]);
+
+    const areaNameById = useMemo(() => {
+        const map = new Map<string, string>();
+        areas.forEach((a: any) => map.set(a.id, a.name));
+        return (id?: string | null) => (id ? map.get(id) || 'Área não definida' : 'Área não definida');
+    }, [areas]);
 
     const userRank = stats.findIndex(s => s.user_id === profile?.id) + 1;
     const currentLeague = profile?.current_league || 'Bronze';
@@ -158,7 +168,9 @@ export default function Leagues() {
                                         </p>
                                         <div className="flex items-center gap-1.5 mt-0.5">
                                             <div className="w-2 h-2 rounded-full bg-slate-200"></div>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{profile?.selected_area_id ? 'Estudante' : 'Membro'}</p>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                {areaNameById(entry.profiles?.selected_area_id)}
+                                            </p>
                                         </div>
                                     </div>
                                     <div className="text-right">
