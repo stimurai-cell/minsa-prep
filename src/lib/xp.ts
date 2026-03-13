@@ -5,6 +5,8 @@ export interface XpAwardResult {
     success: boolean;
     newTotalXp: number;
     xpEarned: number;
+    crossedMilestone?: number;
+    newStreak?: number;
 }
 
 /**
@@ -71,7 +73,7 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
         }
 
         // --- 4. GAMIFICATION: Verificação de Marcos Simbólicos (Milestones) ---
-        const milestones = [1000, 5000, 10000, 25000, 50000, 100000];
+        const milestones = [50, 100, 250, 500, 750, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
         const crossedMilestone = milestones.find(m => currentTotalXp < m && newTotal >= m);
 
         if (crossedMilestone) {
@@ -97,16 +99,67 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
                 body: `Acabaste de bater a meta fantástica de ${crossedMilestone.toLocaleString()} XP. O teu esforço está a dar frutos!`,
                 url: '/news'
             });
+
+            // c) In-app real-time Notification Toast
+            await supabase.from('user_notifications').insert({
+                user_id: userId,
+                title: 'Novo Marco Alcançado! 👑',
+                body: `Acabaste de bater a meta fantástica de ${crossedMilestone.toLocaleString()} XP. O teu esforço está a dar frutos!`,
+                type: 'achievement'
+            });
         }
 
-        // --- 5. GAMIFICATION: Verificação da Ofensiva (Streak) ---
+        // --- 5. GAMIFICATION: Verificação da Ofensiva (Streak) COM FUSO HORÁRIO DE ANGOLA ---
         const { data: profileAfter } = await supabase
             .from('profiles')
-            .select('streak_count')
+            .select('streak_count, streak_freeze_active')
             .eq('id', userId)
             .maybeSingle();
 
-        const currentStreak = profileAfter?.streak_count || 0;
+        let currentStreak = profileAfter?.streak_count || 0;
+        const streakFreezeActive = profileAfter?.streak_freeze_active || false;
+
+        const angolaTime = new Date(now.toLocaleString("en-US", { timeZone: "Africa/Luanda" }));
+        const startOfToday = new Date(angolaTime.getFullYear(), angolaTime.getMonth(), angolaTime.getDate()).getTime();
+
+        // Verificar o ultimo login de XP antes deste que acabamos de inserir
+        const { data: recentLogs } = await supabase
+            .from('activity_logs')
+            .select('created_at')
+            .eq('user_id', userId)
+            .eq('activity_type', 'xp_earned')
+            .order('created_at', { ascending: false })
+            .limit(2);
+
+        // Define a lógica da Ofensiva Real
+        if (recentLogs && recentLogs.length > 1) {
+            const lastLog = recentLogs[1].created_at;
+            const lastAngolaTime = new Date(new Date(lastLog).toLocaleString("en-US", { timeZone: "Africa/Luanda" }));
+            const startOfLast = new Date(lastAngolaTime.getFullYear(), lastAngolaTime.getMonth(), lastAngolaTime.getDate()).getTime();
+
+            const daysDiff = Math.round((startOfToday - startOfLast) / (1000 * 60 * 60 * 24));
+
+            if (daysDiff === 1) {
+                // Fez ontem, incrementa a ofensiva
+                currentStreak += 1;
+                await supabase.from('profiles').update({ streak_count: currentStreak }).eq('id', userId);
+            } else if (daysDiff > 1) {
+                // Perdeu 1 dia ou mais (Quebrou a ofensiva)
+                if (streakFreezeActive) {
+                    currentStreak += 1; // Salvo pelo protetor
+                    await supabase.from('profiles').update({ streak_count: currentStreak, streak_freeze_active: false }).eq('id', userId);
+                } else {
+                    currentStreak = 1; // Voltou à estaca zero (ofensiva recomeça hoje)
+                    await supabase.from('profiles').update({ streak_count: currentStreak }).eq('id', userId);
+                }
+            }
+            // Se daysDiff === 0 (hoje já fez), não incrementa nem perde
+        } else if (!recentLogs || recentLogs.length <= 1) {
+            // Primeiro XP de sempre!
+            currentStreak = 1;
+            await supabase.from('profiles').update({ streak_count: currentStreak }).eq('id', userId);
+        }
+
         const streakMilestones = [3, 7, 14, 30, 50, 100, 365]; // Dias
 
         // Só alertar se a ofensiva for exatamente igual a um marco (para não repetir)
@@ -128,12 +181,21 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
                 body: `Estás imbatível! Alcançaste a ofesiva monumental de ${currentStreak} dias consecutivos. Parabéns!`,
                 url: '/news'
             });
+
+            await supabase.from('user_notifications').insert({
+                user_id: userId,
+                title: `${currentStreak} Dias de Foco! 🔥`,
+                body: `Estás imbatível! Ofesiva de ${currentStreak} dias consecutivos. Parabéns!`,
+                type: 'streak'
+            });
         }
 
         return {
             success: true,
             newTotalXp: newTotal,
-            xpEarned: xpAmount
+            xpEarned: xpAmount,
+            crossedMilestone: crossedMilestone,
+            newStreak: currentStreak
         };
     } catch (err) {
         console.error('Error awarding XP:', err);

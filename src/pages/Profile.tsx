@@ -21,6 +21,7 @@ export default function Profile() {
     const [userBadges, setUserBadges] = useState<any[]>([]);
     const [followingCount, setFollowingCount] = useState(0);
     const [followersCount, setFollowersCount] = useState(0);
+    const [followingFriends, setFollowingFriends] = useState<any[]>([]);
     const [pushStatus, setPushStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
 
     useEffect(() => {
@@ -49,6 +50,18 @@ export default function Profile() {
                 .select('*', { count: 'exact', head: true })
                 .eq('following_id', profile.id);
             setFollowersCount(followers || 0);
+
+            // Fetch Friends for Streaks
+            const { data: follows } = await supabase.from('user_follows').select('following_id').eq('follower_id', profile.id);
+            if (follows && follows.length > 0) {
+                const fIds = follows.map(f => f.following_id);
+                const { data: fProfiles } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, avatar_url, avatar_style, streak_count')
+                    .in('id', fIds)
+                    .order('streak_count', { ascending: false });
+                setFollowingFriends(fProfiles || []);
+            }
         };
 
         fetchBadges();
@@ -296,6 +309,92 @@ export default function Profile() {
                         </div>
                     )}
                 </div>
+
+                <hr className="border-slate-200 mt-8 mb-4" />
+
+                {/* OFENSIVAS DOS AMIGOS */}
+                <div className="mb-8">
+                    <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Ofensivas dos Amigos</h2>
+
+                    <div className="flex gap-4 overflow-x-auto pb-4 -mx-6 px-6 no-scrollbar snap-x">
+                        {followingFriends.length === 0 ? (
+                            <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center min-w-full">
+                                <p className="text-sm font-bold text-slate-400">Ainda não segues amigos!</p>
+                                <Link to="/social" className="text-emerald-500 font-bold text-sm mt-2 block">Encontrar amigos</Link>
+                            </div>
+                        ) : (
+                            followingFriends.map((f, i) => (
+                                <div key={i} className="flex flex-col items-center min-w-[70px] snap-center">
+                                    <div className="relative cursor-pointer" onClick={() => window.location.href = `/profile/${f.id}`}>
+                                        <div className={`w-16 h-16 rounded-full border-2 border-white shadow-sm flex items-center justify-center text-xl font-black overflow-hidden ${!f.avatar_url ? (f.avatar_style || 'bg-slate-200 text-slate-500') : 'bg-white'}`}>
+                                            {f.avatar_url ? (
+                                                <img src={f.avatar_url} alt="" className="w-full h-full object-cover" />
+                                            ) : (
+                                                f.full_name?.charAt(0) || 'U'
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-1 mt-2">
+                                        <Flame className="w-4 h-4 text-orange-500" fill="currentColor" />
+                                        <span className="text-sm font-black text-slate-700">{f.streak_count || 0}</span>
+                                    </div>
+                                    <span className="text-[10px] font-bold text-slate-400 truncate max-w-[70px] mt-1">{f.full_name?.split(' ')[0]}</span>
+                                </div>
+                            ))
+                        )}
+
+                        {/* Add friend bubble */}
+                        <div className="flex flex-col items-center min-w-[70px] snap-center">
+                            <Link to="/social" className="w-16 h-16 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-colors">
+                                <span className="text-2xl font-black">+</span>
+                            </Link>
+                            <span className="text-[10px] font-bold text-slate-400 mt-3">Adicionar</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* CONQUISTAS E MEDALHAS (DUOLINGO STYLE) */}
+                <div>
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest">Conquistas</h2>
+                        <span className="text-xs font-bold text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg">
+                            {userBadges.length} desbloqueadas
+                        </span>
+                    </div>
+
+                    {userBadges.length === 0 ? (
+                        <div className="bg-white border-2 border-dashed border-slate-200 rounded-[2rem] p-8 text-center">
+                            <Award className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                            <p className="text-sm font-bold text-slate-500">Completa lições e atinge metas para ganhares as tuas primeiras medalhas exclusivas!</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-2 gap-4">
+                            {userBadges.map((ub, idx) => (
+                                <div key={idx} className="bg-white border-2 border-slate-100 rounded-[1.5rem] p-4 flex flex-col items-center text-center shadow-sm relative overflow-hidden group">
+                                    <div className="absolute top-2 right-2 flex gap-1">
+                                        {ub.badges?.criteria_type === 'streak' && <Flame className="w-4 h-4 text-orange-400" fill="currentColor" />}
+                                        {ub.badges?.criteria_type === 'count' && <CheckCircle2 className="w-4 h-4 text-emerald-400" fill="currentColor" />}
+                                        {ub.badges?.criteria_type === 'time' && <Zap className="w-4 h-4 text-blue-400" fill="currentColor" />}
+                                    </div>
+
+                                    <div className="w-20 h-20 mb-3 relative">
+                                        {ub.badges?.icon_url ? (
+                                            <img src={ub.badges.icon_url} alt="" className="w-full h-full object-contain drop-shadow-md group-hover:scale-110 transition-transform duration-300" />
+                                        ) : (
+                                            <div className="w-full h-full bg-gradient-to-br from-amber-200 to-amber-400 rounded-full flex items-center justify-center shadow-inner border-4 border-amber-50">
+                                                <Award className="w-10 h-10 text-white drop-shadow-sm" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-sm font-black text-slate-800 leading-tight mb-1">{ub.badges?.name}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 leading-snug">{ub.badges?.description}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <hr className="border-slate-200 my-8" />
             </div>
         </div>
     );

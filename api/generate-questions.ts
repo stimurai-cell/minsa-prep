@@ -13,19 +13,21 @@ const buildQuestionsPrompt = ({
   count,
   difficulty,
   rawContent,
+  alternativesCount,
 }: {
   area: string;
   topic: string;
   count: number;
   difficulty: string;
   rawContent: string;
+  alternativesCount: number;
 }) => `
   Voce e um especialista em concursos publicos da area da saude em Angola (MINSA).
   Gere ${count} questoes de multipla escolha sobre o topico "${topic}" da area de "${area}".
 
   REGRAS CRITICAS:
   1. Use portugues correto com todos os acentos e pontuacao.
-  2. Cada questao deve ter exatamente 4 alternativas (A, B, C, D).
+  2. Cada questao deve ter exatamente ${alternativesCount} alternativas (A, B, C, D, E).
   3. Estilo de escrita: Use termos angolanos.
   4. O nivel de dificuldade deve ser "${difficulty}".
   5. Baseie-se no seguinte conteudo de referencia (se fornecido):
@@ -40,7 +42,8 @@ const buildQuestionsPrompt = ({
           {"text": "Opcao A", "isCorrect": false},
           {"text": "Opcao B", "isCorrect": false},
           {"text": "Opcao C", "isCorrect": true},
-          {"text": "Opcao D", "isCorrect": false}
+          {"text": "Opcao D", "isCorrect": false},
+          {"text": "Opcao E", "isCorrect": false}
         ],
         "explanation": "Explicacao detalhada.",
         "difficulty": "${difficulty}"
@@ -65,7 +68,7 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Metodo nao permitido.' });
   }
 
-  const { action, area_id, topic_id, custom_topic_name, count, difficulty, context, generated_data, area_name, topic_name } = req.body || {};
+  const { action, area_id, topic_id, custom_topic_name, count, difficulty, context, generated_data, area_name, topic_name, is_contest_highlight } = req.body || {};
   const apiKey = process.env.GEMINI_API_KEY;
   const modelName = process.env.GEMINI_MODEL || defaultGeminiModel;
 
@@ -115,6 +118,9 @@ export default async function handler(req: any, res: any) {
 
       let savedCount = 0;
       for (const q of generated_data.questions) {
+        if (!q.alternatives || q.alternatives.length !== 5) {
+          throw new Error(`Quantidade de alternativas inválida para a pergunta "${q.question}". Esperado 5.`);
+        }
         // 1. Inserir a Pergunta
         const { data: quest, error: qError } = await supabase
           .from('questions')
@@ -145,8 +151,11 @@ export default async function handler(req: any, res: any) {
             question_id: quest.id,
             content: q.explanation
           });
-          // Não bloqueamos se a explicação falhar, mas logamos
-          if (eError) console.error('Erro ao salvar explicação:', eError.message);
+          // Se houver erro, logamos. O erro mais comum é constraint violation se o ID não bater.
+          if (eError) {
+            console.error('Erro GRANDE ao salvar explicação:', eError.message, eError.details);
+            throw new Error(`Erro ao salvar explicacao: ${eError.message}`);
+          }
         }
         savedCount++;
       }
@@ -167,6 +176,8 @@ export default async function handler(req: any, res: any) {
       const targetArea = area_name || 'Saude';
       const targetTopic = topic_name || custom_topic_name || 'Geral';
 
+      const alternativesCount = 5;
+
       const response = await ai.models.generateContent({
         model: modelName,
         contents: buildQuestionsPrompt({
@@ -175,6 +186,7 @@ export default async function handler(req: any, res: any) {
           count: count || 5,
           difficulty: difficulty || 'medium',
           rawContent: context || '',
+          alternativesCount,
         }),
         config: {
           responseMimeType: 'application/json',
@@ -190,7 +202,7 @@ export default async function handler(req: any, res: any) {
         area_id,
         topic_id,
         custom_topic_name,
-        is_contest_highlight: req.body.is_contest_highlight
+        is_contest_highlight
       });
     } catch (error) {
       return res.status(500).json({ error: getErrorMessage(error) });

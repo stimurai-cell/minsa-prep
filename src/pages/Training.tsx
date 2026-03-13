@@ -101,10 +101,11 @@ export default function Training() {
     }
   }, [sessionTopicId]);
 
-  // Se não houver tópico selecionado explicitamente, pré-seleciona o primeiro tópico disponível
+  // Se não houver tópico selecionado explicitamente, pré-seleciona um tópico ALEATÓRIO
   useEffect(() => {
     if (!selectedTopic && topics && topics.length > 0) {
-      setSelectedTopic(topics[0].id);
+      const randomIndex = Math.floor(Math.random() * topics.length);
+      setSelectedTopic(topics[randomIndex].id);
     }
   }, [topics, selectedTopic]);
 

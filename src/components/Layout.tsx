@@ -60,9 +60,9 @@ export default function Layout() {
     { to: '/practice', label: 'Pratique', icon: Dumbbell, activeColor: 'text-sky-500', activeBg: 'bg-sky-100', activeBorder: 'border-sky-200' },
     { to: '/social', label: 'Amigos', icon: UsersRound, activeColor: 'text-rose-500', activeBg: 'bg-rose-100', activeBorder: 'border-rose-200' },
     { to: '/leagues', label: 'Ligas', icon: ShieldCheck, activeColor: 'text-indigo-500', activeBg: 'bg-indigo-100', activeBorder: 'border-indigo-200' },
-    { to: '/profile', label: 'Perfil', icon: UserRound, activeColor: 'text-teal-500', activeBg: 'bg-teal-100', activeBorder: 'border-teal-200' },
+    { to: '/news', label: 'Novidades', icon: Megaphone, activeColor: 'text-blue-500', activeBg: 'bg-blue-100', activeBorder: 'border-blue-200' },
     { to: '/premium', label: 'Loja', icon: Crown, activeColor: 'text-yellow-500', activeBg: 'bg-yellow-100', activeBorder: 'border-yellow-200', isExtra: true },
-    { to: '/news', label: 'Novidades', icon: Megaphone, activeColor: 'text-blue-500', activeBg: 'bg-blue-100', activeBorder: 'border-blue-200', isExtra: true },
+    { to: '/profile', label: 'Perfil', icon: UserRound, activeColor: 'text-teal-500', activeBg: 'bg-teal-100', activeBorder: 'border-teal-200', isExtra: true },
   ];
 
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);

@@ -10,7 +10,7 @@ export const shuffleArray = <T,>(items: T[]) => {
 };
 
 export const stripAlternativePrefix = (text: string) =>
-  text.replace(/^\s*[a-d]\s*[\.\)\-:]\s*/i, '').trim();
+  text.replace(/^\s*[a-e]\s*[\.\)\-:]\s*/i, '').trim();
 
 export const prepareQuestionSet = (questions: any[]) =>
   shuffleArray(questions).map((question) => ({
@@ -21,7 +21,7 @@ export const prepareQuestionSet = (questions: any[]) =>
     })),
   }));
 
-export const getAlternativeLabel = (index: number) => ['a', 'b', 'c', 'd'][index] || '?';
+export const getAlternativeLabel = (index: number) => ['a', 'b', 'c', 'd', 'e'][index] || '?';
 
 type DifficultyPreference = 'mixed' | 'easy' | 'medium' | 'hard';
 

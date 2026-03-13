@@ -156,6 +156,11 @@ export default function Simulation() {
     const sessionType = searchParams.get('type');
 
     if (!profile?.selected_area_id && !sessionType) return;
+    if (sessionType && !hasPremiumAccess) {
+      alert('Este simulado especial do edital MINSA é exclusivo para VIP (premium/elite). Faça upgrade para aceder.');
+      navigate('/simulation', { replace: true });
+      return;
+    }
 
     setLoading(true);
 
@@ -199,7 +204,17 @@ export default function Simulation() {
           .in('id', shuffledIds);
 
         if (error) throw error;
-        qData = shuffledIds.map(id => data.find(q => q.id === id)).filter(Boolean);
+        qData = shuffledIds
+          .map(id => data.find(q => q.id === id))
+          .filter((q): q is any => Boolean(q))
+          // For contest highlight / edital MINSA VIP, exigimos exatamente 5 alternativas válidas
+          .filter(q => q.alternatives?.length === 5);
+
+        if (qData.length === 0) {
+          alert('As questões de destaque especial precisam ter 5 alternativas (A-E). Cadastre novas questões no admin e tente novamente.');
+          navigate('/simulation', { replace: true });
+          return;
+        }
       } else {
         // Fluxo Normal por Área
         const { data: topics } = await supabase
@@ -247,7 +262,16 @@ export default function Simulation() {
           .in('id', shuffledIds);
 
         if (error) throw error;
-        qData = shuffledIds.map(id => data.find(q => q.id === id)).filter(Boolean);
+        qData = shuffledIds
+          .map(id => data.find(q => q.id === id))
+          .filter((q): q is any => Boolean(q))
+          .filter(q => q.alternatives?.length === 5);
+
+        if (qData.length === 0) {
+          alert('Ainda não há questões com 5 alternativas (A-E) suficientes para montar o simulado. Cadastre mais itens no admin.');
+          navigate('/simulation', { replace: true });
+          return;
+        }
       }
 
       if (qData && qData.length > 0) {
@@ -421,8 +445,10 @@ export default function Simulation() {
   const startSimulation = () => {
     const difficulty = hasPremiumAccess ? selectedDifficulty : (selectedDifficulty === 'hard' ? 'medium' : selectedDifficulty);
 
-    // Verificar limite de simulacoes para utilizadores free: 1 por semana
-    if (!hasBasicAccess && profile?.id) {
+    // Limite semanal para quem não tem pacote premium/elite/admin: 1 simulação completada a cada 7 dias
+    const hasUnlimitedSimulations = ['premium', 'elite', 'admin'].includes(profile?.role || '');
+
+    if (!hasUnlimitedSimulations && profile?.id) {
       void (async () => {
         try {
           const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -435,7 +461,7 @@ export default function Simulation() {
 
           if (error) throw error;
           if (recent && recent.length >= 1) {
-            alert('No gratuito, você pode fazer 1 simulação de prova por semana. Faça upgrade para um plano pago para fazer mais.');
+            alert('Com o pacote atual você pode realizar 1 simulação por semana. Faça upgrade para destravar tentativas ilimitadas.');
             return;
           }
 
@@ -679,7 +705,7 @@ export default function Simulation() {
           </div>
 
           <div className="mt-3 flex min-h-0 flex-1 overflow-hidden">
-            <AnimatePresence mode="wait">
+            <AnimatePresence mode="sync">
               <motion.div
                 key={currentQ.id}
                 initial={{ opacity: 0, x: 28 }}
