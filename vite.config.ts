@@ -24,7 +24,6 @@ export default defineConfig(({ mode }) => {
             react: ['react', 'react-dom'],
             router: ['react-router-dom'],
             supabase: ['@supabase/supabase-js'],
-            firebase: ['firebase'],
             pdf: ['pdf-lib', '@pdf-lib/fontkit', 'docx'],
             motion: ['motion'],
             icons: ['lucide-react'],
