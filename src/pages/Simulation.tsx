@@ -55,7 +55,7 @@ export default function Simulation() {
   const [selectedAlt, setSelectedAlt] = useState<string | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
   const [showIntro, setShowIntro] = useState(true);
-  const [timeLeft, setTimeLeft] = useState(1800);
+  const [timeLeft, setTimeLeft] = useState(7200);
   const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null);
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
   const [resultHistory, setResultHistory] = useState<boolean[]>([]);
@@ -128,7 +128,7 @@ export default function Simulation() {
     setSelectedAlt(null);
     setIsAnswered(false);
     setShowIntro(true);
-    setTimeLeft(1800);
+    setTimeLeft(7200);
     setSessionStartedAt(null);
     setResultHistory([]);
 
@@ -151,6 +151,48 @@ export default function Simulation() {
     }
   };
 
+  const selectBalancedQuestions = (questionsPool: any[], total = 100) => {
+    if (!questionsPool.length) return [];
+
+    const shuffled = [...questionsPool].sort(() => Math.random() - 0.5);
+    const isCulture = (topicName?: string) =>
+      (topicName || '').toLowerCase().includes('cultura geral');
+
+    const culture = shuffled.filter((q) => isCulture((q as any)?.topics?.name));
+    const others = shuffled.filter((q) => !isCulture((q as any)?.topics?.name));
+
+    const cultureTarget = Math.min(20, culture.length);
+    const selectedCulture = culture.slice(0, cultureTarget);
+
+    const byTopic = new Map<string, any[]>();
+    others.forEach((q) => {
+      const topicId = q.topic_id || 'sem-topico';
+      const bucket = byTopic.get(topicId) || [];
+      bucket.push(q);
+      byTopic.set(topicId, bucket);
+    });
+
+    const remaining = total - selectedCulture.length;
+    const topicKeys = [...byTopic.keys()];
+    const perTopic = topicKeys.length > 0 ? Math.floor(remaining / topicKeys.length) : 0;
+    const remainder = topicKeys.length > 0 ? remaining % topicKeys.length : 0;
+
+    const selected: any[] = [...selectedCulture];
+    topicKeys.forEach((key, idx) => {
+      const bucket = (byTopic.get(key) || []).sort(() => Math.random() - 0.5);
+      const take = perTopic + (idx < remainder ? 1 : 0);
+      selected.push(...bucket.slice(0, take));
+    });
+
+    // Caso falte completar 100, preenche com o que sobrar do pool misturado
+    if (selected.length < total) {
+      const remainingPool = shuffled.filter((q) => !selected.includes(q));
+      selected.push(...remainingPool.slice(0, total - selected.length));
+    }
+
+    return selected.slice(0, total);
+  };
+
   const bootSimulationSession = async (difficulty: DifficultyPreference) => {
     const safeDifficulty = !hasPremiumAccess && difficulty === 'hard' ? 'medium' : difficulty;
     const sessionType = searchParams.get('type');
@@ -166,7 +208,7 @@ export default function Simulation() {
 
     try {
       let qData: any[] = [];
-      const count = sessionType === 'simulado_geral' ? 50 : 30;
+      const count = 100;
 
       if (sessionType && ['legis_geral', 'etica_deon', 'simulado_geral'].includes(sessionType)) {
         // 1. Fetch IDs for the specific contest type
@@ -257,7 +299,8 @@ export default function Simulation() {
           .select(`
             id, content, difficulty, topic_id,
             alternatives (id, content, is_correct),
-            question_explanations (content)
+            question_explanations (content),
+            topics (name)
           `)
           .in('id', shuffledIds);
 
@@ -276,8 +319,7 @@ export default function Simulation() {
 
       if (qData && qData.length > 0) {
         resetSimulationSession();
-        // Since we already shuffled and picked the IDs, we just need to prepare the question set
-        setQuestions(prepareQuestionSet(qData));
+        setQuestions(prepareQuestionSet(selectBalancedQuestions(qData, count)));
         setSessionStartedAt(Date.now());
         setShowIntro(true);
 
@@ -640,7 +682,7 @@ export default function Simulation() {
                   </div>
                   <div className="rounded-2xl bg-white/10 px-4 py-4">
                     <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200">Tempo</p>
-                    <p className="mt-2 text-lg font-black">30 min</p>
+                    <p className="mt-2 text-lg font-black">120 min</p>
                   </div>
                   <div className="rounded-2xl bg-white/10 px-4 py-4">
                     <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200">Objetivo</p>
