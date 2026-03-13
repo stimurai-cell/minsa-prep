@@ -80,7 +80,7 @@ export default function AdminUsers() {
                                 <th className="px-6 py-4 rounded-l-2xl">Membro</th>
                                 <th className="px-6 py-4">Papel / Plano</th>
                                 <th className="px-6 py-4">Área</th>
-                                <th className="px-6 py-4">Número</th>
+                                <th className="px-6 py-4">Telefone</th>
                                 <th className="px-6 py-4">Estado</th>
                                 <th className="px-6 py-4 text-right rounded-r-2xl">Ações</th>
                             </tr>
@@ -100,7 +100,9 @@ export default function AdminUsers() {
                                                 </div>
                                                 <div>
                                                     <p className="text-sm font-black text-slate-900">{u.full_name}</p>
-                                                    <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest">{u.student_number || u.id.substring(0, 8)}</p>
+                                                    <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest">
+                                                        {u.phone ? `Tel: ${u.phone}` : 'Sem telefone'}
+                                                    </p>
                                                 </div>
                                             </div>
                                         </td>
@@ -125,7 +127,7 @@ export default function AdminUsers() {
                                         </td>
                                         <td className="px-6 py-5">
                                             <p className="text-xs font-bold text-slate-700">
-                                                {u.phone || 'Sem número'}
+                                                {u.phone || 'Sem telefone'}
                                             </p>
                                         </td>
                                         <td className="px-6 py-5">
