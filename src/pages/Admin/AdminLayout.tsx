@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, Users, Database, CreditCard,
     LifeBuoy, User, LogOut, Menu, X, ChevronRight, Activity,
-    Megaphone
+    Megaphone, HardDrive
 } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 
@@ -52,7 +52,8 @@ export default function AdminLayout({ children, activeTab, onTabChange }: AdminL
             title: "Conteúdo e Sistema",
             items: [
                 { id: 'content', label: 'Gerir Questões', icon: Database },
-                { id: 'news', label: 'Notificações e Novidades', icon: Megaphone }
+                { id: 'news', label: 'Notificações e Novidades', icon: Megaphone },
+                { id: 'backup', label: 'Backup', icon: HardDrive }
             ]
         },
         {

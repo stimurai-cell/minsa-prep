@@ -80,15 +80,16 @@ export default function AdminUsers() {
                                 <th className="px-6 py-4 rounded-l-2xl">Membro</th>
                                 <th className="px-6 py-4">Papel / Plano</th>
                                 <th className="px-6 py-4">Área</th>
+                                <th className="px-6 py-4">Número</th>
                                 <th className="px-6 py-4">Estado</th>
                                 <th className="px-6 py-4 text-right rounded-r-2xl">Ações</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-transparent">
                             {loadingUsers ? (
-                                <tr><td colSpan={5} className="px-6 py-32 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-emerald-500 mb-2" /><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">A carregar...</p></td></tr>
+                                <tr><td colSpan={6} className="px-6 py-32 text-center"><Loader2 className="h-10 w-10 animate-spin mx-auto text-emerald-500 mb-2" /><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">A carregar...</p></td></tr>
                             ) : filteredUsers.length === 0 ? (
-                                <tr><td colSpan={5} className="px-6 py-32 text-center text-slate-400 font-bold uppercase tracking-widest italic opacity-40">Nenhum rastro encontrado...</td></tr>
+                                <tr><td colSpan={6} className="px-6 py-32 text-center text-slate-400 font-bold uppercase tracking-widest italic opacity-40">Nenhum rastro encontrado...</td></tr>
                             ) : (
                                 filteredUsers.map((u) => (
                                     <tr key={u.id} className="bg-slate-50/20 hover:bg-white transition-all group hover:shadow-xl hover:shadow-slate-200/50">
@@ -121,6 +122,11 @@ export default function AdminUsers() {
                                         </td>
                                         <td className="px-6 py-5">
                                             <p className="text-xs font-bold text-slate-700">{u.areas?.name || '---'}</p>
+                                        </td>
+                                        <td className="px-6 py-5">
+                                            <p className="text-xs font-bold text-slate-700">
+                                                {u.phone || 'Sem número'}
+                                            </p>
                                         </td>
                                         <td className="px-6 py-5">
                                             <div className="flex items-center gap-2">
