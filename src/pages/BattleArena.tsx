@@ -42,7 +42,10 @@ export default function BattleArena() {
                 .eq('topic_id', (await supabase.from('topics').select('id').eq('area_id', matchData.area_id).limit(1).single()).data?.id) // Simplified for now
                 .limit(10);
 
-            if (qs) setQuestions(prepareQuestionSet(qs));
+            if (qs) {
+                const valid = qs.filter(q => (q.alternatives || []).length === 4);
+                setQuestions(prepareQuestionSet(valid));
+            }
             setLoading(false);
         };
 

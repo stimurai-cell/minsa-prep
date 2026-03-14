@@ -69,6 +69,8 @@ export default function SpeedMode() {
         window.speechSynthesis.speak(utterance);
     }, [stopTTS]);
 
+    const filterStandardQuestions = (qs: any[]) => (qs || []).filter(q => (q.alternatives || []).length === 4);
+
     const fetchQuestionBatch = async (ids: string[]) => {
         if (ids.length === 0) return [];
         const { data, error } = await supabase
@@ -80,8 +82,8 @@ export default function SpeedMode() {
             .in('id', ids);
 
         if (error) throw error;
-        // Keep the order of IDs we requested
-        return ids.map(id => data.find(q => q.id === id)).filter(Boolean);
+        // Keep the order of IDs we requested, filtrando somente alternativas A-D
+        return filterStandardQuestions(ids.map(id => data.find(q => q.id === id)).filter(Boolean));
     };
 
     const bootQuestions = async (reset = false) => {

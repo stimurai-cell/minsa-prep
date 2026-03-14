@@ -308,10 +308,11 @@ export default function Simulation() {
         qData = shuffledIds
           .map(id => data.find(q => q.id === id))
           .filter((q): q is any => Boolean(q))
-          .filter(q => q.alternatives?.length === 5);
+          // Modo normal: aceitar apenas questÃµes no formato padrÃ£o (4 alternativas A-D)
+          .filter(q => q.alternatives?.length === 4);
 
         if (qData.length === 0) {
-          alert('Ainda não há questões com 5 alternativas (A-E) suficientes para montar o simulado. Cadastre mais itens no admin.');
+          alert('Ainda não há questões com 4 alternativas (A-D) suficientes para montar o simulado. Cadastre mais itens no admin.');
           navigate('/simulation', { replace: true });
           return;
         }

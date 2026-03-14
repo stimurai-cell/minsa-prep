@@ -4,6 +4,7 @@ export interface GenerateQuestionsPayload {
   count: number;
   difficulty: string;
   rawContent: string;
+  alternativesCount: number;
 }
 
 export const defaultGeminiModel = 'gemini-2.5-flash';
@@ -20,7 +21,7 @@ export const buildQuestionsPrompt = ({
 
   REGRAS CRITICAS:
   1. Use portugues correto (Angola) com todos os acentos e pontuacao.
-  2. Cada questao deve ter exatamente 5 alternativas (A, B, C, D, E).
+  2. Cada questao deve ter exatamente ${alternativesCount} alternativas (A${alternativesCount === 4 ? ', B, C, D' : ', B, C, D, E'}).
   3. Estilo de escrita: Use termos como "assinale a verdadeira", "assinale a falsa", "Excepto".
   4. O nivel de dificuldade deve ser "${difficulty}".
   5. Baseie-se no seguinte conteudo de referencia (se fornecido):
@@ -42,8 +43,8 @@ export const buildQuestionsPrompt = ({
           {"text": "Opcao A", "isCorrect": false},
           {"text": "Opcao B", "isCorrect": false},
           {"text": "Opcao C", "isCorrect": true},
-          {"text": "Opcao D", "isCorrect": false},
-          {"text": "Opcao E", "isCorrect": false}
+          {"text": "Opcao D", "isCorrect": false}${alternativesCount === 5 ? `,
+          {"text": "Opcao E", "isCorrect": false}` : ''}
         ],
         "explanation": "Explicacao tecnica detalhada.",
         "difficulty": "${difficulty}"

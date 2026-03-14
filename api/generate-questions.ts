@@ -27,7 +27,7 @@ const buildQuestionsPrompt = ({
 
   REGRAS CRITICAS:
   1. Use portugues correto com todos os acentos e pontuacao.
-  2. Cada questao deve ter exatamente ${alternativesCount} alternativas (A, B, C, D, E).
+  2. Cada questao deve ter exatamente ${alternativesCount} alternativas (A${alternativesCount === 4 ? ', B, C, D' : ', B, C, D, E'}).
   3. Estilo de escrita: Use termos angolanos.
   4. O nivel de dificuldade deve ser "${difficulty}".
   5. Baseie-se no seguinte conteudo de referencia (se fornecido):
@@ -42,8 +42,10 @@ const buildQuestionsPrompt = ({
           {"text": "Opcao A", "isCorrect": false},
           {"text": "Opcao B", "isCorrect": false},
           {"text": "Opcao C", "isCorrect": true},
-          {"text": "Opcao D", "isCorrect": false},
-          {"text": "Opcao E", "isCorrect": false}
+          {"text": "Opcao D", "isCorrect": false}${
+            alternativesCount === 5 ? `,
+          {"text": "Opcao E", "isCorrect": false}` : ''
+          }
         ],
         "explanation": "Explicacao detalhada.",
         "difficulty": "${difficulty}"
@@ -117,9 +119,11 @@ export default async function handler(req: any, res: any) {
       if (!finalTopicId) throw new Error('ID do tópico não identificado.');
 
       let savedCount = 0;
+      const expectedAlts = generated_data.is_contest_highlight ? 5 : 4;
+
       for (const q of generated_data.questions) {
-        if (!q.alternatives || q.alternatives.length !== 5) {
-          throw new Error(`Quantidade de alternativas inválida para a pergunta "${q.question}". Esperado 5.`);
+        if (!q.alternatives || q.alternatives.length !== expectedAlts) {
+          throw new Error(`Quantidade de alternativas inválida para a pergunta "${q.question}". Esperado ${expectedAlts}.`);
         }
         // 1. Inserir a Pergunta
         const { data: quest, error: qError } = await supabase
@@ -176,7 +180,7 @@ export default async function handler(req: any, res: any) {
       const targetArea = area_name || 'Saude';
       const targetTopic = topic_name || custom_topic_name || 'Geral';
 
-      const alternativesCount = 5;
+      const alternativesCount = is_contest_highlight ? 5 : 4;
 
       const response = await ai.models.generateContent({
         model: modelName,

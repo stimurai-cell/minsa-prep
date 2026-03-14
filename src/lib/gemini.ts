@@ -80,7 +80,8 @@ export const generateQuestions = async (
   topic: string,
   count: number,
   difficulty: string,
-  rawContent: string
+  rawContent: string,
+  isContestHighlight = false
 ) => {
   const payload: GenerateQuestionsPayload = {
     area,
@@ -88,6 +89,7 @@ export const generateQuestions = async (
     count,
     difficulty,
     rawContent,
+    alternativesCount: isContestHighlight ? 5 : 4,
   };
 
   try {

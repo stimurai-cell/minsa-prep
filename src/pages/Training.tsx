@@ -197,6 +197,8 @@ export default function Training() {
     }
   };
 
+  const filterStandardQuestions = (qs: any[]) => (qs || []).filter(q => (q.alternatives || []).length === 4);
+
   const bootReviewSession = async () => {
     if (!profile?.id) return;
     setLoading(true);
@@ -219,7 +221,7 @@ export default function Training() {
       if (srsError) throw srsError;
 
       if (srsQuestions && srsQuestions.length > 0) {
-        const formattedQuestions = srsQuestions.map((srs: any) => srs.questions).filter(Boolean);
+        const formattedQuestions = filterStandardQuestions(srsQuestions.map((srs: any) => srs.questions).filter(Boolean));
         resetTrainingSession();
         setQuestions(prepareQuestionSet(formattedQuestions));
         setSessionStartedAt(Date.now());
@@ -242,7 +244,7 @@ export default function Training() {
       const topicQuestions = downloadedQuestions.filter(q => topicId === 'random' || q.topic_id === topicId);
       if (topicQuestions.length > 0) {
         resetTrainingSession();
-        setQuestions(prepareQuestionSet(pickQuestionsForSession(topicQuestions, 10, difficulty)));
+        setQuestions(prepareQuestionSet(pickQuestionsForSession(filterStandardQuestions(topicQuestions), 10, difficulty)));
         setSessionStartedAt(Date.now());
         setShowIntro(true);
         return;
@@ -290,10 +292,12 @@ export default function Training() {
 
       if (qError) throw qError;
 
-      if (qData && qData.length > 0) {
+      const filtered = filterStandardQuestions(qData);
+
+      if (filtered.length > 0) {
         resetTrainingSession();
         // Maintain the shuffled order
-        const orderedQuestions = shuffledIds.map(id => qData.find(q => q.id === id)).filter(Boolean);
+        const orderedQuestions = shuffledIds.map(id => filtered.find(q => q.id === id)).filter(Boolean);
         setQuestions(prepareQuestionSet(orderedQuestions));
         setSessionStartedAt(Date.now());
         setShowIntro(true);
