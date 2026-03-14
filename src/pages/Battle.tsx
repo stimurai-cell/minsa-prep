@@ -85,6 +85,7 @@ export default function Battle() {
             alert('Desafio enviado com sucesso!');
         } catch (err) {
             console.error('Erro ao desafiar:', err);
+            alert('Não foi possível criar o desafio. Verifique a sua ligação e tente novamente.');
         }
     };
 

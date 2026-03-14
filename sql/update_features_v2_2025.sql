@@ -111,6 +111,8 @@ CREATE POLICY "Users can view own SRS data" ON user_question_srs FOR SELECT USIN
 CREATE POLICY "Users can update own SRS data" ON user_question_srs FOR ALL USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can view matches" ON battle_matches FOR SELECT USING (auth.uid() = challenger_id OR auth.uid() = opponent_id);
+CREATE POLICY "Users can create matches" ON battle_matches FOR INSERT WITH CHECK (auth.uid() = challenger_id);
+CREATE POLICY "Players can update their matches" ON battle_matches FOR UPDATE USING (auth.uid() = challenger_id OR auth.uid() = opponent_id);
 
 CREATE POLICY "Users can view own mentor logs" ON ai_mentor_logs FOR SELECT USING (auth.uid() = user_id);
 

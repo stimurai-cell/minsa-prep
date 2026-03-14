@@ -309,11 +309,11 @@ export default function Social() {
                             </div>
                             <span className="text-xs font-bold text-slate-400">{loadingSuggestions ? '...' : `${suggestions.length} encontrados`}</span>
                         </div>
-                        <div className="flex gap-3 overflow-x-auto pb-3 no-scrollbar">
-                            {(loadingSuggestions ? Array.from({ length: 4 }) : suggestions).map((user: any, idx: number) => (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {(loadingSuggestions ? Array.from({ length: 6 }) : suggestions.slice(0, 6)).map((user: any, idx: number) => (
                                 <div
                                     key={user?.id || idx}
-                                    className="min-w-[160px] max-w-[180px] bg-slate-50 border border-slate-100 rounded-[1.4rem] p-4 flex flex-col items-center text-center gap-2 shadow-[0_6px_18px_-14px_rgba(15,23,42,0.2)]"
+                                    className="bg-slate-50 border border-slate-100 rounded-[1.4rem] p-4 flex flex-col items-center text-center gap-2 shadow-[0_6px_18px_-14px_rgba(15,23,42,0.2)]"
                                 >
                                     <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center font-black text-slate-500 overflow-hidden">
                                         {loadingSuggestions ? (
@@ -328,7 +328,7 @@ export default function Social() {
                                     {!loadingSuggestions && (
                                         <>
                                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                                {areaNameById(user?.selected_area_id)} • {user?.total_xp || 0} XP
+                                                {areaNameById(user?.selected_area_id)} ??? {user?.total_xp || 0} XP
                                             </p>
                                             <button
                                                 onClick={() => handleFollow(user.id)}
