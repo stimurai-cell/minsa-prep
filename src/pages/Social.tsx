@@ -76,9 +76,22 @@ export default function Social() {
                     popular = popularData || [];
                 }
 
-                const merged = [...fofProfiles, ...popular].filter((u, idx, arr) =>
+                let merged = [...fofProfiles, ...popular].filter((u, idx, arr) =>
                     arr.findIndex(v => v.id === u.id) === idx
                 );
+
+                // 3) Garantir que nunca volte lista vazia: se ainda não há sugestões,
+                // pega os perfis mais recentes (sem filtrar) para mostrar algo.
+                if (merged.length < 4) {
+                    const { data: fallbackData } = await supabase
+                        .from('profiles')
+                        .select('id, full_name, total_xp, selected_area_id, avatar_url')
+                        .order('created_at', { ascending: false })
+                        .limit(6);
+                    merged = [...merged, ...(fallbackData || [])].filter((u, idx, arr) =>
+                        arr.findIndex(v => v.id === u.id) === idx
+                    );
+                }
 
                 setSuggestions(merged);
             } catch (err) {
