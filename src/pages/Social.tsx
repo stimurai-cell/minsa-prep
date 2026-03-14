@@ -29,9 +29,68 @@ export default function Social() {
         fetchAreas();
         if (!profile?.id) return;
 
+        const loadSuggestions = async (follows: any[]) => {
+            setLoadingSuggestions(true);
+            try {
+                const already = new Set<string>([(profile?.id as string)]);
+                (follows || []).forEach(f => already.add(f.following_id));
+
+                // 1) Amigos de amigos (prioridade)
+                let fofProfiles: any[] = [];
+                if (follows.length > 0) {
+                    const followIds = follows.map(f => f.following_id);
+                    const { data: fofRows, error: fofError } = await supabase
+                        .from('user_follows')
+                        .select('following_id')
+                        .in('follower_id', followIds)
+                        .limit(60);
+                    if (fofError) throw fofError;
+                    const fofIds = Array.from(new Set((fofRows || []).map(r => r.following_id))).filter(id => !already.has(id));
+                    if (fofIds.length > 0) {
+                        const { data: fofData, error: fofProfilesError } = await supabase
+                            .from('profiles')
+                            .select('id, full_name, total_xp, selected_area_id, avatar_url')
+                            .in('id', fofIds)
+                            .limit(12);
+                        if (fofProfilesError) throw fofProfilesError;
+                        fofProfiles = fofData || [];
+                    }
+                }
+
+                // 2) Fallback: pessoas populares/aleatórias fora da lista "already"
+                let popular: any[] = [];
+                if (fofProfiles.length < 4) {
+                    let popularQuery = supabase
+                        .from('profiles')
+                        .select('id, full_name, total_xp, selected_area_id, avatar_url')
+                        .order('total_xp', { ascending: false })
+                        .limit(20);
+
+                    if (already.size > 0) {
+                        const inList = `(${Array.from(already).map(id => `'${id}'`).join(',')})`;
+                        popularQuery = popularQuery.not('id', 'in', inList);
+                    }
+
+                    const { data: popularData, error: popularError } = await popularQuery;
+                    if (popularError) throw popularError;
+                    popular = popularData || [];
+                }
+
+                const merged = [...fofProfiles, ...popular].filter((u, idx, arr) =>
+                    arr.findIndex(v => v.id === u.id) === idx
+                );
+
+                setSuggestions(merged);
+            } catch (err) {
+                console.error('Error loading suggestions:', err);
+                setSuggestions([]);
+            } finally {
+                setLoadingSuggestions(false);
+            }
+        };
+
         const fetchData = async () => {
             setLoading(true);
-            setLoadingSuggestions(true);
             try {
                 // 1. Fetch Follows (Friends)
                 const { data: follows, error: followError } = await supabase
@@ -42,25 +101,8 @@ export default function Social() {
                 if (followError) throw followError;
                 setFriends(follows?.map(f => f.profiles) || []);
 
-                // 1.1 Sugestões de amigos (todos os utilizadores não seguidos, mostrados aos poucos)
-                setLoadingSuggestions(true);
-                const already = new Set<string>([(profile?.id as string)]);
-                (follows || []).forEach(f => already.add(f.following_id));
-
-                let suggestionQuery = supabase
-                    .from('profiles')
-                    .select('id, full_name, total_xp, selected_area_id, avatar_url')
-                    .order('total_xp', { ascending: false })
-                    .limit(15);
-
-                if (already.size > 0) {
-                    const inList = `(${Array.from(already).map(id => `'${id}'`).join(',')})`;
-                    suggestionQuery = suggestionQuery.not('id', 'in', inList);
-                }
-
-                const { data: suggestData, error: suggestError } = await suggestionQuery;
-                if (suggestError) throw suggestError;
-                setSuggestions(suggestData || []);
+                // 1.1 Sugestões (amigos de amigos, depois populares)
+                await loadSuggestions(follows || []);
 
                 // 2. Feed (apenas amigos + eu) usando feed_items para conquistas/ofensiva/notÃ­cias
                 const friendIds = (follows || []).map(f => f.following_id);
@@ -78,7 +120,6 @@ export default function Social() {
             } catch (err) {
                 console.error('Error fetching social data:', err);
             } finally {
-                setLoadingSuggestions(false);
                 setLoading(false);
             }
         };
