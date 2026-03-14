@@ -137,113 +137,19 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
             }
         }
 
-        // --- 5. GAMIFICATION: Verificação da Ofensiva (Streak) COM FUSO HORÁRIO DE ANGOLA ---
-        const { data: profileAfter } = await supabase
-            .from('profiles')
-            .select('streak_count, streak_freeze_active')
-            .eq('id', userId)
-            .maybeSingle();
-
-        let currentStreak = profileAfter?.streak_count || 0;
-        const streakFreezeActive = profileAfter?.streak_freeze_active || false;
-
-        const angolaTime = new Date(now.toLocaleString("en-US", { timeZone: "Africa/Luanda" }));
-        const startOfToday = new Date(angolaTime.getFullYear(), angolaTime.getMonth(), angolaTime.getDate()).getTime();
-
-        // Verificar o ultimo login de XP antes deste que acabamos de inserir
-        const { data: recentLogs } = await supabase
-            .from('activity_logs')
-            .select('created_at')
-            .eq('user_id', userId)
-            .eq('activity_type', 'xp_earned')
-            .order('created_at', { ascending: false })
-            .limit(2);
-
-        // Define a lógica da Ofensiva Real
-        if (recentLogs && recentLogs.length > 1) {
-            const lastLog = recentLogs[1].created_at;
-            const lastAngolaTime = new Date(new Date(lastLog).toLocaleString("en-US", { timeZone: "Africa/Luanda" }));
-            const startOfLast = new Date(lastAngolaTime.getFullYear(), lastAngolaTime.getMonth(), lastAngolaTime.getDate()).getTime();
-
-            const daysDiff = Math.round((startOfToday - startOfLast) / (1000 * 60 * 60 * 24));
-
-            if (daysDiff === 1) {
-                // Fez ontem, incrementa a ofensiva
-                currentStreak += 1;
-                await supabase.from('profiles').update({ streak_count: currentStreak }).eq('id', userId);
-            } else if (daysDiff > 1) {
-                // Perdeu 1 dia ou mais (Quebrou a ofensiva)
-                if (streakFreezeActive) {
-                    currentStreak += 1; // Salvo pelo protetor
-                    await supabase.from('profiles').update({ streak_count: currentStreak, streak_freeze_active: false }).eq('id', userId);
-                } else {
-                    currentStreak = 1; // Voltou à estaca zero (ofensiva recomeça hoje)
-                    await supabase.from('profiles').update({ streak_count: currentStreak }).eq('id', userId);
-                }
+        // --- 5. GAMIFICATION: Ofensiva diária via RPC dedicada (sem depender de horário/local) ---
+        let currentStreak: number | undefined = undefined;
+        try {
+            const { data: streakResult, error: streakError } = await supabase.rpc('register_daily_streak', {
+                p_user_id: userId
+            });
+            if (streakError) {
+                console.error('[XP] Erro ao registar ofensiva diária:', streakError);
+            } else if (streakResult) {
+                currentStreak = (streakResult as any).streak_count ?? undefined;
             }
-            // Se daysDiff === 0 (hoje já fez), não incrementa nem perde
-        } else if (!recentLogs || recentLogs.length <= 1) {
-            // Primeiro XP de sempre!
-            currentStreak = 1;
-            await supabase.from('profiles').update({ streak_count: currentStreak }).eq('id', userId);
-        }
-
-        const streakMilestones = [3, 7, 14, 30, 50, 100, 365]; // Dias
-
-        // Só alertar se a ofensiva for exatamente igual a um marco (para não repetir)
-        if (streakMilestones.includes(currentStreak)) {
-            // Verificar se já não demos parabéns por isto recentemente (opcional, mas como "currentStreak" exato é difícil repetir, é seguro)
-            await supabase.from('feed_items').insert({
-                user_id: userId,
-                type: 'streak',
-                content: {
-                    title: 'Ofensiva Lendária! 🔥',
-                    body: `Impressionante! Mantiveste o teu foco durante ${currentStreak} dias consecutivos. És uma verdadeira inspiração!`,
-                    streak_days: currentStreak
-                }
-            });
-
-            await sendPushNotification({
-                userId,
-                title: `${currentStreak} Dias de Foco! 🔥`,
-                body: `Estás imbatível! Alcançaste a ofesiva monumental de ${currentStreak} dias consecutivos. Parabéns!`,
-                url: '/news'
-            });
-
-            await supabase.from('user_notifications').insert({
-                user_id: userId,
-                title: `${currentStreak} Dias de Foco! 🔥`,
-                body: `Estás imbatível! Ofesiva de ${currentStreak} dias consecutivos. Parabéns!`,
-                type: 'streak'
-            });
-
-            // Avisar seguidores sobre a ofensiva
-            const { data: followers } = await supabase
-                .from('user_follows')
-                .select('follower_id')
-                .eq('following_id', userId);
-
-            if (followers && followers.length > 0) {
-                const followerNotifications = followers.map((f) => ({
-                    user_id: f.follower_id,
-                    title: 'Teu amigo segue na ofensiva! 🔥',
-                    body: `${currentStreak} dias seguidos. Vai lá motivar!`,
-                    type: 'friend_activity',
-                    link: `/profile/${userId}`
-                }));
-                await supabase.from('user_notifications').insert(followerNotifications);
-
-                await Promise.all(
-                    followers.slice(0, 30).map((f) =>
-                        sendPushNotification({
-                            userId: f.follower_id,
-                            title: '🔥 Ofensiva do teu amigo!',
-                            body: `${currentStreak} dias consecutivos. Não deixes de incentivar.`,
-                            url: `/profile/${userId}`
-                        })
-                    )
-                );
-            }
+        } catch (streakErr) {
+            console.error('[XP] Falha inesperada ao registar ofensiva diária:', streakErr);
         }
 
         return {

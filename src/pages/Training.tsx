@@ -276,7 +276,7 @@ export default function Training() {
       }
 
       // 2. Shuffle and pick IDs
-      const shuffledIds = idData.map(q => q.id).sort(() => Math.random() - 0.5).slice(0, 20);
+      const shuffledIds = idData.map(q => q.id).sort(() => Math.random() - 0.5).slice(0, 10);
 
       // 3. Fetch full data for these IDs
       const { data: qData, error: qError } = await supabase
