@@ -31,6 +31,7 @@ export default function Social() {
 
         const fetchData = async () => {
             setLoading(true);
+            setLoadingSuggestions(true);
             try {
                 // 1. Fetch Follows (Friends)
                 const { data: follows, error: followError } = await supabase
@@ -60,7 +61,6 @@ export default function Social() {
                 const { data: suggestData, error: suggestError } = await suggestionQuery;
                 if (suggestError) throw suggestError;
                 setSuggestions(suggestData || []);
-                setLoadingSuggestions(false);
 
                 // 2. Feed (apenas amigos + eu) usando feed_items para conquistas/ofensiva/notÃ­cias
                 const friendIds = (follows || []).map(f => f.following_id);
@@ -78,6 +78,7 @@ export default function Social() {
             } catch (err) {
                 console.error('Error fetching social data:', err);
             } finally {
+                setLoadingSuggestions(false);
                 setLoading(false);
             }
         };
