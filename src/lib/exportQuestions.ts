@@ -83,17 +83,30 @@ export async function fetchQuestionsForExport(filters: ExportFilters): Promise<E
 }
 
 export async function exportQuestionsToDocx(dataset: ExportDataset) {
+    // docx v8+ requer as secções passadas no construtor; usar addSection isoladamente gerava "e.sections is not iterable"
     const doc = new Document({
         styles: {
             default: {
                 document: { run: { size: 24 } },
             },
         },
+        sections: [
+            {
+                properties: {},
+                children: buildDocxChildren(dataset),
+            },
+        ],
     });
 
+    const blob = await Packer.toBlob(doc);
+    const filename = `questoes_${dataset.topicName ? dataset.topicName : dataset.areaName}.docx`;
+    downloadBlob(blob, filename.replace(/\s+/g, '_'));
+}
+
+function buildDocxChildren(dataset: ExportDataset): Paragraph[] {
     const headerText = dataset.topicName
-        ? `Banco de Questões — ${dataset.areaName} / ${dataset.topicName}`
-        : `Banco de Questões — ${dataset.areaName}`;
+        ? `Banco de Questoes — ${dataset.areaName} / ${dataset.topicName}`
+        : `Banco de Questoes — ${dataset.areaName}`;
 
     const children: Paragraph[] = [
         new Paragraph({
@@ -102,15 +115,16 @@ export async function exportQuestionsToDocx(dataset: ExportDataset) {
         }),
         new Paragraph({
             children: [
-                new TextRun({ text: `Total: ${dataset.questions.length} questões`, bold: true }),
+                new TextRun({ text: `Total: ${dataset.questions.length} questoes`, bold: true }),
             ],
         }),
+        new Paragraph({ text: '' }),
     ];
 
     dataset.questions.forEach((q, idx) => {
         children.push(
             new Paragraph({
-                text: `${idx + 1}. ${q.content}`,
+                text: `${idx + 1}. [${q.id}] ${q.content}`,
                 heading: HeadingLevel.HEADING_2,
             })
         );
@@ -122,7 +136,7 @@ export async function exportQuestionsToDocx(dataset: ExportDataset) {
                     children: [
                         new TextRun({ text: `${label}) `, bold: true }),
                         new TextRun({
-                            text: alt.content + (alt.is_correct ? '   ✔' : ''),
+                            text: alt.content + (alt.is_correct ? '   ✅' : ''),
                             bold: alt.is_correct,
                         }),
                     ],
@@ -134,7 +148,7 @@ export async function exportQuestionsToDocx(dataset: ExportDataset) {
             children.push(
                 new Paragraph({
                     children: [
-                        new TextRun({ text: 'Explicação: ', bold: true }),
+                        new TextRun({ text: 'Explicacao: ', bold: true }),
                         new TextRun({ text: q.question_explanations[0].content, italics: true }),
                     ],
                 })
@@ -144,10 +158,7 @@ export async function exportQuestionsToDocx(dataset: ExportDataset) {
         children.push(new Paragraph({ text: '' }));
     });
 
-    doc.addSection({ children });
-    const blob = await Packer.toBlob(doc);
-    const filename = `questoes_${dataset.topicName ? dataset.topicName : dataset.areaName}.docx`;
-    downloadBlob(blob, filename.replace(/\s+/g, '_'));
+    return children;
 }
 
 function wrapLines(text: string, max: number) {
@@ -195,18 +206,18 @@ export async function exportQuestionsToPdf(dataset: ExportDataset) {
 
     const lines: string[] = [];
     lines.push(dataset.topicName ? `Banco — ${dataset.areaName} / ${dataset.topicName}` : `Banco — ${dataset.areaName}`);
-    lines.push(`Total: ${dataset.questions.length} questões`);
+    lines.push(`Total: ${dataset.questions.length} questoes`);
     lines.push('');
 
     dataset.questions.forEach((q, idx) => {
-        wrapLines(`${idx + 1}. ${q.content}`, 95).forEach((l) => lines.push(l));
+        wrapLines(`${idx + 1}. [${q.id}] ${q.content}`, 95).forEach((l) => lines.push(l));
         q.alternatives.forEach((alt, altIdx) => {
             const label = String.fromCharCode(65 + altIdx);
             const prefix = `${label}) ${alt.content}${alt.is_correct ? '  [CORRETA]' : ''}`;
             wrapLines(prefix, 90).forEach((l) => lines.push('   ' + l));
         });
         if (q.question_explanations?.[0]?.content) {
-            wrapLines(`Explicação: ${q.question_explanations[0].content}`, 92).forEach((l) => lines.push('   ' + l));
+            wrapLines(`Explicacao: ${q.question_explanations[0].content}`, 92).forEach((l) => lines.push('   ' + l));
         }
         lines.push('');
     });

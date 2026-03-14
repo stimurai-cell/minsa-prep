@@ -76,7 +76,7 @@ export default function NotificationCenter() {
         await supabase
             .from('user_notifications')
             .update({ is_read: true })
-            .eq('user_id', profile.id)
+            .or(`user_id.eq.${profile.id},user_id.is.null`)
             .eq('is_read', false);
         fetchNotifications();
     };

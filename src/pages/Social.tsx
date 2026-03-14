@@ -16,6 +16,8 @@ export default function Social() {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [isSearching, setIsSearching] = useState(false);
+    const [suggestions, setSuggestions] = useState<any[]>([]);
+    const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
     const areaNameById = useMemo(() => {
         const map = new Map<string, string>();
@@ -39,15 +41,40 @@ export default function Social() {
                 if (followError) throw followError;
                 setFriends(follows?.map(f => f.profiles) || []);
 
-                // 2. Fetch Activities for Feed
-                const { data: acts, error: actError } = await supabase
-                    .from('user_activities')
-                    .select('*, profiles(full_name, avatar_style, avatar_url, selected_area_id)')
-                    .order('created_at', { ascending: false })
-                    .limit(20);
+                // 1.1 Sugestões de amigos (todos os utilizadores não seguidos, mostrados aos poucos)
+                setLoadingSuggestions(true);
+                const already = new Set<string>([(profile?.id as string)]);
+                (follows || []).forEach(f => already.add(f.following_id));
 
-                if (actError) throw actError;
-                setActivities(acts || []);
+                let suggestionQuery = supabase
+                    .from('profiles')
+                    .select('id, full_name, total_xp, selected_area_id, avatar_url')
+                    .order('total_xp', { ascending: false })
+                    .limit(15);
+
+                if (already.size > 0) {
+                    const inList = `(${Array.from(already).map(id => `'${id}'`).join(',')})`;
+                    suggestionQuery = suggestionQuery.not('id', 'in', inList);
+                }
+
+                const { data: suggestData, error: suggestError } = await suggestionQuery;
+                if (suggestError) throw suggestError;
+                setSuggestions(suggestData || []);
+                setLoadingSuggestions(false);
+
+                // 2. Feed (apenas amigos + eu) usando feed_items para conquistas/ofensiva/notÃ­cias
+                const friendIds = (follows || []).map(f => f.following_id);
+                const audience = friendIds.length > 0 ? [...friendIds, profile.id] : [profile.id];
+
+                const { data: feedItems, error: feedError } = await supabase
+                    .from('feed_items')
+                    .select('*, profiles(full_name, avatar_url, selected_area_id)')
+                    .in('user_id', audience)
+                    .order('created_at', { ascending: false })
+                    .limit(30);
+
+                if (feedError) throw feedError;
+                setActivities(feedItems || []);
             } catch (err) {
                 console.error('Error fetching social data:', err);
             } finally {
@@ -218,6 +245,49 @@ export default function Social() {
                         )}
                     </div>
 
+                    {/* Sugestoes de amigos ao estilo Duolingo */}
+                    <div className="bg-white border-2 border-slate-100 rounded-[2rem] p-5 shadow-sm">
+                        <div className="flex items-center justify-between mb-3">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Sugestoes</p>
+                                <h3 className="text-lg font-black text-slate-900">Pessoas que podes conhecer</h3>
+                            </div>
+                            <span className="text-xs font-bold text-slate-400">{loadingSuggestions ? '...' : `${suggestions.length} encontrados`}</span>
+                        </div>
+                        <div className="flex gap-3 overflow-x-auto pb-3 no-scrollbar">
+                            {(loadingSuggestions ? Array.from({ length: 4 }) : suggestions).map((user: any, idx: number) => (
+                                <div
+                                    key={user?.id || idx}
+                                    className="min-w-[160px] max-w-[180px] bg-slate-50 border border-slate-100 rounded-[1.4rem] p-4 flex flex-col items-center text-center gap-2 shadow-[0_6px_18px_-14px_rgba(15,23,42,0.2)]"
+                                >
+                                    <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center font-black text-slate-500 overflow-hidden">
+                                        {loadingSuggestions ? (
+                                            <div className="w-6 h-6 rounded-full border-2 border-slate-300 border-t-transparent animate-spin" />
+                                        ) : user?.avatar_url ? (
+                                            <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+                                        ) : (
+                                            user?.full_name?.charAt(0)
+                                        )}
+                                    </div>
+                                    <p className="text-sm font-black text-slate-900 truncate w-full">{loadingSuggestions ? '...' : user?.full_name}</p>
+                                    {!loadingSuggestions && (
+                                        <>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                                {areaNameById(user?.selected_area_id)} • {user?.total_xp || 0} XP
+                                            </p>
+                                            <button
+                                                onClick={() => handleFollow(user.id)}
+                                                className="w-full mt-1 bg-blue-600 text-white px-3 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider hover:bg-blue-700 transition-colors"
+                                            >
+                                                Seguir
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
                     <div className="bg-slate-50 border-2 border-slate-100 rounded-[2rem] p-6 shadow-sm mb-6">
                         <h2 className="text-lg font-black text-slate-800 mb-2">Traga mais gente!</h2>
                         <p className="text-sm text-slate-500 mb-4">A melhor forma de crescer é estudando acompanhado.</p>
@@ -317,16 +387,25 @@ export default function Social() {
                                         {act.profiles?.full_name?.charAt(0)}
                                     </div>
                                     <div className="flex-1">
-                                        <p className="text-slate-900 font-medium">
-                                            <span className="font-black hover:text-indigo-600 cursor-pointer" onClick={() => navigate(`/profile/${act.user_id}`)}>
-                                                {act.profiles?.full_name}
-                                            </span>
-                                            {" "}{act.activity_type === 'high_score' ? 'alcançou uma nova pontuação recorde!' :
-                                                act.activity_type === 'achievement' ? 'ganhou uma nova medalha!' : 'acabou de começar um novo treino!'}
+                                        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 mb-2">
+                                            <span>{areaNameById(act.profiles?.selected_area_id)}</span>
+                                            <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                                            <span>{new Date(act.created_at).toLocaleDateString()}</span>
+                                        </div>
+                                        <p className="text-slate-900 font-black leading-tight">
+                                            {act.content?.title || 'Nova atividade no feed'}
                                         </p>
-                                        <p className="text-xs font-bold text-slate-400 mt-2 uppercase tracking-widest">
-                                            {areaNameById(act.profiles?.selected_area_id)} • {new Date(act.created_at).toLocaleDateString()}
-                                        </p>
+                                        {act.content?.body && (
+                                            <p className="text-slate-600 text-sm font-medium mt-1 leading-relaxed">
+                                                {act.content.body}
+                                            </p>
+                                        )}
+                                        {act.content?.streak_days && (
+                                            <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-orange-100 text-orange-700 px-3 py-1 text-[11px] font-black uppercase tracking-widest">
+                                                <Flame className="w-4 h-4" />
+                                                {act.content.streak_days} dias de ofensiva
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>

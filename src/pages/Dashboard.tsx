@@ -59,6 +59,8 @@ export default function Dashboard() {
   const [savingGoal, setSavingGoal] = useState(false);
   const [freezingStreak, setFreezingStreak] = useState(false);
   const [lastTaskCount, setLastTaskCount] = useState<number | null>(null);
+  const [streakWeek, setStreakWeek] = useState<{ label: string; completed: boolean; date: string }[]>([]);
+  const [streakLoading, setStreakLoading] = useState(false);
   const { deferredPrompt, setDeferredPrompt } = useAppStore();
 
   const dailyTip = useMemo(() => {
@@ -167,6 +169,55 @@ export default function Dashboard() {
         }
       })();
     }
+  }, [profile?.id]);
+
+  // Mapa de ofensiva da semana (igual ao duolingo: check-in diario real, nada de numero fixo)
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    const fetchStreakWeek = async () => {
+      setStreakLoading(true);
+      try {
+        const nowLuanda = new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Luanda' }));
+        const start = new Date(nowLuanda);
+        start.setDate(start.getDate() - 6);
+
+        const startIso = new Date(Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())).toISOString();
+
+        const { data, error } = await supabase
+          .from('activity_logs')
+          .select('created_at')
+          .eq('user_id', profile.id)
+          .eq('activity_type', 'xp_earned')
+          .gte('created_at', startIso);
+
+        if (error) throw error;
+
+        const dayLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
+        const doneSet = new Set(
+          (data || []).map((d: any) => new Date(d.created_at).toISOString().slice(0, 10))
+        );
+
+        const week = Array.from({ length: 7 }).map((_, idx) => {
+          const d = new Date(start);
+          d.setDate(start.getDate() + idx);
+          const iso = d.toISOString().slice(0, 10);
+          return {
+            label: dayLabels[d.getDay()],
+            completed: doneSet.has(iso),
+            date: iso,
+          };
+        });
+
+        setStreakWeek(week);
+      } catch (err) {
+        console.error('Erro ao buscar ofensiva semanal:', err);
+      } finally {
+        setStreakLoading(false);
+      }
+    };
+
+    fetchStreakWeek();
   }, [profile?.id]);
 
   // Daily Tasks Completion check
@@ -359,12 +410,12 @@ export default function Dashboard() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-[1.6rem] border-2 border-orange-100 bg-orange-50 shadow-[0_6px_0_0_#ffedd5] p-4 md:p-5 flex flex-col justify-between transition-transform hover:-translate-y-1 relative group">
+            <div className="rounded-[1.6rem] border-2 border-orange-100 bg-orange-50 shadow-[0_6px_0_0_#ffedd5] p-4 md:p-5 flex flex-col gap-3 transition-transform hover:-translate-y-1 relative group">
               <p className="text-sm font-bold text-orange-600 uppercase tracking-widest">Ofensiva</p>
-              <div className="mt-2 flex items-center justify-between">
-                <p className="flex items-center gap-2 text-3xl font-black text-orange-600">
+              <div className="flex items-center justify-between gap-3">
+                <p className="flex items-center gap-2 text-3xl font-black text-orange-600 leading-none">
                   <Flame className="h-7 w-7 fill-current" />
-                  2 Dias
+                  {(profile?.streak_count || 0)} dias
                 </p>
                 {profile?.streak_freeze_active ? (
                   <div className="bg-blue-500 text-white p-1 rounded-full animate-pulse" title="Protegido">
@@ -382,6 +433,30 @@ export default function Dashboard() {
                   )
                 )}
               </div>
+              <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-[0.16em] text-orange-700">
+                <span>Esta semana</span>
+                <span className="text-orange-500">{streakLoading ? 'Atualizando...' : 'Check-in diario real'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {streakWeek.map((day) => (
+                  <div
+                    key={day.date}
+                    className={`flex-1 rounded-xl px-2 py-2 text-center border ${day.completed ? 'bg-white border-orange-200 text-orange-700 shadow-sm' : 'bg-orange-100 border-orange-200/60 text-orange-400'}`}
+                    title={day.date}
+                  >
+                    <div className="text-[11px] font-black">{day.label}</div>
+                    <div className="mt-1 flex items-center justify-center">
+                      {day.completed ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <Circle className="w-4 h-4 text-orange-300" />}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => navigate('/news?tab=achievements')}
+                className="mt-1 text-xs font-bold text-orange-700 underline-offset-2 hover:underline text-left"
+              >
+                Ver linha do tempo da ofensiva
+              </button>
             </div>
             <div className="rounded-[1.6rem] border border-white/60 bg-white/90 p-4 md:p-5">
               <p className="text-sm font-medium text-slate-500">Ultima simulacao de prova</p>

@@ -107,6 +107,34 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
                 body: `Acabaste de bater a meta fantástica de ${crossedMilestone.toLocaleString()} XP. O teu esforço está a dar frutos!`,
                 type: 'achievement'
             });
+
+            // d) Fan-out: notificar seguidores (feed + push + inbox)
+            const { data: followers } = await supabase
+                .from('user_follows')
+                .select('follower_id')
+                .eq('following_id', userId);
+
+            if (followers && followers.length > 0) {
+                const followerNotifications = followers.map((f) => ({
+                    user_id: f.follower_id,
+                    title: 'Teu amigo atingiu um marco! 🏅',
+                    body: `Atingiu ${crossedMilestone.toLocaleString()} XP. Vai lá parabenizar!`,
+                    type: 'friend_activity',
+                    link: `/profile/${userId}`
+                }));
+                await supabase.from('user_notifications').insert(followerNotifications);
+
+                await Promise.all(
+                    followers.slice(0, 30).map((f) =>
+                        sendPushNotification({
+                            userId: f.follower_id,
+                            title: 'Teu amigo brilhou! 🎉',
+                            body: `Alcançou ${crossedMilestone.toLocaleString()} XP.`,
+                            url: `/profile/${userId}`
+                        })
+                    )
+                );
+            }
         }
 
         // --- 5. GAMIFICATION: Verificação da Ofensiva (Streak) COM FUSO HORÁRIO DE ANGOLA ---
@@ -188,6 +216,34 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
                 body: `Estás imbatível! Ofesiva de ${currentStreak} dias consecutivos. Parabéns!`,
                 type: 'streak'
             });
+
+            // Avisar seguidores sobre a ofensiva
+            const { data: followers } = await supabase
+                .from('user_follows')
+                .select('follower_id')
+                .eq('following_id', userId);
+
+            if (followers && followers.length > 0) {
+                const followerNotifications = followers.map((f) => ({
+                    user_id: f.follower_id,
+                    title: 'Teu amigo segue na ofensiva! 🔥',
+                    body: `${currentStreak} dias seguidos. Vai lá motivar!`,
+                    type: 'friend_activity',
+                    link: `/profile/${userId}`
+                }));
+                await supabase.from('user_notifications').insert(followerNotifications);
+
+                await Promise.all(
+                    followers.slice(0, 30).map((f) =>
+                        sendPushNotification({
+                            userId: f.follower_id,
+                            title: '🔥 Ofensiva do teu amigo!',
+                            body: `${currentStreak} dias consecutivos. Não deixes de incentivar.`,
+                            url: `/profile/${userId}`
+                        })
+                    )
+                );
+            }
         }
 
         return {

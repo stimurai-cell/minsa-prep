@@ -17,6 +17,9 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    optimizeDeps: {
+      include: ['docx', 'pdf-lib', '@pdf-lib/fontkit'],
+    },
     build: {
       rollupOptions: {
         output: {
