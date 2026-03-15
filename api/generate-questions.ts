@@ -23,48 +23,32 @@ const buildQuestionsPrompt = ({
   rawContent: string;
   alternativesCount: number;
 }) => `
-# CONTEXTO
-Você é especialista em concursos públicos da área da saúde em Angola (MINSA).
+ESPECIALISTA EM CONCURSOS DE SAÚDE EM ANGOLA
+ÁREA: ${area}
+TÓPICO: ${topic}
+QUANTIDADE: ${count} questões
+DIFICULDADE: ${difficulty}
+ALTERNATIVAS: ${alternativesCount}
 
-# OBJETIVO
-Gerar ${count} questões de múltipla escolha sobre "${topic}" da área "${area}".
-
-# CONTEXTO TEMPORAL ATUAL
 ${getContextualPrompt(area, topic)}
 
-# PROCESSO OBRIGATÓRIO DE RACIOCÍNIO PARA CADA QUESTÃO:
-1. PRIMEIRO determine a resposta correta para a pergunta
-2. DEPOIS crie alternativas incorretas plausíveis (distratores)
-3. VERIFIQUE se a alternativa marcada como correta realmente está correta
-4. VERIFIQUE se todas as outras alternativas estão realmente incorretas
-5. SE encontrar erro, corrija antes de retornar
+PROCESSO OBRIGATÓRIO:
+1. Defina a resposta correta primeiro
+2. Crie alternativas incorretas plausíveis
+3. Verifique se apenas uma alternativa está correta
+4. Verifique se as outras estão realmente incorretas
 
-# REGRAS CRÍTICAS DE VALIDAÇÃO:
-- NÍVEL DE DIFICULDADE: ${difficulty}
-- NÚMERO DE ALTERNATIVAS: ${alternativesCount} (A${alternativesCount === 4 ? ', B, C, D' : ', B, C, D, E'})
-- EXATAMENTE UMA alternativa com "isCorrect": true
-- DEMAIS alternativas com "isCorrect": false
-- Português de Angola correto com acentos e pontuação
-- Alternativas incorretas devem ser plausíveis mas definitivamente erradas
+REGRAS:
+- Apenas uma alternativa com isCorrect: true
+- Demais com isCorrect: false
+- Português de Angola correto
+- Alternativas plausíveis mas incorretas
 
-# REGRAS CRÍTICAS DE VALIDAÇÃO INTERNA:
-Antes de finalizar cada questão, faça esta verificação interna:
-1. Identifique qual alternativa está marcada como correta
-2. Verifique se essa alternativa realmente responde corretamente à pergunta
-3. Verifique se todas as outras alternativas estão realmente incorretas
-4. Se encontrar erro, corrija antes de retornar
-5. Nunca marque como correta uma alternativa conceitualmente errada
-
-# ESTRUTURA OBRIGATÓRIA:
-- Gere exatamente ${count} objetos dentro de "questions"
-- Cada objeto deve ter todos os campos obrigatórios
-- Não gere menos ou mais questões que o solicitado
-
-# FORMATO JSON EXATO (RETORNAR APENAS ISTO):
+RETORNE APENAS O JSON ABAIXO:
 {
   "questions": [
     {
-      "question": "Texto da pergunta aqui",
+      "question": "Texto da pergunta",
       "alternatives": [
         {"text": "Opção A", "isCorrect": false},
         {"text": "Opção B", "isCorrect": false},
@@ -74,16 +58,11 @@ Antes de finalizar cada questão, faça esta verificação interna:
         {"text": "Opção E", "isCorrect": false}` : ''
         }
       ],
-      "explanation": "Explicação detalhada aqui",
+      "explanation": "Explicação detalhada",
       "difficulty": "${difficulty}"
     }
   ]
 }
-
-# IMPORTANTE:
-- Retorne APENAS o JSON acima, sem texto adicional
-- Verifique internamente cada questão antes de retornar
-- Garanta que apenas uma alternativa esteja correta
 `;
 
 const getErrorMessage = (error: unknown) => {
@@ -327,52 +306,70 @@ export default async function handler(req: any, res: any) {
       
       // Função robusta para extrair JSON
       const extractJSON = (text: string): any => {
-        // Tentar encontrar JSON na resposta
-        let jsonText = text;
+        console.log('Attempting to extract JSON from:', text.substring(0, 200));
         
-        // Procurar por { ... } que seja JSON válido
+        // Método 1: Procurar por JSON completo entre { e }
         const jsonStart = text.indexOf('{');
         const jsonEnd = text.lastIndexOf('}');
         
         if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-          jsonText = text.substring(jsonStart, jsonEnd + 1);
-          console.log('Extracted JSON substring:', jsonText);
-        }
-        
-        // Tentar múltiplas abordagens de parse
-        const attempts = [
-          // 1. Parse direto
-          () => JSON.parse(jsonText),
-          // 2. Parse após limpeza básica
-          () => JSON.parse(jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim()),
-          // 3. Parse após limpeza de newlines
-          () => JSON.parse(jsonText.replace(/\n/g, '\\n').replace(/\r/g, '\\r').trim()),
-          // 4. Parse após escape de quotes
-          () => JSON.parse(jsonText.replace(/"/g, '\\"').replace(/'/g, "\\'").trim()),
-          // 5. Parse usando eval como último recurso (cuidado!)
-          () => {
-            try {
-              return eval(`(${jsonText})`);
-            } catch {
-              throw new Error('Eval fallback failed');
-            }
-          }
-        ];
-        
-        let lastError: any;
-        for (let i = 0; i < attempts.length; i++) {
+          const jsonText = text.substring(jsonStart, jsonEnd + 1);
+          console.log('Extracted JSON substring:', jsonText.substring(0, 100));
+          
+          // Tentar fazer parse
           try {
-            console.log(`Attempting parse method ${i + 1}`);
-            const result = attempts[i]();
-            console.log(`Parse method ${i + 1} succeeded`);
-            return result;
+            const parsed = JSON.parse(jsonText);
+            console.log('Successfully parsed JSON');
+            return parsed;
           } catch (error: any) {
-            lastError = error;
-            console.log(`Parse method ${i + 1} failed:`, error.message);
+            console.log('Direct parse failed, trying cleaning...');
+          }
+          
+          // Método 2: Limpar e tentar novamente
+          const cleaned = jsonText
+            .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remover caracteres de controle
+            .replace(/\\n/g, '\\\\n') // Corrigir newlines
+            .replace(/\\r/g, '\\\\r') // Corrigir carriage returns
+            .replace(/\\t/g, '\\\\t') // Corrigir tabs
+            .replace(/\\"/g, '\\\\"') // Corrigir quotes
+            .trim();
+          
+          try {
+            const parsed = JSON.parse(cleaned);
+            console.log('Successfully parsed after cleaning');
+            return parsed;
+          } catch (error: any) {
+            console.log('Cleaned parse failed, trying regex...');
           }
         }
         
-        throw lastError || new Error('All parse methods failed');
+        // Método 3: Usar regex para encontrar JSON
+        const jsonRegex = /\{[\s\S]*\}/;
+        const match = text.match(jsonRegex);
+        
+        if (match) {
+          console.log('Found JSON with regex');
+          try {
+            const parsed = JSON.parse(match[0]);
+            console.log('Successfully parsed regex match');
+            return parsed;
+          } catch (error: any) {
+            console.log('Regex parse failed');
+          }
+        }
+        
+        // Método 4: Tentar eval como último recurso
+        try {
+          console.log('Trying eval as last resort...');
+          const evalText = text.substring(jsonStart || text.indexOf('{'), jsonEnd || text.lastIndexOf('}') + 1);
+          const result = eval(`(${evalText})`);
+          console.log('Eval succeeded');
+          return result;
+        } catch (error: any) {
+          console.log('Eval failed');
+        }
+        
+        throw new Error('Não foi possível extrair JSON válido da resposta');
       };
       
       // Tentar extrair e fazer parse do JSON
