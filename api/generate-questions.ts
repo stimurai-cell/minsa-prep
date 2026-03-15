@@ -23,21 +23,44 @@ const buildQuestionsPrompt = ({
   rawContent: string;
   alternativesCount: number;
 }) => `
-INSTRUÇÕES ESSENCIAIS:
-1. Você é especialista em concursos públicos da área da saúde em Angola (MINSA).
-2. Gere ${count} questões sobre "${topic}" da área "${area}".
-3. NÍVEL DE DIFICULDADE: ${difficulty}
-4. NÚMERO DE ALTERNATIVAS: ${alternativesCount} (A${alternativesCount === 4 ? ', B, C, D' : ', B, C, D, E'})
+# CONTEXTO
+Você é especialista em concursos públicos da área da saúde em Angola (MINSA).
 
+# OBJETIVO
+Gerar ${count} questões de múltipla escolha sobre "${topic}" da área "${area}".
+
+# CONTEXTO TEMPORAL ATUAL
 ${getContextualPrompt(area, topic)}
 
-REGRAS OBRIGATÓRIAS:
+# PROCESSO OBRIGATÓRIO DE RACIOCÍNIO PARA CADA QUESTÃO:
+1. PRIMEIRO determine a resposta correta para a pergunta
+2. DEPOIS crie alternativas incorretas plausíveis (distratores)
+3. VERIFIQUE se a alternativa marcada como correta realmente está correta
+4. VERIFIQUE se todas as outras alternativas estão realmente incorretas
+5. SE encontrar erro, corrija antes de retornar
+
+# REGRAS CRÍTICAS DE VALIDAÇÃO:
+- NÍVEL DE DIFICULDADE: ${difficulty}
+- NÚMERO DE ALTERNATIVAS: ${alternativesCount} (A${alternativesCount === 4 ? ', B, C, D' : ', B, C, D, E'})
 - EXATAMENTE UMA alternativa com "isCorrect": true
 - DEMAIS alternativas com "isCorrect": false
-- Português de Angola correto
-- Alternativas plausíveis mas incorretas
+- Português de Angola correto com acentos e pontuação
+- Alternativas incorretas devem ser plausíveis mas definitivamente erradas
 
-FORMATO EXATO (RETORNAR APENAS ISTO):
+# REGRAS CRÍTICAS DE VALIDAÇÃO INTERNA:
+Antes de finalizar cada questão, faça esta verificação interna:
+1. Identifique qual alternativa está marcada como correta
+2. Verifique se essa alternativa realmente responde corretamente à pergunta
+3. Verifique se todas as outras alternativas estão realmente incorretas
+4. Se encontrar erro, corrija antes de retornar
+5. Nunca marque como correta uma alternativa conceitualmente errada
+
+# ESTRUTURA OBRIGATÓRIA:
+- Gere exatamente ${count} objetos dentro de "questions"
+- Cada objeto deve ter todos os campos obrigatórios
+- Não gere menos ou mais questões que o solicitado
+
+# FORMATO JSON EXATO (RETORNAR APENAS ISTO):
 {
   "questions": [
     {
@@ -57,7 +80,10 @@ FORMATO EXATO (RETORNAR APENAS ISTO):
   ]
 }
 
-IMPORTANTE: Retorne APENAS o JSON acima, sem texto adicional.
+# IMPORTANTE:
+- Retorne APENAS o JSON acima, sem texto adicional
+- Verifique internamente cada questão antes de retornar
+- Garanta que apenas uma alternativa esteja correta
 `;
 
 const getErrorMessage = (error: unknown) => {
@@ -71,13 +97,18 @@ const getErrorMessage = (error: unknown) => {
   return message;
 };
 
-const validateGeneratedQuestions = (data: any, expectedAlts: number) => {
+const validateGeneratedQuestions = (data: any, expectedAlts: number, expectedCount: number) => {
   const errors: string[] = [];
   const warnings: string[] = [];
   
   if (!data || !data.questions || !Array.isArray(data.questions)) {
     errors.push('Formato invalido: "questions" deve ser um array');
     return { errors, warnings };
+  }
+  
+  // Verificar se o número de questões está correto
+  if (data.questions.length !== expectedCount) {
+    errors.push(`Quantidade de questões incorreta: esperado ${expectedCount}, recebido ${data.questions.length}`);
   }
   
   data.questions.forEach((q: any, index: number) => {
@@ -104,6 +135,13 @@ const validateGeneratedQuestions = (data: any, expectedAlts: number) => {
           warnings.push(`Questao ${index + 1}, Alternativa ${altIndex + 1} marcada como correta: "${alt.text}"`);
         }
       });
+    }
+    
+    // Validação adicional: verificar se há alternativas duplicadas
+    const alternativeTexts = q.alternatives.map((a: any) => a.text.toLowerCase().trim());
+    const duplicates = alternativeTexts.filter((text: string, i: number) => alternativeTexts.indexOf(text) !== i);
+    if (duplicates.length > 0) {
+      errors.push(`Questao ${index + 1}: Existem alternativas duplicadas: ${duplicates.join(', ')}`);
     }
     
     q.alternatives.forEach((alt: any, altIndex: number) => {
@@ -357,7 +395,7 @@ export default async function handler(req: any, res: any) {
       });
       
       // Validate the generated questions
-      const validation = validateGeneratedQuestions(parsed, alternativesCount);
+      const validation = validateGeneratedQuestions(parsed, alternativesCount, count || 5);
       if (validation.errors.length > 0) {
         console.error('Validation errors:', validation.errors);
         if (validation.warnings.length > 0) {
