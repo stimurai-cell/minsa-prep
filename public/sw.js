@@ -78,15 +78,17 @@ self.addEventListener('fetch', (event) => {
     // Assets Estáticos: Stale-While-Revalidate
     event.respondWith(
         caches.match(request).then((cachedResponse) => {
-            const fetchedResponse = fetch(request).then((networkResponse) => {
+            if (cachedResponse) {
+                return cachedResponse;
+            }
+            
+            return fetch(request).then((networkResponse) => {
                 if (networkResponse && networkResponse.status === 200) {
                     const resClone = networkResponse.clone();
                     caches.open(CACHE_NAME).then((cache) => cache.put(request, resClone));
                 }
                 return networkResponse;
             }).catch(() => null);
-
-            return cachedResponse || fetchedResponse;
         })
     );
 });

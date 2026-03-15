@@ -108,6 +108,21 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         return send(res, 200, { sent: response.successCount, total: tokens.length, failures: response.failureCount });
     } catch (err: any) {
         console.error('[send-push FCM] Error:', err);
-        return send(res, 500, { error: err.message });
+        console.error('[send-push FCM] Stack:', err.stack);
+        
+        // Melhorar mensagem de erro para debug
+        let errorMessage = err.message || 'Erro desconhecido';
+        if (err.code) {
+            errorMessage = `FCM Error ${err.code}: ${errorMessage}`;
+        }
+        
+        return send(res, 500, { 
+            error: errorMessage,
+            details: {
+                code: err.code,
+                message: err.message,
+                stack: err.stack
+            }
+        });
     }
 }
