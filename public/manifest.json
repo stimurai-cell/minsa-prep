@@ -1,6 +1,5 @@
 {
     "name": "MINSA Prep",
-    "gcm_sender_id": "845647802142",
     "short_name": "MINSAPrep",
     "description": "Preparação inteligente para concursos públicos de saúde em Angola.",
     "start_url": "/dashboard",
@@ -8,24 +7,32 @@
     "background_color": "#ffffff",
     "theme_color": "#10b981",
     "orientation": "portrait",
+    "gcm_sender_id": "845647802142",
+    "scope": "/",
     "icons": [
         {
             "src": "https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png",
             "sizes": "192x192",
             "type": "image/png",
-            "purpose": "any"
+            "purpose": "any maskable"
         },
         {
             "src": "https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png",
             "sizes": "512x512",
             "type": "image/png",
-            "purpose": "any"
-        },
-        {
-            "src": "https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png",
-            "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "maskable"
+            "purpose": "any maskable"
         }
-    ]
+    ],
+    "notifications": {
+        "actions": [
+            {
+                "action": "open",
+                "title": "Abrir App"
+            },
+            {
+                "action": "close", 
+                "title": "Fechar"
+            }
+        ]
+    }
 }

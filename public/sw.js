@@ -1,6 +1,9 @@
+// Firebase Cloud Messaging Service Worker
+// Importa o Firebase SDK para service workers
 importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-messaging-compat.js');
 
+// Configuração Firebase (deve coincidir com a do frontend)
 const firebaseConfig = {
     apiKey: "AIzaSyAuwBXj9rJM6o4U9AAUTMhQTsbY_-LcrKI",
     authDomain: "farmolink-28.firebaseapp.com",
@@ -11,6 +14,7 @@ const firebaseConfig = {
     measurementId: "G-L9SM8DDHCP"
 };
 
+// Inicializa Firebase
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
@@ -87,13 +91,42 @@ self.addEventListener('fetch', (event) => {
     );
 });
 
-// ─── Push Notifications ──────────────────────────────────────────────────────
+// ─── Firebase Cloud Messaging ──────────────────────────────────────────────────────
+
+// Background message handler - Recebe mensagens quando app está em 2º plano
+messaging.onBackgroundMessage((payload) => {
+    console.log('[SW] Mensagem recebida em background:', payload);
+
+    const notificationTitle = payload.notification?.title || 'MINSA Prep';
+    const notificationOptions = {
+        body: payload.notification?.body || 'Tens uma nova notificação!',
+        icon: 'https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png',
+        badge: 'https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png',
+        vibrate: [200, 100, 200],
+        requireInteraction: false,
+        data: { 
+            url: payload.data?.url || '/dashboard',
+            click_action: payload.fcmOptions?.link || '/dashboard'
+        },
+        actions: [
+            { action: 'open', title: 'Abrir App' },
+            { action: 'close', title: 'Fechar' }
+        ]
+    };
+
+    return self.registration.showNotification(notificationTitle, notificationOptions);
+});
+
+// Push event handler - Compatibilidade com browsers mais antigos
 self.addEventListener('push', (event) => {
     let data = { title: 'MINSA Prep', body: 'Tens uma nova notificação!', url: '/dashboard' };
 
     if (event.data) {
-        try { data = { ...data, ...event.data.json() }; }
-        catch (e) { data.body = event.data.text() || data.body; }
+        try { 
+            data = { ...data, ...event.data.json() }; 
+        } catch (e) { 
+            data.body = event.data.text() || data.body; 
+        }
     }
 
     const options = {
@@ -115,11 +148,13 @@ self.addEventListener('push', (event) => {
 });
 
 self.addEventListener('notificationclick', (event) => {
+    console.log('[SW] Notificação clicada:', event);
     event.notification.close();
 
     if (event.action === 'close') return;
 
-    const urlToOpen = event.notification.data?.url || '/dashboard';
+    // Prioriza o URL do data.click_action (FCM) ou data.url (fallback)
+    const urlToOpen = event.notification.data?.click_action || event.notification.data?.url || '/dashboard';
 
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {

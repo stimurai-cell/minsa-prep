@@ -38,18 +38,9 @@ export const requestFirebaseNotificationPermission = async () => {
                 throw new Error('O motor da App (Service Worker) não está pronto ou falhou ao registar.');
             }
 
-            // Tenta obter a chave de ambas as variáveis possíveis
-            const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || import.meta.env.VITE_FIREBASE_VAPID_KEY;
-
-            if (!vapidKey) {
-                console.error('[Firebase] VAPID Key não encontrada. Variáveis verificadas: VITE_VAPID_PUBLIC_KEY, VITE_FIREBASE_VAPID_KEY');
-                throw new Error('Chave de segurança (VAPID) não configurada no ambiente.');
-            }
-
-            console.log('[Firebase] A obter token com VAPID Key...', vapidKey.substring(0, 10) + '...');
+            console.log('[Firebase] A obter token FCM...');
 
             const token = await getToken(messaging, {
-                vapidKey: vapidKey,
                 serviceWorkerRegistration: registration
             });
 
