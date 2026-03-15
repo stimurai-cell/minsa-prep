@@ -1,3 +1,5 @@
+import { validateTemporalConcepts, getContextualPrompt } from './temporalValidation';
+
 export interface GenerateQuestionsPayload {
   area: string;
   topic: string;
@@ -20,6 +22,8 @@ export const buildQuestionsPrompt = ({
   Voce e um especialista em concursos publicos da area da saude em Angola (MINSA).
   Gere ${count} questoes de multipla escolha sobre o topico "${topic}" da area de "${area}".
 
+  ${getContextualPrompt(area, topic)}
+
   REGRAS CRITICAS - OBEDECA RIGIDOSAMENTE:
   1. Use portugues correto de Angola com todos os acentos e pontuacao.
   2. Cada questao deve ter exatamente ${alternativesCount} alternativas (A${alternativesCount === 4 ? ', B, C, D' : ', B, C, D, E'}).
@@ -34,16 +38,21 @@ export const buildQuestionsPrompt = ({
   - A alternativa correta deve ser a unica resposta certa para a pergunta
   - As alternativas incorretas devem ser plausiveis mas definitivamente erradas
   
-  EXEMPLO DE QUESTAO CORRETA:
+  REGRA CRUCIAL - ATUALIDADE TEMPORAL:
+  - USE APENAS conceitos e orgaos ATUAIS listados no contexto temporal
+  - NUNCA use orgaos desatualizados como ARMED, Conselho Nacional de Farmácia, etc.
+  - Se mencionar conceito antigo, esclareça que foi substituido
+  
+  EXEMPLO DE QUESTAO CORRETA (usando conceitos atuais):
   {
-    "question": "Qual o principal orgao regulador da farmacia em Angola?",
+    "question": "Qual o principal orgao regulador de medicamentos em Angola em 2025?",
     "alternatives": [
       {"text": "Ministerio da Saude", "isCorrect": false},
-      {"text": "Ordem dos Farmaceuticos", "isCorrect": false},
-      {"text": "Direccao Nacional de Medicamentos e Farmacia", "isCorrect": true},
-      {"text": "Agencia Reguladora de Medicamentos", "isCorrect": false}
+      {"text": "INFARMED - Autoridade Nacional do Medicamento", "isCorrect": true},
+      {"text": "ARMED - Agência Reguladora de Medicamentos", "isCorrect": false},
+      {"text": "Direccao Nacional de Farmácia", "isCorrect": false}
     ],
-    "explanation": "A Direccao Nacional de Medicamentos e Farmacia (DNMF) e o orgao do Ministerio da Saude responsavel pela regulacao e fiscalizacao das atividades farmaceuticas em Angola.",
+    "explanation": "A INFARMED (Autoridade Nacional do Medicamento e Produtos de Saúde) é o orgao regulador atual, sucedendo a antiga ARMED.",
     "difficulty": "medium"
   }
 

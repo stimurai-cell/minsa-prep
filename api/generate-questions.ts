@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
+import { validateTemporalConcepts, getContextualPrompt } from '../src/lib/temporalValidation';
 
 const defaultGeminiModel = 'gemini-2.5-flash';
 
@@ -25,6 +26,8 @@ const buildQuestionsPrompt = ({
   Voce e um especialista em concursos publicos da area da saude em Angola (MINSA).
   Gere ${count} questoes de multipla escolha sobre o topico "${topic}" da area de "${area}".
 
+  ${getContextualPrompt(area, topic)}
+
   REGRAS CRITICAS - OBEDECA RIGIDOSAMENTE:
   1. Use portugues correto de Angola com todos os acentos e pontuacao.
   2. Cada questao deve ter exatamente ${alternativesCount} alternativas (A${alternativesCount === 4 ? ', B, C, D' : ', B, C, D, E'}).
@@ -39,16 +42,21 @@ const buildQuestionsPrompt = ({
   - A alternativa correta deve ser a unica resposta certa para a pergunta
   - As alternativas incorretas devem ser plausiveis mas definitivamente erradas
   
-  EXEMPLO DE QUESTAO CORRETA:
+  REGRA CRUCIAL - ATUALIDADE TEMPORAL:
+  - USE APENAS conceitos e orgaos ATUAIS listados no contexto temporal
+  - NUNCA use orgaos desatualizados como ARMED, Conselho Nacional de Farmácia, etc.
+  - Se mencionar conceito antigo, esclareça que foi substituido
+  
+  EXEMPLO DE QUESTAO CORRETA (usando conceitos atuais):
   {
-    "question": "Qual o principal orgao regulador da farmacia em Angola?",
+    "question": "Qual o principal orgao regulador de medicamentos em Angola em 2025?",
     "alternatives": [
       {"text": "Ministerio da Saude", "isCorrect": false},
-      {"text": "Ordem dos Farmaceuticos", "isCorrect": false},
-      {"text": "Direccao Nacional de Medicamentos e Farmacia", "isCorrect": true},
-      {"text": "Agencia Reguladora de Medicamentos", "isCorrect": false}
+      {"text": "INFARMED - Autoridade Nacional do Medicamento", "isCorrect": true},
+      {"text": "ARMED - Agência Reguladora de Medicamentos", "isCorrect": false},
+      {"text": "Direccao Nacional de Farmácia", "isCorrect": false}
     ],
-    "explanation": "A Direccao Nacional de Medicamentos e Farmacia (DNMF) e o orgao do Ministerio da Saude responsavel pela regulacao e fiscalizacao das atividades farmaceuticas em Angola.",
+    "explanation": "A INFARMED (Autoridade Nacional do Medicamento e Produtos de Saúde) é o orgao regulador atual, sucedendo a antiga ARMED.",
     "difficulty": "medium"
   }
 
@@ -322,6 +330,36 @@ export default async function handler(req: any, res: any) {
       
       if (validation.warnings.length > 0) {
         console.warn('Validation warnings:', validation.warnings);
+      }
+      
+      // Temporal validation - check for outdated concepts
+      const temporalIssues: string[] = [];
+      parsed.questions.forEach((q: any, index: number) => {
+        const temporalValidation = validateTemporalConcepts(q.question);
+        const explanationValidation = validateTemporalConcepts(q.explanation || '');
+        
+        if (!temporalValidation.isValid) {
+          temporalIssues.push(`Questao ${index + 1}: ${temporalValidation.issues.map(i => i.issue).join(', ')}`);
+        }
+        if (!explanationValidation.isValid) {
+          temporalIssues.push(`Explicacao Questao ${index + 1}: ${explanationValidation.issues.map(i => i.issue).join(', ')}`);
+        }
+        
+        // Also check alternatives
+        q.alternatives.forEach((alt: any, altIndex: number) => {
+          const altValidation = validateTemporalConcepts(alt.text);
+          if (!altValidation.isValid) {
+            temporalIssues.push(`Questao ${index + 1}, Alternativa ${altIndex + 1}: ${altValidation.issues.map(i => i.issue).join(', ')}`);
+          }
+        });
+      });
+      
+      if (temporalIssues.length > 0) {
+        console.error('Temporal validation errors:', temporalIssues);
+        return res.status(422).json({ 
+          error: 'A IA gerou questoes com conceitos desatualizados',
+          details: temporalIssues
+        });
       }
       
       // Incluir metadados para o salvamento posterior
