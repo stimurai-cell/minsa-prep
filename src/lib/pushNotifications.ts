@@ -7,6 +7,8 @@ import { requestFirebaseNotificationPermission } from './firebase';
  */
 export async function subscribeToPush(userId: string): Promise<boolean> {
     try {
+        console.log(`[Push] Iniciando subscrição para usuário: ${userId}`);
+        
         if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
             throw new Error('Notificações não são suportadas neste navegador.');
         }
@@ -14,19 +16,27 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
         console.log('[Push] A solicitar token FCM para utilizador:', userId);
 
         // Verificar permissão
+        console.log('[Push] Verificando permissão atual:', Notification.permission);
         if (Notification.permission === 'denied') {
             throw new Error('Bloqueado: Precisas de permitir as notificações nas definições do teu navegador/telemóvel.');
         }
 
+        console.log('[Push] Chamando requestFirebaseNotificationPermission...');
         const token = await requestFirebaseNotificationPermission();
 
         // O requestFirebaseNotificationPermission já lança erros detalhados se falhar
-        if (!token) return false;
+        if (!token) {
+            console.error('[Push] Token não obtido - requestFirebaseNotificationPermission retornou null/undefined');
+            return false;
+        }
 
+        console.log('[Push] Token FCM obtido:', token ? `${token.substring(0, 20)}...` : 'NULL');
         console.log('[Push] Token obtido, a guardar no Supabase...');
         const subscriptionJson = { endpoint: token, fcm: true };
 
-        const { error } = await supabase
+        console.log('[Push] Dados a serem salvos:', { userId, subscriptionJson });
+        
+        const { error, data } = await supabase
             .from('push_subscriptions')
             .upsert(
                 {
@@ -36,7 +46,9 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
                     updated_at: new Date().toISOString(),
                 },
                 { onConflict: 'user_id,endpoint' }
-            );
+            )
+            .select()
+            .single();
 
         if (error) {
             console.error('[Push] Erro Supabase:', error);
@@ -44,9 +56,11 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
         }
 
         console.log('[Push] Sucesso: Ligação ativa ✅');
+        console.log('[Push] Dados salvos no Supabase:', data);
         return true;
     } catch (err: any) {
         console.error('[Push] Erro na subscrição:', err);
+        console.error('[Push] Stack trace:', err.stack);
         // Relançamos o erro para ser capturado pelo alert no Profile.tsx
         throw err;
     }
