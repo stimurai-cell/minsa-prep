@@ -16,7 +16,8 @@ import {
   Download,
   WifiOff,
   CreditCard,
-  ArrowRight
+  ArrowRight,
+  Circle
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { createStudyPlanForUser } from '../lib/studyPlan';
