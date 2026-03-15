@@ -32,6 +32,8 @@ import AIMentor from '../components/AIMentor';
 import NotificationCenter from '../components/NotificationCenter';
 import { useOfflineStore } from '../store/useOfflineStore';
 import { usePermissions } from '../lib/permissions';
+import { EliteStrategyManager } from '../lib/eliteStrategy';
+import EliteAutoDiagnosis from '../components/EliteAutoDiagnosis';
 
 const DAILY_TIPS = [
   "Treinar 15 minutos todos os dias gera mais resultado do que estudar 3 horas só no domingo!",
@@ -63,6 +65,8 @@ export default function Dashboard() {
   const [streakWeek, setStreakWeek] = useState<{ label: string; completed: boolean; date: string }[]>([]);
   const [streakLoading, setStreakLoading] = useState(false);
   const { deferredPrompt, setDeferredPrompt } = useAppStore();
+  const [showEliteWelcome, setShowEliteWelcome] = useState(false);
+  const [currentStrategy, setCurrentStrategy] = useState<any>(null);
 
   const dailyTip = useMemo(() => {
     const day = new Date().getDay();
@@ -80,6 +84,44 @@ export default function Dashboard() {
   useEffect(() => {
     fetchAreas();
   }, [fetchAreas]);
+
+  // Check Elite user onboarding
+  useEffect(() => {
+    const checkEliteOnboarding = async () => {
+      if (!profile?.id || profile?.role !== 'elite') return;
+
+      try {
+        // Check if user completed onboarding
+        const { data: onboarding } = await supabase
+          .from('elite_onboarding')
+          .select('completed')
+          .eq('user_id', profile.id)
+          .single();
+
+        if (!onboarding?.completed) {
+          setShowEliteWelcome(true);
+          return;
+        }
+
+        // Load current strategy
+        const strategy = await EliteStrategyManager.getCurrentWeekStrategy(profile.id);
+        setCurrentStrategy(strategy);
+
+        // Check if week needs reassessment
+        const needsReassessment = await EliteStrategyManager.checkWeekCompletion(profile.id);
+        if (needsReassessment) {
+          await EliteStrategyManager.completeWeekAndReassess(profile.id);
+          // Reload strategy
+          const newStrategy = await EliteStrategyManager.getCurrentWeekStrategy(profile.id);
+          setCurrentStrategy(newStrategy);
+        }
+      } catch (error) {
+        console.error('Error checking elite onboarding:', error);
+      }
+    };
+
+    checkEliteOnboarding();
+  }, [profile]);
 
   // Autoreservar Notificações
   useEffect(() => {
@@ -385,32 +427,38 @@ export default function Dashboard() {
 
       <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,#dff7ea,transparent_36%),linear-gradient(135deg,#ffffff_0%,#f5fff9_48%,#eff6ff_100%)] p-5 shadow-[0_28px_90px_-48px_rgba(15,23,42,0.45)] md:p-8">
         <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="flex items-center gap-6">
-            <div className={`w-24 h-24 rounded-full border-4 border-white bg-white flex items-center justify-center shadow-lg shadow-emerald-600/10 overflow-hidden relative ${!profile?.avatar_url ? 'p-1' : ''}`}>
-              <img
-                src={profile?.avatar_url || "https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png"}
-                alt="Avatar"
-                className="w-full h-full object-cover"
-              />
+          <div className="space-y-5">
+            <div className="flex items-center gap-6">
+              <div className={`w-24 h-24 rounded-full border-4 border-white bg-white flex items-center justify-center shadow-lg shadow-emerald-600/10 overflow-hidden relative ${!profile?.avatar_url ? 'p-1' : ''}`}>
+                <img
+                  src={profile?.avatar_url || "https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png"}
+                  alt="Avatar"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">Painel do estudante</p>
+                <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900 md:text-4xl">
+                  Olá, {profile?.full_name?.split(' ')[0] || 'Estudante'}
+                </h1>
+                {(profile as any)?.goal && (
+                  <p className="mt-2 inline-flex items-center gap-2 rounded-xl bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-700">
+                    <Target className="w-4 h-4" />
+                    Meta: {(profile as any)?.goal}
+                  </p>
+                )}
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                <NotificationCenter />
+              </div>
             </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">Painel do estudante</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900 md:text-4xl">
-                Olá, {profile?.full_name?.split(' ')[0] || 'Estudante'}
-              </h1>
-              {(profile as any)?.goal && (
-                <p className="mt-2 inline-flex items-center gap-2 rounded-xl bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-700">
-                  <Target className="w-4 h-4" />
-                  Meta: {(profile as any)?.goal}
-                </p>
-              )}
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <NotificationCenter />
-            </div>
-          </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+            {/* Elite Auto Diagnosis - Always Visible for Elite Users */}
+            {profile?.role === 'elite' && (
+              <EliteAutoDiagnosis />
+            )}
+
+            <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-[1.6rem] border-2 border-orange-100 bg-orange-50 shadow-[0_6px_0_0_#ffedd5] p-4 md:p-5 flex flex-col gap-3 transition-transform hover:-translate-y-1 relative group">
               <p className="text-sm font-bold text-orange-600 uppercase tracking-widest">Ofensiva</p>
               <div className="flex items-center justify-between gap-3">
@@ -490,41 +538,9 @@ export default function Dashboard() {
                 <p className="text-slate-600 font-medium">Você tem <span className="font-black text-emerald-600">{stats.dueQuestions} questões</span> prontas para revisão hoje.</p>
               </div>
             </div>
-            <button
-              onClick={() => navigate('/training?session=1&type=review')}
-              className="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 py-4 rounded-2xl shadow-[0_6px_0_0_#065f46] transition-all hover:translate-y-[1px] hover:shadow-[0_4px_0_0_#065f46] active:shadow-none active:translate-y-[2px]"
-            >
-              Começar Revisão
-            </button>
-          </div>
-        </section>
-      )}
-
-      <section className="grid gap-6 md:grid-cols-2">
-        <DailyTasks />
-        <AIMentor />
-      </section>
-
-      <section className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)] md:p-6">
-          <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-5">
-            <div>
-              <h2 className="text-xl font-black text-slate-900">Sessão recomendada</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Conteúdo filtrado automaticamente para a sua área de estudo.
-              </p>
-            </div>
-            <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-orange-700">
-              Prioridade
-            </span>
           </div>
 
-          <p className="mt-5 text-sm leading-6 text-slate-600">
-            Com base no seu objetivo de {profile?.preparation_time_months} {profile?.preparation_time_months === 1 ? 'mês' : 'meses'} focado na sua formação em {areaName},
-            preparamos um percurso de treino focado nos **tópicos principais** que você precisa dominar.
-          </p>
-
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Link
               to="/training"
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 text-sm font-semibold text-white transition hover:bg-emerald-700"
@@ -619,51 +635,28 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#fff8eb_40%,#f5fff7_100%)] p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)] md:p-6">
-        <div className="flex flex-col gap-3 border-b border-slate-100 pb-5 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Pacotes premium</p>
-            <h2 className="mt-2 text-2xl font-black text-slate-900">Planos premium</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Escolha o plano que melhor se adequa ao seu objetivo de estudo.
-            </p>
-          </div>
-          <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600">
-            Perfil atual: <span className="font-black text-slate-900">{profile?.role === 'premium' ? 'Premium' : 'Gratuito'}</span>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-4 lg:grid-cols-3">
-          {premiumPlans.map((plan) => (
-            <div
-              key={plan.id}
-              className={`rounded-[1.7rem] border p-5 ${plan.highlight
-                ? 'border-amber-300 bg-amber-50 shadow-[0_18px_50px_-40px_rgba(245,158,11,0.5)]'
-                : 'border-slate-200 bg-white'
-                }`}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${plan.highlight ? 'bg-amber-200 text-amber-900' : 'bg-slate-100 text-slate-600'
-                  }`}>
-                  {plan.badge}
-                </span>
-                {plan.highlight && <Crown className="h-5 w-5 text-amber-600" />}
-              </div>
-              <h3 className="mt-4 text-xl font-black text-slate-900">{plan.name}</h3>
-              <p className="mt-1 text-sm font-semibold text-emerald-700">A partir de {plan.prices.monthly.label}/mês</p>
-              <p className="mt-4 text-sm font-semibold text-slate-800">{plan.headline}</p>
-              <p className="mt-3 text-sm leading-6 text-slate-600">{plan.description}</p>
-              <div className="mt-4 space-y-2">
-                {plan.features.map((feature) => (
-                  <p key={feature} className="rounded-xl bg-white/80 px-3 py-2 text-sm text-slate-700">
-                    {feature}
-                  </p>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+      <section className="grid gap-6 md:grid-cols-2">
+        <DailyTasks />
+        <AIMentor />
       </section>
-    </div>
-  );
-}
+
+      <section className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)] md:p-6">
+          <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-5">
+            <div>
+              <h2 className="text-xl font-black text-slate-900">Sessão recomendada</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Conteúdo filtrado automaticamente para a sua área de estudo.
+              </p>
+            </div>
+            <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-orange-700">
+              Prioridade
+            </span>
+          </div>
+
+          <p className="mt-5 text-sm leading-6 text-slate-600">
+            Com base no seu objetivo de {profile?.preparation_time_months} {profile?.preparation_time_months === 1 ? 'mês' : 'meses'} focado na sua formação em {areaName},
+            preparamos um percurso de treino focado nos **tópicos principais** que você precisa dominar.
+          </p>
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">

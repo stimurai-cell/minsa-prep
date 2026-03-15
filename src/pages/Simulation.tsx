@@ -47,7 +47,6 @@ export default function Simulation() {
   const [searchParams] = useSearchParams();
 
   const [loading, setLoading] = useState(false);
-  const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyPreference>('mixed');
   const [questions, setQuestions] = useState<any[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [currentQIndex, setCurrentQIndex] = useState(0);
@@ -66,25 +65,18 @@ export default function Simulation() {
   const hasBasicAccess = ['basic', 'premium', 'elite', 'admin'].includes(profile?.role || '');
 
   const sessionActive = searchParams.get('session') === '1';
-  const sessionDifficulty = (searchParams.get('difficulty') as DifficultyPreference) || 'mixed';
-  // Non-premium users: allow mixed/easy/medium, but keep hard reserved for premium
-  const effectiveDifficulty = hasPremiumAccess ? sessionDifficulty : (sessionDifficulty === 'hard' ? 'medium' : sessionDifficulty);
 
   useEffect(() => {
     fetchAreas();
   }, [fetchAreas]);
 
   useEffect(() => {
-    setSelectedDifficulty(hasPremiumAccess ? sessionDifficulty : (sessionDifficulty === 'hard' ? 'medium' : sessionDifficulty));
-  }, [hasPremiumAccess, sessionDifficulty]);
-
-  useEffect(() => {
     if (!sessionActive || questions.length > 0 || loading || !profile?.selected_area_id) {
       return;
     }
 
-    void bootSimulationSession(effectiveDifficulty);
-  }, [effectiveDifficulty, loading, profile?.selected_area_id, questions.length, sessionActive]);
+    void bootSimulationSession('mixed');
+  }, [loading, profile?.selected_area_id, questions.length, sessionActive]);
 
   useEffect(() => {
     if (!sessionActive || !questions.length || !sessionStartedAt) {
@@ -161,10 +153,14 @@ export default function Simulation() {
     const culture = shuffled.filter((q) => isCulture((q as any)?.topics?.name));
     const others = shuffled.filter((q) => !isCulture((q as any)?.topics?.name));
 
+    // Máximo de 20% para cultura geral (20 questões em 100)
     const cultureTarget = Math.min(20, culture.length);
     const selectedCulture = culture.slice(0, cultureTarget);
 
+    const remaining = total - selectedCulture.length;
     const byTopic = new Map<string, any[]>();
+    
+    // Agrupar por tópico (exceto cultura geral)
     others.forEach((q) => {
       const topicId = q.topic_id || 'sem-topico';
       const bucket = byTopic.get(topicId) || [];
@@ -172,7 +168,7 @@ export default function Simulation() {
       byTopic.set(topicId, bucket);
     });
 
-    const remaining = total - selectedCulture.length;
+    // Distribuir equitativamente entre os tópicos restantes
     const topicKeys = [...byTopic.keys()];
     const perTopic = topicKeys.length > 0 ? Math.floor(remaining / topicKeys.length) : 0;
     const remainder = topicKeys.length > 0 ? remaining % topicKeys.length : 0;
@@ -194,14 +190,11 @@ export default function Simulation() {
   };
 
   const bootSimulationSession = async (difficulty: DifficultyPreference) => {
-    const safeDifficulty = !hasPremiumAccess && difficulty === 'hard' ? 'medium' : difficulty;
     const sessionType = searchParams.get('type');
 
     if (!profile?.selected_area_id && !sessionType) return;
     if (sessionType && !hasPremiumAccess) {
       alert('Este simulado especial do edital MINSA é exclusivo para VIP (premium/elite). Faça upgrade para aceder.');
-      navigate('/simulation', { replace: true });
-      return;
     }
 
     setLoading(true);
@@ -211,7 +204,7 @@ export default function Simulation() {
       const count = 100;
 
       if (sessionType && ['legis_geral', 'etica_deon', 'simulado_geral'].includes(sessionType)) {
-        // 1. Fetch IDs for the specific contest type
+        // 1. Fetch IDs for specific contest type
         let idsQuery = supabase
           .from('questions')
           .select(`id, topics!inner (name)`)
@@ -272,23 +265,17 @@ export default function Simulation() {
 
         const topicIds = topics.map((topic) => topic.id);
 
-        // 1. Fetch IDs
+        // 1. Fetch IDs (sem filtro de dificuldade - mistura automática)
         let idsQuery = supabase
           .from('questions')
           .select('id')
           .in('topic_id', topicIds);
-
-        if (safeDifficulty !== 'mixed') {
-          idsQuery = idsQuery.eq('difficulty', safeDifficulty);
-        }
 
         const { data: idData, error: idError } = await idsQuery;
         if (idError) throw idError;
 
         if (!idData || idData.length === 0) {
           alert('Não há questões suficientes para esta área.');
-          navigate('/simulation', { replace: true });
-          return;
         }
 
         const shuffledIds = idData.map(q => q.id).sort(() => Math.random() - 0.5).slice(0, count);
@@ -308,7 +295,7 @@ export default function Simulation() {
         qData = shuffledIds
           .map(id => data.find(q => q.id === id))
           .filter((q): q is any => Boolean(q))
-          // Modo normal: aceitar apenas questÃµes no formato padrÃ£o (4 alternativas A-D)
+          // Modo normal: aceitar apenas questões no formato padrão (4 alternativas A-D)
           .filter(q => q.alternatives?.length === 4);
 
         if (qData.length === 0) {
@@ -486,8 +473,6 @@ export default function Simulation() {
   };
 
   const startSimulation = () => {
-    const difficulty = hasPremiumAccess ? selectedDifficulty : (selectedDifficulty === 'hard' ? 'medium' : selectedDifficulty);
-
     // Limite semanal para quem não tem pacote premium/elite/admin: 1 simulação completada a cada 7 dias
     const hasUnlimitedSimulations = ['premium', 'elite', 'admin'].includes(profile?.role || '');
 
@@ -499,25 +484,26 @@ export default function Simulation() {
             .from('quiz_attempts')
             .select('id')
             .eq('user_id', profile.id)
-            .gte('completed_at', sevenDaysAgo)
-            .eq('is_completed', true);
+            .eq('is_completed', true)
+            .gte('created_at', sevenDaysAgo)
+            .limit(1);
 
           if (error) throw error;
-          if (recent && recent.length >= 1) {
-            alert('Com o pacote atual você pode realizar 1 simulação por semana. Faça upgrade para destravar tentativas ilimitadas.');
+
+          if (recent && recent.length > 0) {
+            alert('Você já completou uma simulação esta semana. Faça upgrade para Premium ou Elite para simulações ilimitadas.');
+            navigate('/premium?plan=focus#payment-section');
             return;
           }
-
-          navigate(`/simulation?session=1&difficulty=${difficulty}`);
         } catch (err) {
-          console.error('Erro ao verificar limite de simulacoes:', err);
-          navigate(`/simulation?session=1&difficulty=${difficulty}`);
+          console.error('Error checking recent simulations:', err);
         }
       })();
-      return;
     }
 
-    navigate(`/simulation?session=1&difficulty=${difficulty}`);
+    setShowIntro(false);
+    void bootSimulationSession('mixed'); // Sempre misturado agora
+    navigate(`/simulation?session=1&difficulty=mixed`);
   };
 
   const leaveSimulationSession = () => {
@@ -673,7 +659,7 @@ export default function Simulation() {
                 </div>
                 <h1 className="mt-5 text-3xl font-black leading-tight">Entre em ambiente de simulacao real.</h1>
                 <p className="mt-3 text-base leading-7 text-cyan-50">
-                  Voce vai responder {questions.length} questoes em modo {getDifficultyLabel(selectedDifficulty).toLowerCase()}, uma por vez, com temporizador visivel e correcao imediata antes de seguir.
+                  Voce vai responder {questions.length} questoes em modo misturado, uma por vez, com temporizador visivel e correcao imediata antes de seguir.
                 </p>
 
                 <div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -911,7 +897,7 @@ export default function Simulation() {
           </button>
 
           <div className="mt-4">
-            <label className="mb-2 block text-sm font-semibold text-slate-700">Nivel</label>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">Nível</label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {(['mixed', 'easy', 'medium', 'hard'] as DifficultyPreference[]).map((difficulty) => (
                 <button
@@ -922,10 +908,9 @@ export default function Simulation() {
                       navigate(`/premium?plan=focus#payment-section`);
                       return;
                     }
-                    setSelectedDifficulty(difficulty);
                   }}
                   disabled={!hasPremiumAccess && difficulty === 'hard'}
-                  className={`relative rounded-2xl px-3 py-3 text-sm font-semibold transition ${selectedDifficulty === difficulty
+                  className={`relative rounded-2xl px-3 py-3 text-sm font-semibold transition ${difficulty === 'mixed'
                     ? 'bg-emerald-600 text-white'
                     : !hasPremiumAccess && difficulty === 'hard'
                       ? 'cursor-pointer border border-slate-200 bg-slate-100 text-slate-400'
@@ -943,19 +928,10 @@ export default function Simulation() {
                 </button>
               ))}
             </div>
-            {hasPremiumAccess ? (
-              <p className="mt-2 text-xs text-slate-500">
-                Em modo misto, a prova tenta distribuir questões entre fácil, médio e difícil antes de completar as 30.
-              </p>
-            ) : (
-              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
-                No plano gratuito você pode usar <span className="font-black">Fácil</span>, <span className="font-black">Médio</span> e <span className="font-black">Misto</span>.
-                O modo <span className="font-black">Difícil</span> está reservado ao Premium.
-                <Link to="/premium" className="ml-1 font-black underline">
-                  Ver premium
-                </Link>
-              </div>
-            )}
+            <div className="mt-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-900">
+              <span className="font-black">Simulados agora são sempre misturados!</span> 
+              O sistema equilibra automaticamente a dificuldade entre fácil, médio e difícil para melhor preparação.
+            </div>
           </div>
         </div>
 

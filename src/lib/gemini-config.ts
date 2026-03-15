@@ -39,6 +39,9 @@ REGRAS:
 - Demais com isCorrect: false
 - Português de Angola correto
 - Alternativas plausíveis mas incorretas
+- Distribuição equilibrada entre todos os tópicos (exceto cultura geral)
+- Para simulados: 100 questões total
+- Para treinos: número solicitado
 
 RETORNE APENAS O JSON ABAIXO:
 {

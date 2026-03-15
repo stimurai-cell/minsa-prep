@@ -18,6 +18,7 @@ interface UserProfile {
   last_streak_freeze_at?: string | null;
   created_at?: string;
   active_packages?: string[];
+  streak_count?: number;
 }
 
 interface AuthState {
