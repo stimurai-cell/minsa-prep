@@ -60,7 +60,12 @@ const buildQuestionsPrompt = ({
     "difficulty": "medium"
   }
 
-  Retorne APENAS um JSON valido com este formato:
+  Retorne APENAS E EXCLUSIVAMENTE um JSON valido.
+  NÃO adicione nenhum texto antes ou depois do JSON.
+  NÃO inclua explicações ou comentários.
+  A resposta deve começar com { e terminar com }.
+
+  Formato JSON:
   {
     "questions": [
       {
@@ -305,7 +310,42 @@ export default async function handler(req: any, res: any) {
 
       if (!response.text) throw new Error('O Gemini respondeu vazio.');
 
-      const parsed = JSON.parse(response.text);
+      // Log da resposta bruta para debugging
+      console.log('Raw AI Response:', response.text);
+      
+      // Tentar extrair JSON da resposta
+      let jsonText = response.text;
+      
+      // Se a resposta contiver texto antes do JSON, tentar extrair apenas o JSON
+      const jsonMatch = response.text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        jsonText = jsonMatch[0];
+        console.log('Extracted JSON:', jsonText);
+      }
+      
+      // Tentar fazer parse com tratamento de erro
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonText);
+      } catch (parseError: any) {
+        console.error('JSON Parse Error:', parseError);
+        console.error('Response text:', jsonText);
+        
+        // Tentar limpar o texto e fazer parse novamente
+        const cleanedText = jsonText
+          .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remover caracteres de controle
+          .replace(/\\n/g, '\\\\n') // Escapar newlines
+          .replace(/\\"/g, '\\\\"') // Escapar quotes
+          .trim();
+        
+        try {
+          parsed = JSON.parse(cleanedText);
+          console.log('Successfully parsed after cleaning');
+        } catch (secondError: any) {
+          console.error('Second parse attempt failed:', secondError);
+          throw new Error(`A IA retornou JSON inválido: ${parseError.message}. Resposta: "${jsonText.substring(0, 200)}..."`);
+        }
+      }
       
       // Log the response for debugging
       console.log('AI Generation Response:', {

@@ -56,7 +56,12 @@ export const buildQuestionsPrompt = ({
     "difficulty": "medium"
   }
 
-  Retorne APENAS um JSON valido com este formato:
+  Retorne APENAS E EXCLUSIVAMENTE um JSON valido.
+  NÃO adicione nenhum texto antes ou depois do JSON.
+  NÃO inclua explicações ou comentários.
+  A resposta deve começar com { e terminar com }.
+
+  Formato JSON:
   {
     "questions": [
       {
