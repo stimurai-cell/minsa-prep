@@ -59,11 +59,29 @@ export default function AdminNews() {
             return;
         }
         const fetchDeviceCount = async () => {
-            const { count } = await supabase
+            console.log(`[Admin] A verificar dispositivos para usuário: ${selectedUser.id} (${selectedUser.full_name})`);
+            const { data, count, error } = await supabase
                 .from('push_subscriptions')
-                .select('*', { count: 'exact', head: true })
+                .select('endpoint, user_id, created_at')
                 .eq('user_id', selectedUser.id);
-            setDeviceCount(count);
+            
+            console.log(`[Admin] Resultado da consulta:`, { data, count, error });
+            
+            if (error) {
+                console.error('[Admin] Erro ao buscar dispositivos:', error);
+                setDeviceCount(0);
+                return;
+            }
+            
+            // Filtrar apenas tokens FCM válidos (não começam com http)
+            const validFCMTokens = data?.filter(sub => 
+                sub.endpoint && 
+                typeof sub.endpoint === 'string' && 
+                !sub.endpoint.startsWith('http')
+            ) || [];
+            
+            console.log(`[Admin] Tokens FCM válidos encontrados:`, validFCMTokens.length);
+            setDeviceCount(validFCMTokens.length);
         };
         fetchDeviceCount();
     }, [selectedUser]);
