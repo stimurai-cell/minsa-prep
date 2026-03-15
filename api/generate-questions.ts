@@ -25,7 +25,7 @@ const buildQuestionsPrompt = ({
   Voce e um especialista em concursos publicos da area da saude em Angola (MINSA).
   Gere ${count} questoes de multipla escolha sobre o topico "${topic}" da area de "${area}".
 
-  REGRAS CRITICAS:
+  REGRAS CRITICAS - OBEDECA RIGIDOSAMENTE:
   1. Use portugues correto de Angola com todos os acentos e pontuacao.
   2. Cada questao deve ter exatamente ${alternativesCount} alternativas (A${alternativesCount === 4 ? ', B, C, D' : ', B, C, D, E'}).
   3. Estilo de escrita: Use termos como "assinale a alternativa correta", "assinale a incorreta", "exceto".
@@ -33,13 +33,26 @@ const buildQuestionsPrompt = ({
   5. Baseie-se no seguinte conteudo de referencia (se fornecido):
   ${rawContent || 'Nenhum conteudo fornecido - use seu conhecimento especializado.'}
   
-  IMPORTANTE:
-  - Apenas UMA alternativa deve estar marcada como correta (isCorrect: true).
-  - As demais alternativas devem estar marcadas como incorretas (isCorrect: false).
-  - As alternativas incorretas devem ser plausiveis mas definitivamente erradas.
-  - A explicacao deve justificar por que a alternativa correta esta certa e as outras estao erradas.
+  REGRA MAIS IMPORTANTE - ALTERNATIVAS:
+  - EXATAMENTE UMA (1) alternativa deve ter "isCorrect": true
+  - TODAS as outras alternativas devem ter "isCorrect": false
+  - A alternativa correta deve ser a unica resposta certa para a pergunta
+  - As alternativas incorretas devem ser plausiveis mas definitivamente erradas
+  
+  EXEMPLO DE QUESTAO CORRETA:
+  {
+    "question": "Qual o principal orgao regulador da farmacia em Angola?",
+    "alternatives": [
+      {"text": "Ministerio da Saude", "isCorrect": false},
+      {"text": "Ordem dos Farmaceuticos", "isCorrect": false},
+      {"text": "Direccao Nacional de Medicamentos e Farmacia", "isCorrect": true},
+      {"text": "Agencia Reguladora de Medicamentos", "isCorrect": false}
+    ],
+    "explanation": "A Direccao Nacional de Medicamentos e Farmacia (DNMF) e o orgao do Ministerio da Saude responsavel pela regulacao e fiscalizacao das atividades farmaceuticas em Angola.",
+    "difficulty": "medium"
+  }
 
-  Retorne apenas um JSON valido seguindo estritamente este formato:
+  Retorne APENAS um JSON valido com este formato:
   {
     "questions": [
       {
@@ -73,10 +86,11 @@ const getErrorMessage = (error: unknown) => {
 
 const validateGeneratedQuestions = (data: any, expectedAlts: number) => {
   const errors: string[] = [];
+  const warnings: string[] = [];
   
   if (!data || !data.questions || !Array.isArray(data.questions)) {
     errors.push('Formato invalido: "questions" deve ser um array');
-    return errors;
+    return { errors, warnings };
   }
   
   data.questions.forEach((q: any, index: number) => {
@@ -96,6 +110,13 @@ const validateGeneratedQuestions = (data: any, expectedAlts: number) => {
     const correctCount = q.alternatives.filter((a: any) => a.isCorrect === true).length;
     if (correctCount !== 1) {
       errors.push(`Questao ${index + 1}: Deve ter exatamente 1 alternativa correta, encontrou ${correctCount}`);
+      
+      // Log detalhado das alternativas para debugging
+      q.alternatives.forEach((alt: any, altIndex: number) => {
+        if (alt.isCorrect === true) {
+          warnings.push(`Questao ${index + 1}, Alternativa ${altIndex + 1} marcada como correta: "${alt.text}"`);
+        }
+      });
     }
     
     q.alternatives.forEach((alt: any, altIndex: number) => {
@@ -103,7 +124,7 @@ const validateGeneratedQuestions = (data: any, expectedAlts: number) => {
         errors.push(`Questao ${index + 1}, Alternativa ${altIndex + 1}: Texto invalido ou muito curto`);
       }
       if (typeof alt.isCorrect !== 'boolean') {
-        errors.push(`Questao ${index + 1}, Alternativa ${altIndex + 1}: isCorrect deve ser booleano`);
+        errors.push(`Questao ${index + 1}, Alternativa ${altIndex + 1}: isCorrect deve ser booleano (recebido: ${typeof alt.isCorrect})`);
       }
     });
     
@@ -116,7 +137,7 @@ const validateGeneratedQuestions = (data: any, expectedAlts: number) => {
     }
   });
   
-  return errors;
+  return { errors, warnings };
 };
 
 export default async function handler(req: any, res: any) {
@@ -199,9 +220,22 @@ export default async function handler(req: any, res: any) {
           content: alt.text,
           is_correct: alt.isCorrect
         }));
+        
+        // Log detalhado para debugging
+        console.log(`Salvando alternativas para questao "${q.question.substring(0, 50)}...":`, {
+          totalAlternatives: alternatives.length,
+          correctAlternatives: alternatives.filter((a: any) => a.is_correct === true).length,
+          alternativesData: alternatives.map((a: any) => ({
+            text: a.text.substring(0, 50) + '...',
+            is_correct: a.is_correct
+          }))
+        });
 
         const { error: aError } = await supabase.from('alternatives').insert(alternatives);
-        if (aError) throw aError;
+        if (aError) {
+          console.error('Erro ao salvar alternativas:', aError);
+          throw aError;
+        }
 
         // 3. Inserir Explicação
         if (q.explanation) {
@@ -273,13 +307,21 @@ export default async function handler(req: any, res: any) {
       });
       
       // Validate the generated questions
-      const validationErrors = validateGeneratedQuestions(parsed, alternativesCount);
-      if (validationErrors.length > 0) {
-        console.error('Validation errors:', validationErrors);
+      const validation = validateGeneratedQuestions(parsed, alternativesCount);
+      if (validation.errors.length > 0) {
+        console.error('Validation errors:', validation.errors);
+        if (validation.warnings.length > 0) {
+          console.warn('Validation warnings:', validation.warnings);
+        }
         return res.status(422).json({ 
           error: 'A IA gerou questoes com problemas de validacao',
-          details: validationErrors
+          details: validation.errors,
+          warnings: validation.warnings
         });
+      }
+      
+      if (validation.warnings.length > 0) {
+        console.warn('Validation warnings:', validation.warnings);
       }
       
       // Incluir metadados para o salvamento posterior
