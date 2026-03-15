@@ -66,7 +66,47 @@ const generateQuestionsLocally = async (payload: GenerateQuestionsPayload) => {
     throw new Error('O Gemini respondeu sem corpo de texto.');
   }
 
-  return JSON.parse(response.text);
+  const parsed = JSON.parse(response.text);
+  
+  // Validate the generated questions
+  const validateQuestions = (data: any, expectedAlts: number) => {
+    const errors: string[] = [];
+    
+    if (!data || !data.questions || !Array.isArray(data.questions)) {
+      errors.push('Formato invalido: "questions" deve ser um array');
+      return errors;
+    }
+    
+    data.questions.forEach((q: any, index: number) => {
+      if (!q.question || typeof q.question !== 'string' || q.question.trim().length < 10) {
+        errors.push(`Questao ${index + 1}: Texto da pergunta invalido ou muito curto`);
+      }
+      
+      if (!q.alternatives || !Array.isArray(q.alternatives)) {
+        errors.push(`Questao ${index + 1}: Alternativas invalidas`);
+        return;
+      }
+      
+      if (q.alternatives.length !== expectedAlts) {
+        errors.push(`Questao ${index + 1}: Esperado ${expectedAlts} alternativas, recebido ${q.alternatives.length}`);
+      }
+      
+      const correctCount = q.alternatives.filter((a: any) => a.isCorrect === true).length;
+      if (correctCount !== 1) {
+        errors.push(`Questao ${index + 1}: Deve ter exatamente 1 alternativa correta, encontrou ${correctCount}`);
+      }
+    });
+    
+    return errors;
+  };
+  
+  const validationErrors = validateQuestions(parsed, payload.alternativesCount);
+  if (validationErrors.length > 0) {
+    console.error('Local validation errors:', validationErrors);
+    throw new Error(`A IA gerou questoes com problemas: ${validationErrors.join(', ')}`);
+  }
+
+  return parsed;
 };
 
 export const getGeminiConfigStatus = () => ({

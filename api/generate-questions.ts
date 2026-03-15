@@ -26,12 +26,18 @@ const buildQuestionsPrompt = ({
   Gere ${count} questoes de multipla escolha sobre o topico "${topic}" da area de "${area}".
 
   REGRAS CRITICAS:
-  1. Use portugues correto com todos os acentos e pontuacao.
+  1. Use portugues correto de Angola com todos os acentos e pontuacao.
   2. Cada questao deve ter exatamente ${alternativesCount} alternativas (A${alternativesCount === 4 ? ', B, C, D' : ', B, C, D, E'}).
-  3. Estilo de escrita: Use termos angolanos.
+  3. Estilo de escrita: Use termos como "assinale a alternativa correta", "assinale a incorreta", "exceto".
   4. O nivel de dificuldade deve ser "${difficulty}".
   5. Baseie-se no seguinte conteudo de referencia (se fornecido):
-  ${rawContent}
+  ${rawContent || 'Nenhum conteudo fornecido - use seu conhecimento especializado.'}
+  
+  IMPORTANTE:
+  - Apenas UMA alternativa deve estar marcada como correta (isCorrect: true).
+  - As demais alternativas devem estar marcadas como incorretas (isCorrect: false).
+  - As alternativas incorretas devem ser plausiveis mas definitivamente erradas.
+  - A explicacao deve justificar por que a alternativa correta esta certa e as outras estao erradas.
 
   Retorne apenas um JSON valido seguindo estritamente este formato:
   {
@@ -47,7 +53,7 @@ const buildQuestionsPrompt = ({
           {"text": "Opcao E", "isCorrect": false}` : ''
           }
         ],
-        "explanation": "Explicacao detalhada.",
+        "explanation": "Explicacao detalhada da resposta correta.",
         "difficulty": "${difficulty}"
       }
     ]
@@ -63,6 +69,54 @@ const getErrorMessage = (error: unknown) => {
     return 'A quota do Gemini acabou.';
   }
   return message;
+};
+
+const validateGeneratedQuestions = (data: any, expectedAlts: number) => {
+  const errors: string[] = [];
+  
+  if (!data || !data.questions || !Array.isArray(data.questions)) {
+    errors.push('Formato invalido: "questions" deve ser um array');
+    return errors;
+  }
+  
+  data.questions.forEach((q: any, index: number) => {
+    if (!q.question || typeof q.question !== 'string' || q.question.trim().length < 10) {
+      errors.push(`Questao ${index + 1}: Texto da pergunta invalido ou muito curto`);
+    }
+    
+    if (!q.alternatives || !Array.isArray(q.alternatives)) {
+      errors.push(`Questao ${index + 1}: Alternativas invalidas`);
+      return;
+    }
+    
+    if (q.alternatives.length !== expectedAlts) {
+      errors.push(`Questao ${index + 1}: Esperado ${expectedAlts} alternativas, recebido ${q.alternatives.length}`);
+    }
+    
+    const correctCount = q.alternatives.filter((a: any) => a.isCorrect === true).length;
+    if (correctCount !== 1) {
+      errors.push(`Questao ${index + 1}: Deve ter exatamente 1 alternativa correta, encontrou ${correctCount}`);
+    }
+    
+    q.alternatives.forEach((alt: any, altIndex: number) => {
+      if (!alt.text || typeof alt.text !== 'string' || alt.text.trim().length < 3) {
+        errors.push(`Questao ${index + 1}, Alternativa ${altIndex + 1}: Texto invalido ou muito curto`);
+      }
+      if (typeof alt.isCorrect !== 'boolean') {
+        errors.push(`Questao ${index + 1}, Alternativa ${altIndex + 1}: isCorrect deve ser booleano`);
+      }
+    });
+    
+    if (!q.explanation || typeof q.explanation !== 'string' || q.explanation.trim().length < 20) {
+      errors.push(`Questao ${index + 1}: Explicacao invalida ou muito curta`);
+    }
+    
+    if (!q.difficulty || !['easy', 'medium', 'hard'].includes(q.difficulty)) {
+      errors.push(`Questao ${index + 1}: Dificuldade invalida`);
+    }
+  });
+  
+  return errors;
 };
 
 export default async function handler(req: any, res: any) {
@@ -179,8 +233,18 @@ export default async function handler(req: any, res: any) {
     try {
       const targetArea = area_name || 'Saude';
       const targetTopic = topic_name || custom_topic_name || 'Geral';
-
       const alternativesCount = is_contest_highlight ? 5 : 4;
+      
+      // Log the request for debugging
+      console.log('AI Generation Request:', {
+        area: targetArea,
+        topic: targetTopic,
+        count,
+        difficulty,
+        alternativesCount,
+        hasContext: Boolean(context),
+        contextLength: context?.length || 0
+      });
 
       const response = await ai.models.generateContent({
         model: modelName,
@@ -200,6 +264,24 @@ export default async function handler(req: any, res: any) {
       if (!response.text) throw new Error('O Gemini respondeu vazio.');
 
       const parsed = JSON.parse(response.text);
+      
+      // Log the response for debugging
+      console.log('AI Generation Response:', {
+        questionsGenerated: parsed.questions?.length || 0,
+        expectedCount: count || 5,
+        modelUsed: modelName
+      });
+      
+      // Validate the generated questions
+      const validationErrors = validateGeneratedQuestions(parsed, alternativesCount);
+      if (validationErrors.length > 0) {
+        console.error('Validation errors:', validationErrors);
+        return res.status(422).json({ 
+          error: 'A IA gerou questoes com problemas de validacao',
+          details: validationErrors
+        });
+      }
+      
       // Incluir metadados para o salvamento posterior
       return res.status(200).json({
         ...parsed,
