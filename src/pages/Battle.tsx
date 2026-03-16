@@ -37,6 +37,7 @@ export default function Battle() {
                     .from('profiles')
                     .select('id, full_name, total_xp, role')
                     .eq('selected_area_id', profile.selected_area_id)
+                    .in('role', ['elite', 'admin'])
                     .neq('id', profile.id)
                     .order('total_xp', { ascending: false })
                     .limit(10);
