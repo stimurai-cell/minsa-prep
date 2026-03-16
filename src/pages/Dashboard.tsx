@@ -209,6 +209,7 @@ export default function Dashboard() {
         });
       } catch (error) {
         console.error('Error fetching stats:', error);
+        setLoading(false);
       } finally {
         setLoading(false);
       }
@@ -272,6 +273,7 @@ export default function Dashboard() {
         setStreakWeek(week);
       } catch (err) {
         console.error('Erro ao buscar ofensiva semanal:', err);
+        setStreakLoading(false);
       } finally {
         setStreakLoading(false);
       }
@@ -323,8 +325,12 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex justify-center p-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-emerald-600"></div>
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-emerald-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-amber-200 border-t-amber-600"></div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2 mt-4">Carregando seu painel</h2>
+          <p className="text-slate-600">Preparando tudo para você...</p>
+        </div>
       </div>
     );
   }
