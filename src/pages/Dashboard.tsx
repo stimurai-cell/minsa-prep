@@ -91,16 +91,32 @@ export default function Dashboard() {
       if (!profile?.id || profile?.role !== 'elite') return;
 
       try {
-        // Check if user completed onboarding
-        const { data: onboarding } = await supabase
-          .from('elite_onboarding')
-          .select('completed')
-          .eq('user_id', profile.id)
-          .single();
+        // Verificar se usuário Elite precisa completar onboarding (incluindo upgrade de plano)
+        if (profile?.role === 'elite') {
+          const { data: onboarding } = await supabase
+            .from('elite_onboarding')
+            .select('completed, completed_at')
+            .eq('user_id', profile.id)
+            .single();
 
-        if (!onboarding?.completed) {
-          setShowEliteWelcome(true);
-          return;
+          // Se não tem onboarding ou se completed_at é anterior a possível upgrade recente
+          if (!onboarding?.completed) {
+            setShowEliteWelcome(true);
+            return;
+          }
+          
+          // Verificar se o usuário fez upgrade recentemente (comparando data do onboarding com data possível de upgrade)
+          // Se o onboarding foi completado muito antes de ser Elite, mostrar novamente
+          if (onboarding.completed_at) {
+            const onboardingDate = new Date(onboarding.completed_at);
+            const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            
+            // Se o onboarding foi há mais de uma semana e agora é Elite, provavelmente fez upgrade
+            if (onboardingDate < oneWeekAgo) {
+              setShowEliteWelcome(true);
+              return;
+            }
+          }
         }
 
         // Load current strategy
@@ -605,36 +621,39 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)] md:p-6">
-        <h2 className="text-xl font-black text-slate-900">Dominio por topico</h2>
-        <div className="mt-5 space-y-4">
-          {topicProgress.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-              Ainda nao existem respostas registadas. Comece a treinar para ver o seu dominio crescer.
-            </p>
-          ) : (
-            topicProgress.map((progress, idx) => (
-              <div key={idx} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <span className="font-semibold text-slate-800">{progress.topics?.name}</span>
-                  <span className="text-sm font-bold text-slate-500">{Math.round(progress.domain_score)}%</span>
+      {/* Domínio por tópico - apenas para Premium e acima */}
+      {perms.hasWeaknessRadar && (
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)] md:p-6">
+          <h2 className="text-xl font-black text-slate-900">Dominio por topico</h2>
+          <div className="mt-5 space-y-4">
+            {topicProgress.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                Ainda nao existem respostas registadas. Comece a treinar para ver o seu dominio crescer.
+              </p>
+            ) : (
+              topicProgress.map((progress, idx) => (
+                <div key={idx} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="font-semibold text-slate-800">{progress.topics?.name}</span>
+                    <span className="text-sm font-bold text-slate-500">{Math.round(progress.domain_score)}%</span>
+                  </div>
+                  <div className="h-2.5 w-full rounded-full bg-slate-200">
+                    <div
+                      className={`h-2.5 rounded-full ${progress.domain_score >= 80
+                        ? 'bg-emerald-500'
+                        : progress.domain_score >= 50
+                          ? 'bg-orange-500'
+                          : 'bg-red-500'
+                        }`}
+                      style={{ width: `${progress.domain_score}%` }}
+                    ></div>
+                  </div>
                 </div>
-                <div className="h-2.5 w-full rounded-full bg-slate-200">
-                  <div
-                    className={`h-2.5 rounded-full ${progress.domain_score >= 80
-                      ? 'bg-emerald-500'
-                      : progress.domain_score >= 50
-                        ? 'bg-orange-500'
-                        : 'bg-red-500'
-                      }`}
-                    style={{ width: `${progress.domain_score}%` }}
-                  ></div>
-                </div>
-              </div>
-            ))
-          )}
+              ))
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       <section className="grid gap-6 md:grid-cols-2">
         <DailyTasks />
@@ -642,49 +661,6 @@ export default function Dashboard() {
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)] md:p-6">
-          <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-5">
-            <div>
-              <h2 className="text-xl font-black text-slate-900">Sessão recomendada</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Conteúdo filtrado automaticamente para a sua área de estudo.
-              </p>
-            </div>
-            <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-orange-700">
-              Prioridade
-            </span>
-          </div>
-
-          <p className="mt-5 text-sm leading-6 text-slate-600">
-            Com base no seu objetivo de {profile?.preparation_time_months} {profile?.preparation_time_months === 1 ? 'mês' : 'meses'} focado na sua formação em {areaName},
-            preparamos um percurso de treino focado nos **tópicos principais** que você precisa dominar.
-          </p>
-
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
-            <Link
-              to="/training"
-              className="group flex flex-col items-center justify-center gap-2 rounded-[1.4rem] border-2 border-emerald-100 bg-emerald-50 p-5 text-center transition hover:border-emerald-300 hover:bg-emerald-100 hover:shadow-md"
-            >
-              <PlayCircle className="h-7 w-7 text-emerald-600 transition group-hover:scale-110" />
-              <span className="text-xs font-black uppercase tracking-wider text-emerald-700">Treinar</span>
-            </Link>
-            <Link
-              to="/simulation"
-              className="group flex flex-col items-center justify-center gap-2 rounded-[1.4rem] border-2 border-sky-100 bg-sky-50 p-5 text-center transition hover:border-sky-300 hover:bg-sky-100 hover:shadow-md"
-            >
-              <Clock3 className="h-7 w-7 text-sky-600 transition group-hover:scale-110" />
-              <span className="text-xs font-black uppercase tracking-wider text-sky-700">Simulação</span>
-            </Link>
-            <Link
-              to="/statistics"
-              className="group flex flex-col items-center justify-center gap-2 rounded-[1.4rem] border-2 border-violet-100 bg-violet-50 p-5 text-center transition hover:border-violet-300 hover:bg-violet-100 hover:shadow-md"
-            >
-              <BarChart2 className="h-7 w-7 text-violet-600 transition group-hover:scale-110" />
-              <span className="text-xs font-black uppercase tracking-wider text-violet-700">Estatísticas</span>
-            </Link>
-          </div>
-        </div>
-
         {/* Premium CTA */}
         {profile?.role === 'free' && (
           <div
