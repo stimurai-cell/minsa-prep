@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Swords, Trophy, Timer, Loader2, ArrowLeft, ArrowRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
-import { prepareQuestionSet } from '../lib/quiz';
+import { stripAlternativePrefix } from '../lib/quiz';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function BattleArena() {
@@ -17,6 +17,34 @@ export default function BattleArena() {
     const [score, setScore] = useState(0);
     const [isFinished, setIsFinished] = useState(false);
     const [opponentProgress, setOpponentProgress] = useState(0);
+    const [hasSyncedFinish, setHasSyncedFinish] = useState(false);
+
+    const seededShuffle = <T,>(items: T[], seed: string) => {
+        // Mulberry32 PRNG for reproducible ordem
+        const hashSeed = seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) || 1;
+        let t = hashSeed;
+        const random = () => {
+            t += 0x6D2B79F5;
+            let r = Math.imul(t ^ (t >>> 15), 1 | t);
+            r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+            return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+        };
+
+        const copy = [...items];
+        for (let i = copy.length - 1; i > 0; i -= 1) {
+            const j = Math.floor(random() * (i + 1));
+            [copy[i], copy[j]] = [copy[j], copy[i]];
+        }
+        return copy;
+    };
+
+    const buildQuestionSet = (qs: any[], seed: string) => seededShuffle(qs, seed).map((q, idx) => ({
+        ...q,
+        alternatives: seededShuffle(q.alternatives || [], `${seed}-${idx}`).map((alternative: any) => ({
+            ...alternative,
+            content: stripAlternativePrefix(alternative.content || '')
+        }))
+    }));
 
     useEffect(() => {
         const fetchMatchAndQuestions = async () => {
@@ -28,23 +56,30 @@ export default function BattleArena() {
                 .eq('id', matchId)
                 .single();
 
-            if (!matchData || matchData.status !== 'active') {
+            const isParticipant = matchData && (matchData.challenger_id === profile.id || matchData.opponent_id === profile.id);
+
+            if (!matchData || !isParticipant || matchData.status !== 'active') {
                 navigate('/battle');
                 return;
             }
 
             setMatch(matchData);
+            const isChallenger = profile.id === matchData.challenger_id;
+            setOpponentProgress(isChallenger ? matchData.opponent_score : matchData.challenger_score);
 
             // Fetch 10 questions for the battle
+            const topicId = (await supabase.from('topics').select('id').eq('area_id', matchData.area_id).limit(1).single()).data?.id;
+
             const { data: qs } = await supabase
                 .from('questions')
                 .select('*, alternatives(*)')
-                .eq('topic_id', (await supabase.from('topics').select('id').eq('area_id', matchData.area_id).limit(1).single()).data?.id) // Simplified for now
+                .eq('topic_id', topicId || '')
+                .order('created_at', { ascending: true })
                 .limit(10);
 
             if (qs) {
                 const valid = qs.filter(q => (q.alternatives || []).length === 4);
-                setQuestions(prepareQuestionSet(valid));
+                setQuestions(buildQuestionSet(valid, matchData.id));
             }
             setLoading(false);
         };
@@ -56,7 +91,13 @@ export default function BattleArena() {
             .channel(`battle:${matchId}`)
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'battle_matches', filter: `id=eq.${matchId}` }, (payload) => {
                 const isChallenger = profile?.id === payload.new.challenger_id;
+                setMatch(payload.new);
                 setOpponentProgress(isChallenger ? payload.new.opponent_score : payload.new.challenger_score);
+
+                if (payload.new.status === 'completed') {
+                    setIsFinished(true);
+                    setScore(isChallenger ? payload.new.challenger_score : payload.new.opponent_score);
+                }
             })
             .subscribe();
 
@@ -83,6 +124,37 @@ export default function BattleArena() {
             // Finish match logic here
         }
     };
+
+    const finalizeMatch = async (finalScore: number) => {
+        if (!match || hasSyncedFinish) return;
+
+        setHasSyncedFinish(true);
+        const isChallenger = profile?.id === match.challenger_id;
+        const challengerScore = isChallenger ? finalScore : match.challenger_score || 0;
+        const opponentScoreFinal = isChallenger ? opponentProgress : finalScore;
+        const winnerId = challengerScore === opponentScoreFinal
+            ? null
+            : challengerScore > opponentScoreFinal
+                ? match.challenger_id
+                : match.opponent_id;
+
+        await supabase
+            .from('battle_matches')
+            .update({
+                status: 'completed',
+                challenger_score: challengerScore,
+                opponent_score: opponentScoreFinal,
+                winner_id: winnerId,
+                completed_at: new Date().toISOString()
+            })
+            .eq('id', matchId);
+    };
+
+    useEffect(() => {
+        if (isFinished) {
+            finalizeMatch(score);
+        }
+    }, [isFinished, score, match]);
 
     if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white"><Loader2 className="animate-spin w-8 h-8" /></div>;
 

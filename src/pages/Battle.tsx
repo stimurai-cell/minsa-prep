@@ -12,6 +12,7 @@ export default function Battle() {
     const [opponents, setOpponents] = useState<any[]>([]);
     const [matches, setMatches] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [autoJoinedMatchId, setAutoJoinedMatchId] = useState<string | null>(null);
 
     const isElite = profile?.role === 'elite' || profile?.role === 'admin';
 
@@ -60,8 +61,21 @@ export default function Battle() {
                 event: '*',
                 schema: 'public',
                 table: 'battle_matches'
-            }, () => {
+            }, (payload) => {
                 fetchMatches();
+
+                // Se uma batalha que envolve o jogador ficou ativa, leva-o direto para a arena
+                const becameActive = payload.eventType === 'UPDATE'
+                    && payload.old?.status !== 'active'
+                    && payload.new?.status === 'active';
+
+                const involvesUser = profile?.id
+                    && (payload.new?.challenger_id === profile.id || payload.new?.opponent_id === profile.id);
+
+                if (becameActive && involvesUser) {
+                    setAutoJoinedMatchId(payload.new.id);
+                    navigate(`/battle/${payload.new.id}`);
+                }
             })
             .subscribe();
 
@@ -69,6 +83,21 @@ export default function Battle() {
             supabase.removeChannel(channel);
         };
     }, [isElite, profile?.id, profile?.selected_area_id]);
+
+    // Se já houver uma batalha ativa envolvendo o usuário, não obrigar a esperar na lista
+    useEffect(() => {
+        if (!profile?.id || matches.length === 0) return;
+
+        const activeMatch = matches.find(
+            (m) => m.status === 'active'
+                && (m.challenger_id === profile.id || m.opponent_id === profile.id)
+        );
+
+        if (activeMatch && autoJoinedMatchId !== activeMatch.id) {
+            setAutoJoinedMatchId(activeMatch.id);
+            navigate(`/battle/${activeMatch.id}`);
+        }
+    }, [matches, profile?.id, navigate, autoJoinedMatchId]);
 
     const handleChallenge = async (opponentId: string) => {
         if (!profile?.id || !profile.selected_area_id) return;
@@ -193,6 +222,14 @@ export default function Battle() {
                                                     <CloseIcon className="w-4 h-4" />
                                                 </button>
                                             </div>
+                                        )}
+                                        {m.status === 'active' && (
+                                            <button
+                                                onClick={() => navigate(`/battle/${m.id}`)}
+                                                className="ml-3 rounded-lg bg-slate-900 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-white hover:bg-purple-600 transition-colors"
+                                            >
+                                                Entrar
+                                            </button>
                                         )}
                                     </div>
                                 );
