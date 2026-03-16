@@ -49,6 +49,7 @@ export default function Dashboard() {
   const { areas, fetchAreas } = useAppStore();
   const { isOfflineMode, downloadedQuestions } = useOfflineStore();
   const perms = usePermissions();
+  const isPaidUser = perms.canAccessSimulation;
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [stats, setStats] = useState({
     totalQuestions: 0,
@@ -469,6 +470,28 @@ export default function Dashboard() {
               </div>
             </div>
 
+            {/* Elite Study Plan Button - For Elite users without plan */}
+            {profile?.role === 'elite' && !currentStrategy && (
+              <div className="rounded-[2rem] border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-6 shadow-sm">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center">
+                    <Target className="w-6 h-6 text-amber-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900">Plano de Estudo Elite</h3>
+                    <p className="text-sm text-slate-600">Crie seu plano personalizado para acelerar sua aprovação</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => navigate('/elite-assessment')}
+                  className="w-full bg-gradient-to-r from-amber-500 to-emerald-500 text-white font-black px-6 py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3"
+                >
+                  <Target className="w-5 h-5" />
+                  Criar Plano de Estudo
+                </button>
+              </div>
+            )}
+
             {/* Elite Auto Diagnosis - Always Visible for Elite Users */}
             {profile?.role === 'elite' && (
               <EliteAutoDiagnosis />
@@ -542,8 +565,8 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Spaced Repetition (SRS) Card */}
-      {stats.dueQuestions > 0 && (
+      {/* Spaced Repetition (SRS) Card - Available for all paid plans */}
+      {stats.dueQuestions > 0 && isPaidUser && (
         <section className="animate-in slide-in-from-bottom duration-500">
           <div className="rounded-[2rem] border-2 border-emerald-200 bg-emerald-50 p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
             <div className="flex items-center gap-5 text-center md:text-left">

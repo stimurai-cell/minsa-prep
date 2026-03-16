@@ -48,6 +48,7 @@ export const premiumPlans: PremiumPlan[] = [
       'Treino diário sem limites (Exceto Dificil)',
       'Ranking completo',
       'Historico de provas',
+      'Sistema de revisao inteligente',
     ],
     prices: {
       monthly: { amount: 1500, label: '1.500 Kz' },
@@ -68,6 +69,7 @@ export const premiumPlans: PremiumPlan[] = [
       'Modo Dificil desbloqueado',
       'Banco completo de questoes',
       'Radar de Fraquezas (Insights Inteligentes)',
+      'Sistema de revisao inteligente',
     ],
     prices: {
       monthly: { amount: 4000, label: '4.000 Kz' },
@@ -87,6 +89,7 @@ export const premiumPlans: PremiumPlan[] = [
       'Simulacao Nacional (Prova de Evento)',
       'Estatisticas profundas em PDF',
       'Modo Batalha XP Plus',
+      'Sistema de revisao inteligente',
     ],
     prices: {
       monthly: { amount: 8000, label: '8.000 Kz' },

@@ -42,6 +42,12 @@ export default function AIMentor() {
                 .order('completed_at', { ascending: false })
                 .limit(5);
 
+            // Buscar todos os tópicos da área para análise completa (modo Elite)
+            const { data: allTopics } = await supabase
+                .from('topics')
+                .select('name')
+                .eq('area_id', profile.selected_area_id);
+
             const res = await fetch('/api/ai-mentor', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -49,7 +55,8 @@ export default function AIMentor() {
                     fullName: profile.full_name,
                     area: areaName,
                     topicProgress,
-                    recentAttempts: attempts
+                    recentAttempts: attempts,
+                    allTopics: allTopics || []
                 })
             });
 
@@ -103,7 +110,7 @@ export default function AIMentor() {
                     <div className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center text-white mb-4 shadow-xl rotate-3 group-hover:rotate-0 transition-transform">
                         <Lock className="w-6 h-6" />
                     </div>
-                    <h3 className="text-xl font-black text-slate-800 mb-2 tracking-tight">Mentora IA</h3>
+                    <h3 className="text-xl font-black text-slate-800 mb-2 tracking-tight">Mentor IA</h3>
                     <p className="text-sm text-slate-600 mb-6 max-w-[240px] leading-relaxed">A análise inteligente de desempenho está disponível nos planos pagos.</p>
                     <button
                         onClick={() => navigate('/premium')}
@@ -114,7 +121,7 @@ export default function AIMentor() {
                 </div>
                 <div className="opacity-10 pointer-events-none blur-[1px]">
                     <h3 className="text-lg font-black mb-4 flex items-center gap-2">
-                        <Brain className="w-5 h-5" /> Mentora IA
+                        <Brain className="w-5 h-5" /> Mentor IA
                     </h3>
                     <div className="space-y-3">
                         <div className="h-4 bg-slate-300 rounded-full w-3/4"></div>
@@ -134,7 +141,7 @@ export default function AIMentor() {
                         <Brain className="w-6 h-6" />
                     </div>
                     <div>
-                        <h3 className="text-lg font-black text-slate-800 tracking-tight">Análise da Mentora</h3>
+                        <h3 className="text-lg font-black text-slate-800 tracking-tight">Análise do Mentor</h3>
                         <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Powered by Gemini AI</p>
                     </div>
                 </div>
