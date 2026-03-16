@@ -30,12 +30,6 @@ export function useVersionCheck() {
         return () => clearInterval(interval);
     }, []);
 
-    useEffect(() => {
-        if (needsUpdate) {
-            // ForÃ§a reload para limpar HTML/CSS/JS antigos em PWAs em cache
-            setTimeout(() => window.location.reload(), 500);
-        }
-    }, [needsUpdate]);
-
+    // Deixa o App decidir como avisar o usuário; nada de reload automático
     return { needsUpdate };
 }

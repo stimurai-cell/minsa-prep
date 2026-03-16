@@ -19,8 +19,12 @@ if ('serviceWorker' in navigator) {
       console.error('[SW] Falha ao registar sw.js:', err);
     });
 
-    // Quando um novo SW assumir o controlo, recarrega para limpar HTML antigo em cache
+    // Quando um novo SW assumir o controle, faz refresh apenas uma vez por aba
+    let refreshing = sessionStorage.getItem('sw-refreshed') === '1';
     navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing) return;
+      refreshing = true;
+      sessionStorage.setItem('sw-refreshed', '1');
       window.location.reload();
     });
   });
