@@ -177,6 +177,7 @@ export default async function handler(req: any, res: any) {
         }
 
         const result = JSON.parse(response.text);
+        console.log('Generated questions result:', result);
         
         // Mark as contest highlight if requested
         if (is_contest_highlight && result.questions) {
@@ -233,6 +234,7 @@ export default async function handler(req: any, res: any) {
       // Save questions
       const savedQuestions = [];
       for (const question of questions) {
+        console.log('Saving question:', question);
         const { data: newQuestion, error: questionError } = await supabase
           .from('questions')
           .insert({
@@ -251,6 +253,7 @@ export default async function handler(req: any, res: any) {
 
         // Save alternatives
         for (const alternative of question.alternatives) {
+          console.log('Saving alternative:', alternative);
           await supabase
             .from('alternatives')
             .insert({

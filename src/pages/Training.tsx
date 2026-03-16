@@ -724,6 +724,7 @@ export default function Training() {
                 </div>
 
                 <h1 className="mt-3 text-lg font-black leading-7 text-slate-900 md:text-[1.45rem] md:leading-9">
+                  {console.log('Current question:', currentQ)}
                   {currentQ.content}
                 </h1>
 
@@ -772,7 +773,7 @@ export default function Training() {
                               {isAnswered && isWrongSelection && <CircleX className="h-5 w-5 text-rose-500" />}
                               {isAnswered && !isCorrect && !isWrongSelection && <Circle className="h-5 w-5 text-slate-300" />}
                             </div>
-                            <span className="text-sm leading-5 text-slate-800">{alt.content}</span>
+                            <span className="text-sm leading-5 text-slate-800">{console.log('Alternative:', alt)}{alt.content}</span>
                           </div>
                         </button>
                       );
