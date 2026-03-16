@@ -9,6 +9,7 @@ import ToastNotification from './components/ToastNotification';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { RefreshCw } from 'lucide-react';
 import PaymentNotificationListener from './components/PaymentNotificationListener';
+import BattleAutoJoin from './components/BattleAutoJoin';
 
 import { WifiOff } from 'lucide-react';
 
@@ -41,6 +42,10 @@ const Leagues = lazy(() => import('./pages/Leagues'));
 const UserProfileView = lazy(() => import('./pages/UserProfileView'));
 const Welcome = lazy(() => import('./pages/Welcome'));
 const Notifications = lazy(() => import('./pages/Notifications'));
+const EliteWelcome = lazy(() => import('./pages/EliteWelcome'));
+const EliteAssessment = lazy(() => import('./pages/EliteAssessment'));
+const EliteStrategy = lazy(() => import('./pages/EliteStrategy'));
+const ElitePlanPreview = lazy(() => import('./pages/ElitePlanPreview'));
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuthStore();
@@ -119,6 +124,7 @@ export default function App() {
     <BrowserRouter>
       <OfflineSync />
       <PaymentNotificationListener />
+      <BattleAutoJoin />
       <ToastNotification />
       {showOfflineAlert && (
         <div className="fixed top-0 left-0 right-0 z-[100] bg-orange-500 p-2 text-center text-sm font-bold text-white shadow-lg animate-in slide-in-from-top duration-300">
@@ -177,6 +183,10 @@ export default function App() {
               <Route path="premium" element={<Premium />} />
               <Route path="notifications" element={<Notifications />} />
               <Route path="admin" element={<Admin />} />
+              <Route path="elite-welcome" element={<EliteWelcome />} />
+              <Route path="elite-assessment" element={<EliteAssessment />} />
+              <Route path="elite-strategy" element={<EliteStrategy />} />
+              <Route path="elite-plan-preview" element={<ElitePlanPreview />} />
             </Route>
           </Routes>
         </Suspense>

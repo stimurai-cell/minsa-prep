@@ -13,6 +13,7 @@ export default function Battle() {
     const [matches, setMatches] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [autoJoinedMatchId, setAutoJoinedMatchId] = useState<string | null>(null);
+    const EXPIRATION_MINUTES = 5;
 
     const isElite = profile?.role === 'elite' || profile?.role === 'admin';
 
@@ -24,7 +25,24 @@ export default function Battle() {
             .or(`challenger_id.eq.${profile.id},opponent_id.eq.${profile.id}`)
             .order('created_at', { ascending: false });
 
-        if (data) setMatches(data);
+        if (data) {
+            // Expirar convites antigos (apenas se o usuário é o desafiante)
+            const now = Date.now();
+            const expiredIds = data
+                .filter(m => m.status === 'pending' && m.challenger_id === profile.id)
+                .filter(m => {
+                    const created = new Date(m.created_at).getTime();
+                    const diffMinutes = (now - created) / 60000;
+                    return diffMinutes >= EXPIRATION_MINUTES;
+                })
+                .map(m => m.id);
+
+            if (expiredIds.length > 0) {
+                await supabase.from('battle_matches').update({ status: 'expired' }).in('id', expiredIds);
+            }
+
+            setMatches(data);
+        }
     };
 
     useEffect(() => {
@@ -213,6 +231,11 @@ export default function Battle() {
                                                 {m.status === 'pending' ? (isOpponent ? `Desafio de ${otherName}` : `Aguardando ${otherName}`) : `Batalha contra ${otherName}`}
                                             </p>
                                             <p className="text-[10px] uppercase font-black tracking-widest text-slate-400 mt-1">{m.status}</p>
+                                            {m.status === 'pending' && m.challenger_id === profile?.id && (
+                                                <p className="text-[10px] text-amber-500 font-black mt-1">
+                                                    Expira em {Math.max(0, EXPIRATION_MINUTES - Math.floor((Date.now() - new Date(m.created_at).getTime()) / 60000))} min
+                                                </p>
+                                            )}
                                         </div>
                                         {m.status === 'pending' && isOpponent && (
                                             <div className="flex gap-2">
