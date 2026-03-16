@@ -61,8 +61,9 @@ export default function EliteAssessment() {
   const loadAreasAndQuestions = async () => {
     console.log('loadAreasAndQuestions called, profile:', profile);
     if (!profile?.selected_area_id) {
-      console.log('No selected_area_id, returning');
+      console.log('No selected_area_id, redirecting');
       setLoading(false);
+      navigate('/dashboard');
       return;
     }
 
@@ -142,9 +143,9 @@ export default function EliteAssessment() {
         if (response.ok) {
           const data = await response.json();
           console.log('Response data:', data);
-          if (data.questions?.[0]) {
+          if (data?.questions?.[0]?.alternatives) {
             assessmentQuestions.push({
-              id: crypto.randomUUID(),
+              id: crypto?.randomUUID?.() || Math.random().toString(),
               text: data.questions[0].question,
               topic: topic.name,
               alternatives: data.questions[0].alternatives
@@ -232,8 +233,8 @@ export default function EliteAssessment() {
 
       questions.forEach((question, index) => {
         const userAnswer = answers[question.id];
-        const correctAlternative = question.alternatives.findIndex(alt => alt.isCorrect);
-        const isCorrect = parseInt(userAnswer) === correctAlternative;
+        const correctAlternative = question.alternatives?.findIndex(alt => alt.isCorrect);
+        const isCorrect = userAnswer !== undefined && parseInt(userAnswer) === correctAlternative;
 
         if (isCorrect) correctCount++;
 
@@ -431,6 +432,13 @@ export default function EliteAssessment() {
     navigate('/elite-plan-preview');
   };
 
+  // Debug log para identificar tela preta
+  console.log({
+    loading,
+    questionsLength: questions.length,
+    showPersonalQuestions
+  });
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-amber-50 to-emerald-50 flex items-center justify-center">
@@ -438,6 +446,29 @@ export default function EliteAssessment() {
           <div className="animate-spin rounded-full h-16 w-16 border-4 border-amber-200 border-t-amber-600"></div>
           <h2 className="text-2xl font-bold text-slate-900 mb-2 mt-4">Preparando sua avaliação</h2>
           <p className="text-slate-600">Analisando os melhores tópicos para você...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback para quando não há perguntas geradas
+  if (!loading && questions.length === 0 && !showPersonalQuestions) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-emerald-50 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="mb-6">
+            <AlertCircle className="h-16 w-16 text-amber-600 mx-auto" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-4">Não foi possível gerar perguntas</h2>
+          <p className="text-slate-600 mb-6">
+            Ocorreu um erro ao carregar as perguntas da avaliação. Por favor, tente novamente.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-3 bg-amber-500 text-white rounded-xl font-bold hover:bg-amber-600 transition-colors"
+          >
+            Tentar novamente
+          </button>
         </div>
       </div>
     );
@@ -697,9 +728,13 @@ export default function EliteAssessment() {
             </div>
           </div>
           <div className="w-full bg-slate-200 rounded-full h-3">
-            <div 
+            <div
               className="bg-gradient-to-r from-amber-500 to-emerald-500 h-3 rounded-full transition-all duration-300"
-              style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
+              style={{
+                width: questions.length
+                  ? `${((currentQuestion + 1) / questions.length) * 100}%`
+                  : '0%'
+              }}
             />
           </div>
         </div>
@@ -718,7 +753,7 @@ export default function EliteAssessment() {
             </div>
 
             <div className="space-y-3">
-              {questions[currentQuestion].alternatives.map((alternative, index) => (
+              {questions[currentQuestion]?.alternatives?.map((alternative, index) => (
                 <button
                   key={index}
                   onClick={() => handleAnswer(questions[currentQuestion].id, index.toString())}
