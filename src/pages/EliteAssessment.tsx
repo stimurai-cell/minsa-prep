@@ -408,8 +408,10 @@ export default function EliteAssessment() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-amber-50 to-emerald-50 flex items-center justify-center">
         <div className="text-center">
-          <Brain className="h-16 w-16 text-amber-600 mx-auto mb-4 animate-pulse" />
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Preparando sua avaliação</h2>
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-amber-200 border-t-amber-600">
+            <div className="h-8 w-8 bg-amber-600 rounded-full"></div>
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2 mt-4">Preparando sua avaliação</h2>
           <p className="text-slate-600">Analisando os melhores tópicos para você...</p>
         </div>
       </div>

@@ -60,6 +60,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     if (error) {
       console.error('Profile refresh error:', error);
+      // Não mostrar erro genérico para usuário - apenas log no console
       return null;
     }
 
@@ -84,6 +85,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
     } catch (error) {
       console.error('Session check error:', error);
+      // Não mostrar erro genérico para usuário - apenas log no console
     } finally {
       set({ loading: false });
     }
@@ -99,6 +101,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         .eq('id', user.id);
     } catch (error) {
       console.error('Error updating last_active:', error);
+      // Não mostrar erro genérico para usuário - apenas log no console
     }
   },
 }));
