@@ -18,6 +18,11 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch((err) => {
       console.error('[SW] Falha ao registar sw.js:', err);
     });
+
+    // Quando um novo SW assumir o controlo, recarrega para limpar HTML antigo em cache
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      window.location.reload();
+    });
   });
 }
 

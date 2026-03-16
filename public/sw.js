@@ -18,35 +18,38 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
-const CACHE_NAME = 'minsa-prep-v1.0.7';
+// Atualize esta versão sempre que houver release para forçar refresh em PWAs antigos
+const CACHE_NAME = 'minsa-prep-v1.0.8';
 const DATA_CACHE_NAME = 'minsa-prep-data-v1';
 
 const ASSETS_TO_CACHE = [
     '/',
     '/index.html',
-    '/manifest.json'
+    '/manifest.json',
+    '/version.json'
 ];
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll(ASSETS_TO_CACHE);
-        })
+        caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
     );
 });
 
 self.addEventListener('activate', (event) => {
     event.waitUntil(
-        caches.keys().then((cacheNames) => {
-            return Promise.all(
-                cacheNames.map((cacheName) => {
-                    if (cacheName !== CACHE_NAME && cacheName !== DATA_CACHE_NAME) {
-                        return caches.delete(cacheName);
-                    }
-                })
-            );
-        }).then(() => self.clients.claim())
+        caches.keys().then((cacheNames) => Promise.all(
+            cacheNames.map((cacheName) => {
+                if (cacheName !== CACHE_NAME && cacheName !== DATA_CACHE_NAME) {
+                    return caches.delete(cacheName);
+                }
+                return null;
+            })
+        )).then(async () => {
+            await self.clients.claim();
+            const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+            clients.forEach((client) => client.postMessage({ type: 'SW_UPDATED' }));
+        })
     );
 });
 
@@ -59,43 +62,56 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Caching de Dados da API (GET)
-    if (url.includes('supabase.co') || url.includes('/api/')) {
-        if (method === 'GET') {
-            event.respondWith(
-                fetch(request)
-                    .then((response) => {
-                        const resClone = response.clone();
-                        caches.open(DATA_CACHE_NAME).then((cache) => cache.put(url, resClone));
-                        return response;
-                    })
-                    .catch(() => caches.match(url))
-            );
-            return;
-        }
+    // Navegações HTML: rede primeiro para garantir HTML mais recente (corrige PWA em branco)
+    const isNavigation = request.mode === 'navigate' || (request.headers.get('accept') || '').includes('text/html');
+    if (isNavigation) {
+        event.respondWith(
+            fetch('/index.html', { cache: 'no-store' })
+                .then((response) => {
+                    const resClone = response.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', resClone));
+                    return response;
+                })
+                .catch(() => caches.match('/index.html'))
+        );
+        return;
     }
 
-    // Assets Estáticos: Stale-While-Revalidate
+    // Caching de Dados da API (GET)
+    if ((url.includes('supabase.co') || url.includes('/api/')) && method === 'GET') {
+        event.respondWith(
+            fetch(request)
+                .then((response) => {
+                    const resClone = response.clone();
+                    caches.open(DATA_CACHE_NAME).then((cache) => cache.put(url, resClone));
+                    return response;
+                })
+                .catch(() => caches.match(url))
+        );
+        return;
+    }
+
+    // Assets estáticos: Stale-While-Revalidate
     event.respondWith(
         caches.match(request).then((cachedResponse) => {
             if (cachedResponse) {
                 return cachedResponse;
             }
-            
-            return fetch(request).then((networkResponse) => {
-                if (networkResponse && networkResponse.status === 200 && request.method === 'GET') {
-                    const resClone = networkResponse.clone();
-                    caches.open(CACHE_NAME).then((cache) => {
-                        return cache.put(request, resClone);
-                    });
-                }
-                return networkResponse;
-            }).catch(() => null);
+
+            return fetch(request)
+                .then((networkResponse) => {
+                    if (networkResponse && networkResponse.status === 200 && request.method === 'GET') {
+                        const resClone = networkResponse.clone();
+                        caches.open(CACHE_NAME).then((cache) => cache.put(request, resClone));
+                    }
+                    return networkResponse;
+                })
+                .catch(() => null);
         })
     );
 });
 
-// ─── Firebase Cloud Messaging ──────────────────────────────────────────────────────
+// ─── Firebase Cloud Messaging ────────────────────────────────────────────────
 
 // Background message handler - Recebe mensagens quando app está em 2º plano
 messaging.onBackgroundMessage((payload) => {
@@ -108,7 +124,7 @@ messaging.onBackgroundMessage((payload) => {
         badge: 'https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png',
         vibrate: [200, 100, 200],
         requireInteraction: false,
-        data: { 
+        data: {
             url: payload.data?.url || '/dashboard',
             click_action: payload.fcmOptions?.link || '/dashboard'
         },
@@ -126,10 +142,10 @@ self.addEventListener('push', (event) => {
     let data = { title: 'MINSA Prep', body: 'Tens uma nova notificação!', url: '/dashboard' };
 
     if (event.data) {
-        try { 
-            data = { ...data, ...event.data.json() }; 
-        } catch (e) { 
-            data.body = event.data.text() || data.body; 
+        try {
+            data = { ...data, ...event.data.json() };
+        } catch (e) {
+            data.body = event.data.text() || data.body;
         }
     }
 
@@ -174,6 +190,7 @@ self.addEventListener('notificationclick', (event) => {
             if (clients.openWindow) {
                 return clients.openWindow(urlToOpen);
             }
+            return null;
         })
     );
 });

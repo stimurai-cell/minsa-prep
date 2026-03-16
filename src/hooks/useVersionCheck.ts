@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 // This matches the version in version.json
-const CURRENT_VERSION = '1.0.2';
+const CURRENT_VERSION = '1.0.3';
 
 export function useVersionCheck() {
     const [needsUpdate, setNeedsUpdate] = useState(false);
@@ -32,9 +32,8 @@ export function useVersionCheck() {
 
     useEffect(() => {
         if (needsUpdate) {
-            // In a more aggressive setup, we could force reload
-            // window.location.reload(true);
-            // But let's show a UI hint instead or handle it gracefully
+            // ForÃ§a reload para limpar HTML/CSS/JS antigos em PWAs em cache
+            setTimeout(() => window.location.reload(), 500);
         }
     }, [needsUpdate]);
 
