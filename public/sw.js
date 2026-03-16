@@ -83,7 +83,7 @@ self.addEventListener('fetch', (event) => {
             }
             
             return fetch(request).then((networkResponse) => {
-                if (networkResponse && networkResponse.status === 200) {
+                if (networkResponse && networkResponse.status === 200 && request.method === 'GET') {
                     const resClone = networkResponse.clone();
                     caches.open(CACHE_NAME).then((cache) => {
                         return cache.put(request, resClone);
