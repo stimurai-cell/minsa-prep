@@ -48,6 +48,16 @@ export default function AdminContent() {
         }
     }, [genArea, fetchTopics]);
 
+    const safeJson = async (res: Response) => {
+        const text = await res.text();
+        try {
+            return JSON.parse(text);
+        } catch {
+            console.error('Resposta não-JSON da API:', text.substring(0, 500));
+            throw new Error(`A API retornou uma resposta inválida. Verifique o Vercel. (${res.status} ${res.statusText})`);
+        }
+    };
+
     const fetchGeminiStatus = async () => {
         try {
             const res = await fetch('/api/generate-questions', {
@@ -55,7 +65,7 @@ export default function AdminContent() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'status' })
             });
-            const data = await res.json();
+            const data = await safeJson(res);
             if (res.ok && data) {
                 setGeminiModel(data.model || 'Desconhecido');
                 setGeminiMode(data.mode || 'N/A');
@@ -177,7 +187,7 @@ export default function AdminContent() {
                 })
             });
 
-            const data = await res.json();
+            const data = await safeJson(res);
             if (!res.ok) throw new Error(data.error || 'Erro na API');
 
             setGenResult(data);
@@ -202,7 +212,7 @@ export default function AdminContent() {
                 })
             });
 
-            const data = await res.json();
+            const data = await safeJson(res);
             if (!res.ok) throw new Error(data.error || 'Erro ao guardar');
 
             alert(`✅ ${data.saved_count} perguntas guardadas com sucesso no banco de dados!`);

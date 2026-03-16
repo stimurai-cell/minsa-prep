@@ -295,7 +295,7 @@ export default async function handler(req: any, res: any) {
           alternativesCount,
         }),
         config: {
-          responseMimeType: 'text/plain', // Mudando para text/plain para forçar parse manual
+          responseMimeType: 'application/json',
         },
       });
 
