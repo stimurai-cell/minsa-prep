@@ -1,0 +1,8 @@
+{
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "headers": { "X-Frame-Options": "DENY" }
+    }
+  ]
+}
