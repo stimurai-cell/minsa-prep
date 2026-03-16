@@ -8,6 +8,7 @@ export default function BattleAutoJoin() {
   const { profile } = useAuthStore();
   const navigate = useNavigate();
   const lastMatchRef = useRef<string | null>(null);
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -28,6 +29,8 @@ export default function BattleAutoJoin() {
     };
 
     enterIfActive();
+    // Fallback de polling a cada 2s para reduzir latência se o realtime atrasar
+    pollRef.current = setInterval(enterIfActive, 2000);
 
     const channel = supabase
       .channel(`battle-live-${profile.id}`)
@@ -65,6 +68,7 @@ export default function BattleAutoJoin() {
 
     return () => {
       supabase.removeChannel(channel);
+      if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [profile?.id, navigate]);
 

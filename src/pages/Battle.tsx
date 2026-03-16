@@ -145,6 +145,8 @@ export default function Battle() {
 
         if (!error) {
             navigate(`/battle/${matchId}`);
+            // Garantir que o desafiante receba rapidamente a mudança via polling de autojoin
+            localStorage.setItem('lastAcceptedBattle', matchId);
         }
     };
 
