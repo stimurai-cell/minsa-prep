@@ -177,6 +177,8 @@ export default async function handler(req: any, res: any) {
         }
 
         const result = JSON.parse(response.text);
+        console.log('Raw Gemini response:', response.text);
+        console.log('Parsed result:', JSON.stringify(result, null, 2));
         
         // Mark as contest highlight if requested
         if (is_contest_highlight && result.questions) {
