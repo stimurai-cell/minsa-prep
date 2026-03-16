@@ -459,67 +459,68 @@ export default function Dashboard() {
             )}
 
             <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-[1.6rem] border-2 border-orange-100 bg-orange-50 shadow-[0_6px_0_0_#ffedd5] p-4 md:p-5 flex flex-col gap-3 transition-transform hover:-translate-y-1 relative group">
-              <p className="text-sm font-bold text-orange-600 uppercase tracking-widest">Ofensiva</p>
-              <div className="flex items-center justify-between gap-3">
-                <p className="flex items-center gap-2 text-3xl font-black text-orange-600 leading-none">
-                  <Flame className="h-7 w-7 fill-current" />
-                  {(profile?.streak_count || 0)} dias
-                </p>
-                {profile?.streak_freeze_active ? (
-                  <div className="bg-blue-500 text-white p-1 rounded-full animate-pulse" title="Protegido">
-                    <ShieldCheck className="w-5 h-5" />
-                  </div>
-                ) : (
-                  (profile?.total_xp || 0) >= 1000 && (
-                    <button
-                      onClick={handleBuyStreakFreeze}
-                      disabled={freezingStreak}
-                      className="hidden group-hover:flex items-center gap-1 bg-blue-100 text-blue-600 px-2 py-1 rounded-lg text-[10px] font-bold border border-blue-200 transition-all"
-                    >
-                      <Zap className="w-3 h-3" /> {freezingStreak ? '...' : 'PROTEGER'}
-                    </button>
-                  )
-                )}
-              </div>
-              <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-[0.16em] text-orange-700">
-                <span>Esta semana</span>
-                <span className="text-orange-500">{streakLoading ? 'Atualizando...' : 'Check-in diario real'}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {streakWeek.map((day) => (
-                  <div
-                    key={day.date}
-                    className={`flex-1 rounded-xl px-2 py-2 text-center border ${day.completed ? 'bg-white border-orange-200 text-orange-700 shadow-sm' : 'bg-orange-100 border-orange-200/60 text-orange-400'}`}
-                    title={day.date}
-                  >
-                    <div className="text-[11px] font-black">{day.label}</div>
-                    <div className="mt-1 flex items-center justify-center">
-                      {day.completed ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <Circle className="w-4 h-4 text-orange-300" />}
+              <div className="rounded-[1.6rem] border-2 border-orange-100 bg-orange-50 shadow-[0_6px_0_0_#ffedd5] p-4 md:p-5 flex flex-col gap-3 transition-transform hover:-translate-y-1 relative group">
+                <p className="text-sm font-bold text-orange-600 uppercase tracking-widest">Ofensiva</p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="flex items-center gap-2 text-3xl font-black text-orange-600 leading-none">
+                    <Flame className="h-7 w-7 fill-current" />
+                    {(profile?.streak_count || 0)} dias
+                  </p>
+                  {profile?.streak_freeze_active ? (
+                    <div className="bg-blue-500 text-white p-1 rounded-full animate-pulse" title="Protegido">
+                      <ShieldCheck className="w-5 h-5" />
                     </div>
-                  </div>
-                ))}
+                  ) : (
+                    (profile?.total_xp || 0) >= 1000 && (
+                      <button
+                        onClick={handleBuyStreakFreeze}
+                        disabled={freezingStreak}
+                        className="hidden group-hover:flex items-center gap-1 bg-blue-100 text-blue-600 px-2 py-1 rounded-lg text-[10px] font-bold border border-blue-200 transition-all"
+                      >
+                        <Zap className="w-3 h-3" /> {freezingStreak ? '...' : 'PROTEGER'}
+                      </button>
+                    )
+                  )}
+                </div>
+                <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-[0.16em] text-orange-700">
+                  <span>Esta semana</span>
+                  <span className="text-orange-500">{streakLoading ? 'Atualizando...' : 'Check-in diario real'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {streakWeek.map((day) => (
+                    <div
+                      key={day.date}
+                      className={`flex-1 rounded-xl px-2 py-2 text-center border ${day.completed ? 'bg-white border-orange-200 text-orange-700 shadow-sm' : 'bg-orange-100 border-orange-200/60 text-orange-400'}`}
+                      title={day.date}
+                    >
+                      <div className="text-[11px] font-black">{day.label}</div>
+                      <div className="mt-1 flex items-center justify-center">
+                        {day.completed ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <Circle className="w-4 h-4 text-orange-300" />}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => navigate('/news?tab=achievements')}
+                  className="mt-1 text-xs font-bold text-orange-700 underline-offset-2 hover:underline text-left"
+                >
+                  Ver linha do tempo da ofensiva
+                </button>
               </div>
-              <button
-                onClick={() => navigate('/news?tab=achievements')}
-                className="mt-1 text-xs font-bold text-orange-700 underline-offset-2 hover:underline text-left"
-              >
-                Ver linha do tempo da ofensiva
-              </button>
-            </div>
-            <div className="rounded-[1.6rem] border border-white/60 bg-white/90 p-4 md:p-5">
-              <p className="text-sm font-medium text-slate-500">Ultima simulacao de prova</p>
-              <p className="mt-2 flex items-center gap-2 text-2xl font-black text-slate-900">
-                <Clock3 className="h-5 w-5 text-sky-600" />
-                {stats.lastSimScore}%
-              </p>
-            </div>
-            <div className="rounded-[1.6rem] border-2 border-yellow-200 bg-yellow-50 shadow-[0_6px_0_0_#fef08a] p-4 md:p-5 flex flex-col justify-between transition-transform hover:-translate-y-1">
-              <p className="text-sm font-bold text-yellow-700 uppercase tracking-widest">XP Total</p>
-              <p className="mt-2 flex items-center gap-2 text-3xl font-black text-yellow-600">
-                <Award className="h-7 w-7" fill="currentColor" />
-                {profile?.total_xp || 0}
-              </p>
+              <div className="rounded-[1.6rem] border border-white/60 bg-white/90 p-4 md:p-5">
+                <p className="text-sm font-medium text-slate-500">Ultima simulacao de prova</p>
+                <p className="mt-2 flex items-center gap-2 text-2xl font-black text-slate-900">
+                  <Clock3 className="h-5 w-5 text-sky-600" />
+                  {stats.lastSimScore}%
+                </p>
+              </div>
+              <div className="rounded-[1.6rem] border-2 border-yellow-200 bg-yellow-50 shadow-[0_6px_0_0_#fef08a] p-4 md:p-5 flex flex-col justify-between transition-transform hover:-translate-y-1">
+                <p className="text-sm font-bold text-yellow-700 uppercase tracking-widest">XP Total</p>
+                <p className="mt-2 flex items-center gap-2 text-3xl font-black text-yellow-600">
+                  <Award className="h-7 w-7" fill="currentColor" />
+                  {profile?.total_xp || 0}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -540,7 +541,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 mt-4">
             <Link
               to="/training"
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 text-sm font-semibold text-white transition hover:bg-emerald-700"
@@ -570,70 +571,70 @@ export default function Dashboard() {
               Modo Relâmpago
             </Link>
           </div>
-        </div>
+        </section>
+      )}
 
-        {/* Card Especial Concurso (Apenas para quem tem esse objetivo) */}
-        {(profile as any)?.goal === "Passar no concurso público" && (
-          <div
-            className="rounded-[2.5rem] border-2 border-slate-900 bg-[#0A1128] p-8 text-white shadow-2xl relative overflow-hidden group hover:scale-[1.01] transition-all cursor-pointer"
-            onClick={() => navigate('/contest')}
-          >
-            <div className="relative z-10">
-              <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400 mb-5 border border-emerald-500/20">
-                <Sparkles className="w-3.5 h-3.5" />
-                Destaque Exclusivo
-              </div>
-              <h3 className="text-3xl md:text-4xl font-black tracking-tight leading-tight">
-                Preparação para o <br />
-                <span className="text-emerald-400">Concurso MINSA</span>
-              </h3>
-              <p className="mt-4 text-slate-400 text-sm font-medium pr-20 leading-relaxed max-w-xl">
-                Acesse simulados focados 100% no edital de saúde: Legislação Nacional,
-                Ética Profissional e Deontologia. Tudo em um só lugar.
-              </p>
-              <div className="mt-8 flex items-center gap-3 text-emerald-400 font-black text-[10px] uppercase tracking-[0.25em] group-hover:gap-5 transition-all">
-                Abrir Módulo de Concurso
-                <ArrowRight className="w-4 h-4" />
-              </div>
+      {/* Card Especial Concurso (Apenas para quem tem esse objetivo) */}
+      {(profile as any)?.goal === "Passar no concurso público" && (
+        <div
+          className="rounded-[2.5rem] border-2 border-slate-900 bg-[#0A1128] p-8 text-white shadow-2xl relative overflow-hidden group hover:scale-[1.01] transition-all cursor-pointer"
+          onClick={() => navigate('/contest')}
+        >
+          <div className="relative z-10">
+            <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400 mb-5 border border-emerald-500/20">
+              <Sparkles className="w-3.5 h-3.5" />
+              Destaque Exclusivo
             </div>
-
-            {/* Efeito visual de fundo */}
-            <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl group-hover:bg-emerald-500/10 transition-colors"></div>
-            <AwardIcon className="absolute -right-6 -bottom-6 w-40 h-40 text-white/5 rotate-12 group-hover:scale-110 group-hover:rotate-0 transition-all duration-500" />
+            <h3 className="text-3xl md:text-4xl font-black tracking-tight leading-tight">
+              Preparação para o <br />
+              <span className="text-emerald-400">Concurso MINSA</span>
+            </h3>
+            <p className="mt-4 text-slate-400 text-sm font-medium pr-20 leading-relaxed max-w-xl">
+              Acesse simulados focados 100% no edital de saúde: Legislação Nacional,
+              Ética Profissional e Deontologia. Tudo em um só lugar.
+            </p>
+            <div className="mt-8 flex items-center gap-3 text-emerald-400 font-black text-[10px] uppercase tracking-[0.25em] group-hover:gap-5 transition-all">
+              Abrir Módulo de Concurso
+              <ArrowRight className="w-4 h-4" />
+            </div>
           </div>
-        )}
 
-        <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)] md:p-6">
-          <h2 className="text-xl font-black text-slate-900">Dominio por topico</h2>
-          <div className="mt-5 space-y-4">
-            {topicProgress.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                Ainda nao existem respostas registadas. Comece a treinar para ver o seu dominio crescer.
-              </p>
-            ) : (
-              topicProgress.map((progress, idx) => (
-                <div key={idx} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <span className="font-semibold text-slate-800">{progress.topics?.name}</span>
-                    <span className="text-sm font-bold text-slate-500">{Math.round(progress.domain_score)}%</span>
-                  </div>
-                  <div className="h-2.5 w-full rounded-full bg-slate-200">
-                    <div
-                      className={`h-2.5 rounded-full ${progress.domain_score >= 80
-                        ? 'bg-emerald-500'
-                        : progress.domain_score >= 50
-                          ? 'bg-orange-500'
-                          : 'bg-red-500'
-                        }`}
-                      style={{ width: `${progress.domain_score}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+          {/* Efeito visual de fundo */}
+          <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl group-hover:bg-emerald-500/10 transition-colors"></div>
+          <AwardIcon className="absolute -right-6 -bottom-6 w-40 h-40 text-white/5 rotate-12 group-hover:scale-110 group-hover:rotate-0 transition-all duration-500" />
         </div>
-      </section>
+      )}
+
+      <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.4)] md:p-6">
+        <h2 className="text-xl font-black text-slate-900">Dominio por topico</h2>
+        <div className="mt-5 space-y-4">
+          {topicProgress.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              Ainda nao existem respostas registadas. Comece a treinar para ver o seu dominio crescer.
+            </p>
+          ) : (
+            topicProgress.map((progress, idx) => (
+              <div key={idx} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="font-semibold text-slate-800">{progress.topics?.name}</span>
+                  <span className="text-sm font-bold text-slate-500">{Math.round(progress.domain_score)}%</span>
+                </div>
+                <div className="h-2.5 w-full rounded-full bg-slate-200">
+                  <div
+                    className={`h-2.5 rounded-full ${progress.domain_score >= 80
+                      ? 'bg-emerald-500'
+                      : progress.domain_score >= 50
+                        ? 'bg-orange-500'
+                        : 'bg-red-500'
+                      }`}
+                    style={{ width: `${progress.domain_score}%` }}
+                  ></div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
 
       <section className="grid gap-6 md:grid-cols-2">
         <DailyTasks />
@@ -660,3 +661,76 @@ export default function Dashboard() {
           </p>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            <Link
+              to="/training"
+              className="group flex flex-col items-center justify-center gap-2 rounded-[1.4rem] border-2 border-emerald-100 bg-emerald-50 p-5 text-center transition hover:border-emerald-300 hover:bg-emerald-100 hover:shadow-md"
+            >
+              <PlayCircle className="h-7 w-7 text-emerald-600 transition group-hover:scale-110" />
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-700">Treinar</span>
+            </Link>
+            <Link
+              to="/simulation"
+              className="group flex flex-col items-center justify-center gap-2 rounded-[1.4rem] border-2 border-sky-100 bg-sky-50 p-5 text-center transition hover:border-sky-300 hover:bg-sky-100 hover:shadow-md"
+            >
+              <Clock3 className="h-7 w-7 text-sky-600 transition group-hover:scale-110" />
+              <span className="text-xs font-black uppercase tracking-wider text-sky-700">Simulação</span>
+            </Link>
+            <Link
+              to="/statistics"
+              className="group flex flex-col items-center justify-center gap-2 rounded-[1.4rem] border-2 border-violet-100 bg-violet-50 p-5 text-center transition hover:border-violet-300 hover:bg-violet-100 hover:shadow-md"
+            >
+              <BarChart2 className="h-7 w-7 text-violet-600 transition group-hover:scale-110" />
+              <span className="text-xs font-black uppercase tracking-wider text-violet-700">Estatísticas</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* Premium CTA */}
+        {profile?.role === 'free' && (
+          <div
+            className="rounded-[2rem] border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-6 flex flex-col gap-4 shadow-sm cursor-pointer hover:shadow-md transition-all"
+            onClick={() => navigate('/premium')}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0">
+                <Crown className="w-6 h-6 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-amber-600 mb-1">Plano Premium</p>
+                <h3 className="font-black text-slate-900 text-lg leading-tight">Desbloqueie seu potencial total</h3>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600 font-medium leading-relaxed">
+              Acesse questões ilimitadas, simulações avançadas e o plano de estudo personalizado para a sua aprovação.
+            </p>
+            <div className="flex items-center gap-2 text-amber-700 font-black text-sm">
+              Ver planos disponíveis <ArrowRight className="w-4 h-4" />
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Install App Banner */}
+      {deferredPrompt && (
+        <div className="rounded-[2rem] border border-slate-200 bg-gradient-to-r from-slate-900 to-slate-800 p-5 md:p-6 flex flex-col sm:flex-row items-center gap-5 shadow-xl">
+          <div className="w-14 h-14 rounded-[1.4rem] bg-white/10 flex items-center justify-center shrink-0">
+            <Download className="w-7 h-7 text-white" />
+          </div>
+          <div className="flex-1 text-center sm:text-left">
+            <h3 className="text-lg font-black text-white">Instalar App no Dispositivo</h3>
+            <p className="mt-1 text-slate-400 text-sm font-medium">
+              Aceda ao MINSA Prep mais rápido, mesmo sem internet, diretamente do seu ecrã inicial.
+            </p>
+          </div>
+          <button
+            onClick={handleInstallClick}
+            className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-900 hover:bg-slate-100 transition-all shrink-0"
+          >
+            <Download className="h-4 w-4" />
+            Instalar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

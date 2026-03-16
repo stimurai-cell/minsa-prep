@@ -51,7 +51,7 @@ export class EliteStrategyManager {
 
     // Tentar gerar plano personalizado com base nas informações
     const personalizedPlan = this.generatePersonalizedPlan(assessmentResults, personalProfile);
-    
+
     const { data, error } = await supabase
       .from('elite_study_plans')
       .insert({
@@ -120,18 +120,18 @@ export class EliteStrategyManager {
     baseTime: string
   ): DailyActivity {
     const { daily_study_time, exam_experience, self_declared_weak_area } = personalProfile;
-    
+
     // Lógica baseada na experiência
     const activityType = this.getActivityByExperience(exam_experience, dayIndex);
-    
+
     // Lógica baseada no tempo disponível
     const estimatedTime = this.getTimeByIntensity(daily_study_time);
-    
+
     // Foco principal: área mais fraca ou tópicos da avaliação
-    const focusTopic = self_declared_weak_area || 
-                         assessmentResults.weakTopics?.[dayIndex - 1] || 
-                         assessmentResults.strongTopics?.[dayIndex - 1] || 
-                         'Revisão geral';
+    const focusTopic = self_declared_weak_area ||
+      assessmentResults.weakTopics?.[dayIndex - 1] ||
+      assessmentResults.strongTopics?.[dayIndex - 1] ||
+      'Revisão geral';
 
     // Variar horários levemente para evitar monotonia
     const timeVariation = (dayIndex % 2) * 0.5; // Alternar entre baseTime e baseTime + 30min
@@ -188,7 +188,7 @@ export class EliteStrategyManager {
     return `${String(hours).padStart(2, '0')}:${String(adjustedMinutes).padStart(2, '0')}`;
   }
 
-  static async createWeeklyStrategy(userId: string, assessmentResults: any): Promise<StudyStrategy> {
+  static async createWeeklyStrategyBasic(userId: string, assessmentResults: any): Promise<StudyStrategy> {
     const weekStart = new Date();
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
@@ -237,9 +237,9 @@ export class EliteStrategyManager {
         };
       } else {
         // Dias de semana - Foco nos pontos fracos
-        const focusTopic = assessmentResults.weakTopics?.[index - 1] || 
-                          assessmentResults.strongTopics?.[index - 1] || 
-                          'Revisão geral';
+        const focusTopic = assessmentResults.weakTopics?.[index - 1] ||
+          assessmentResults.strongTopics?.[index - 1] ||
+          'Revisão geral';
         plan[day] = {
           type: 'study',
           focus: focusTopic,
@@ -253,8 +253,8 @@ export class EliteStrategyManager {
   }
 
   static async updateDailyActivity(
-    userId: string, 
-    day: string, 
+    userId: string,
+    day: string,
     activityData: Partial<DailyActivity>
   ): Promise<void> {
     const { data: currentPlan } = await supabase
@@ -333,7 +333,7 @@ export class EliteStrategyManager {
     if (personalProfile) {
       await this.createWeeklyStrategy(userId, newAssessmentResults, personalProfile as PersonalProfile);
     } else {
-      await this.createWeeklyStrategy(userId, newAssessmentResults);
+      await this.createWeeklyStrategyBasic(userId, newAssessmentResults);
     }
   }
 
@@ -431,7 +431,7 @@ export class EliteStrategyManager {
     // Verificar se todos os dias foram completados
     const dailyPlan = plan.daily_plan as Record<string, DailyActivity>;
     const completedDays = Object.values(dailyPlan).filter(day => day.completed).length;
-    
+
     return completedDays === Object.keys(dailyPlan).length;
   }
 
