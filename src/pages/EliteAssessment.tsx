@@ -59,38 +59,56 @@ export default function EliteAssessment() {
   }, []);
 
   const loadAreasAndQuestions = async () => {
-    if (!profile?.selected_area_id) return;
+    console.log('loadAreasAndQuestions called, profile:', profile);
+    if (!profile?.selected_area_id) {
+      console.log('No selected_area_id, returning');
+      setLoading(false);
+      return;
+    }
 
     try {
+      console.log('Loading areas and questions for area:', profile.selected_area_id);
+      
       // Carregar áreas para a pergunta de área mais difícil
       const { data: allAreas } = await supabase
         .from('areas')
         .select('*')
         .order('name');
 
+      console.log('Areas loaded:', allAreas?.length);
+
       if (allAreas) {
         setAreas(allAreas);
       }
 
       // Buscar tópicos que começam com número
-      const { data: topics } = await supabase
+      const { data: topics, error: topicsError } = await supabase
         .from('topics')
         .select('*')
         .eq('area_id', profile.selected_area_id)
         .or('name.ilike.1.%,name.ilike.1-%,name.ilike.2.%,name.ilike.2-%,name.ilike.3.%,name.ilike.3-%')
         .limit(10);
 
+      console.log('Topics query result:', topics, topicsError);
+
       if (!topics || topics.length === 0) {
-        const { data: fallbackTopics } = await supabase
+        console.log('No numbered topics found, using fallback');
+        const { data: fallbackTopics, error: fallbackError } = await supabase
           .from('topics')
           .select('*')
           .eq('area_id', profile.selected_area_id)
           .limit(10);
 
+        console.log('Fallback topics result:', fallbackTopics, fallbackError);
+
         if (fallbackTopics) {
           generateQuestionsFromTopics(fallbackTopics);
+        } else {
+          console.error('No topics found at all');
+          setLoading(false);
         }
       } else {
+        console.log('Using numbered topics');
         generateQuestionsFromTopics(topics);
       }
     } catch (error) {
@@ -102,8 +120,11 @@ export default function EliteAssessment() {
   const generateQuestionsFromTopics = async (topics: any[]) => {
     const assessmentQuestions: Question[] = [];
 
+    console.log('Starting to generate questions from topics:', topics.length);
+
     for (const topic of topics.slice(0, 8)) {
       try {
+        console.log('Generating question for topic:', topic.name);
         const response = await fetch('/api/generate-questions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -116,8 +137,11 @@ export default function EliteAssessment() {
           })
         });
 
+        console.log('Response status:', response.status);
+
         if (response.ok) {
           const data = await response.json();
+          console.log('Response data:', data);
           if (data.questions?.[0]) {
             assessmentQuestions.push({
               id: crypto.randomUUID(),
@@ -126,12 +150,15 @@ export default function EliteAssessment() {
               alternatives: data.questions[0].alternatives
             });
           }
+        } else {
+          console.error('Failed to generate question, status:', response.status);
         }
       } catch (error) {
-        console.error('Error generating question for topic:', topic.name);
+        console.error('Error generating question for topic:', topic.name, error);
       }
     }
 
+    console.log('Generated questions:', assessmentQuestions.length);
     setQuestions(assessmentQuestions);
     setLoading(false);
   };
