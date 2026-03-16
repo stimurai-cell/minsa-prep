@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Swords, Trophy, Timer, Loader2, ArrowLeft, ArrowRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -18,6 +18,7 @@ export default function BattleArena() {
     const [isFinished, setIsFinished] = useState(false);
     const [opponentProgress, setOpponentProgress] = useState(0);
     const [hasSyncedFinish, setHasSyncedFinish] = useState(false);
+    const pollRef = useRef<NodeJS.Timeout | null>(null);
 
     const seededShuffle = <T,>(items: T[], seed: string) => {
         // Mulberry32 PRNG for reproducible ordem
@@ -101,7 +102,13 @@ export default function BattleArena() {
             })
             .subscribe();
 
-        return () => { supabase.removeChannel(channel); };
+        // Polling de segurança (0.4s) para reduzir latência percebida
+        pollRef.current = setInterval(fetchMatchAndQuestions, 400);
+
+        return () => {
+            supabase.removeChannel(channel);
+            if (pollRef.current) clearInterval(pollRef.current);
+        };
     }, [matchId, profile?.id]);
 
     const handleAnswer = async (isCorrect: boolean) => {
@@ -130,13 +137,22 @@ export default function BattleArena() {
 
         setHasSyncedFinish(true);
         const isChallenger = profile?.id === match.challenger_id;
-        const challengerScore = isChallenger ? finalScore : match.challenger_score || 0;
-        const opponentScoreFinal = isChallenger ? opponentProgress : finalScore;
-        const winnerId = challengerScore === opponentScoreFinal
-            ? null
-            : challengerScore > opponentScoreFinal
-                ? match.challenger_id
-                : match.opponent_id;
+        const { data: fresh } = await supabase
+            .from('battle_matches')
+            .select('challenger_score, opponent_score, challenger_id, opponent_id')
+            .eq('id', matchId)
+            .single();
+
+        const challengerScore = isChallenger ? finalScore : (fresh?.challenger_score ?? match.challenger_score ?? 0);
+        const opponentScoreFinal = isChallenger ? (fresh?.opponent_score ?? opponentProgress) : finalScore;
+
+        // Critério: quem acertou mais; em empate, declarar empate (winner_id null)
+        const winnerId =
+            challengerScore === opponentScoreFinal
+                ? null
+                : challengerScore > opponentScoreFinal
+                    ? match.challenger_id
+                    : match.opponent_id;
 
         await supabase
             .from('battle_matches')
@@ -163,11 +179,19 @@ export default function BattleArena() {
             <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6 text-center">
                 <Trophy className="w-20 h-20 text-amber-500 mb-6" />
                 <h1 className="text-4xl font-black mb-2">Batalha Finalizada!</h1>
-                <p className="text-slate-400 mb-8">O resultado final será processado em instantes.</p>
+                <p className="text-slate-400 mb-8">
+                    Resultado: {match?.winner_id
+                        ? (match?.winner_id === profile?.id ? 'Você venceu!' : 'Seu oponente venceu.')
+                        : 'Empate (mesma pontuação).'}
+                </p>
                 <div className="bg-white/10 p-6 rounded-3xl backdrop-blur-md border border-white/20 w-full max-w-sm mb-8">
                     <div className="flex justify-between items-center mb-4">
                         <span className="font-bold">Sua Pontuação</span>
-                        <span className="text-2xl font-black">{score} / 10</span>
+                        <span className="text-2xl font-black">{score} / {questions.length}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <span className="font-bold">Oponente</span>
+                        <span className="text-2xl font-black text-fuchsia-300">{opponentProgress} / {questions.length}</span>
                     </div>
                 </div>
                 <button onClick={() => navigate('/battle')} className="bg-indigo-600 hover:bg-indigo-700 px-8 py-3 rounded-xl font-black">Voltar ao Menu</button>
