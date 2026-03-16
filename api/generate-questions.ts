@@ -235,6 +235,8 @@ export default async function handler(req: any, res: any) {
       // Save questions
       const savedQuestions = [];
       for (const question of questions) {
+        console.log('Saving question with content:', question.content);
+        console.log('Question alternatives:', question.alternatives);
         const { data: newQuestion, error: questionError } = await supabase
           .from('questions')
           .insert({
