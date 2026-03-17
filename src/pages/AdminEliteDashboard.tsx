@@ -102,7 +102,9 @@ export default function AdminEliteDashboard() {
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'active')
-      .single();
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
     return data;
   };
 

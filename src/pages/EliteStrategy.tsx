@@ -5,10 +5,21 @@ import { useAuthStore } from '../store/useAuthStore';
 import { supabase } from '../lib/supabase';
 
 interface DailyPlan {
-  type: 'study' | 'simulation' | 'planning' | 'review';
+  type:
+    | 'study'
+    | 'simulation'
+    | 'planning'
+    | 'review'
+    | 'training'
+    | 'practice'
+    | 'srs'
+    | 'speed_mode'
+    | 'rest'
+    | 'mini_simulation';
   focus: string;
-  estimatedTime: number;
-  topics: string[];
+  estimatedTime?: number;
+  topics?: string[];
+  time?: string | null;
   completed?: boolean;
   completedAt?: string;
 }
@@ -52,8 +63,29 @@ export default function EliteStrategy() {
         setStudyPlan(plan);
         calculateProgress(plan);
       } else {
-        // Se não encontrar plano ativo, redirecionar para avaliação
-        navigate('/elite-assessment');
+        const { data: legacyPlan } = await supabase
+          .from('study_plans')
+          .select('id, generated_at, plan_json')
+          .eq('user_id', profile.id)
+          .order('generated_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (legacyPlan?.plan_json) {
+          const parsed = legacyPlan.plan_json as any;
+          const mappedPlan: StudyPlan = {
+            id: legacyPlan.id,
+            week_start: parsed.week_start || legacyPlan.generated_at,
+            week_end: parsed.week_end || legacyPlan.generated_at,
+            daily_plan: parsed.daily_plan || {},
+            focus_topics: parsed.focus_topics || [],
+            status: 'active'
+          };
+          setStudyPlan(mappedPlan);
+          calculateProgress(mappedPlan);
+        } else {
+          navigate('/elite-plan-preview');
+        }
       }
     } catch (error) {
       console.error('Error loading study plan:', error);
@@ -91,14 +123,18 @@ export default function EliteStrategy() {
   };
 
   const handleStartDailyActivity = async (day: string, activity: DailyPlan) => {
-    if (activity.type === 'simulation') {
+    if (activity.type === 'simulation' || activity.type === 'mini_simulation') {
       navigate('/simulation?mode=weekly');
-    } else if (activity.type === 'study') {
-      navigate(`/training?topic=${encodeURIComponent(activity.focus)}&mode=elite`);
+    } else if (activity.type === 'speed_mode') {
+      navigate('/speed-mode');
+    } else if (activity.type === 'study' || activity.type === 'training' || activity.type === 'practice' || activity.type === 'review' || activity.type === 'srs') {
+      navigate(`/training?topic=${encodeURIComponent(activity.focus || 'Revisao geral')}&mode=elite`);
     } else if (activity.type === 'planning') {
-      navigate('/elite-planning');
+      navigate('/elite-plan-preview');
+    } else if (activity.type === 'rest') {
+      return;
     } else {
-      navigate('/review');
+      navigate('/training?mode=elite');
     }
   };
 
