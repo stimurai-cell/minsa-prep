@@ -116,7 +116,7 @@ export default function EliteAssessment() {
         .eq('user_id', profile.id)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
       if (data?.weak_topics?.length) {
         setSelectedTechnicalTopics(data.weak_topics.slice(0, 5));
       }
@@ -140,7 +140,7 @@ export default function EliteAssessment() {
   };
 
   const persistPersonalData = async () => {
-    await supabase.from('elite_profiles').upsert({
+    const { error } = await supabase.from('elite_profiles').upsert({
       user_id: profile?.id,
       daily_study_time: personalAnswers.daily_study_time,
       exam_experience: personalAnswers.exam_experience,
@@ -149,6 +149,7 @@ export default function EliteAssessment() {
       study_days: selectedDays,
       selected_area_id: profile?.selected_area_id || null
     });
+    if (error) throw error;
   };
 
   const getTimeSuggestions = () => {
@@ -270,6 +271,13 @@ export default function EliteAssessment() {
       created_at: new Date().toISOString()
     };
 
+    // Garante apenas um plano ativo por estudante antes de criar o novo
+    await supabase
+      .from('elite_study_plans')
+      .update({ status: 'archived', updated_at: new Date().toISOString() })
+      .eq('user_id', profile?.id)
+      .eq('status', 'active');
+
     const { error: planError } = await supabase.from('elite_study_plans').insert(planPayload);
 
     if (planError) {
@@ -352,6 +360,31 @@ export default function EliteAssessment() {
     } catch (error) {
       console.error('Error generating plan:', error);
       alert('Erro ao gerar plano. Tente novamente.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSkipTechnicalStep = async () => {
+    setSubmitting(true);
+    try {
+      const syntheticResults: AssessmentResult = {
+        totalQuestions: 0,
+        correctAnswers: 0,
+        score: 0,
+        weakTopics: [],
+        strongTopics: [],
+        recommendations: generateRecommendations([], [])
+      };
+
+      await generatePersonalizedStrategy(syntheticResults, personalAnswers);
+      setResults(syntheticResults);
+      setShowPersonalQuestions(false);
+      setShowTechnicalStep(false);
+      setShowResults(true);
+    } catch (error) {
+      console.error('Error generating fallback plan:', error);
+      alert('Erro ao gerar plano padrão. Tente novamente.');
     } finally {
       setSubmitting(false);
     }
@@ -492,7 +525,7 @@ export default function EliteAssessment() {
                 {submitting ? 'Gerando plano...' : 'Gerar plano com topicos'}
               </button>
               <button
-                onClick={finalizeAssessment}
+                onClick={handleSkipTechnicalStep}
                 className="flex-1 py-4 border-2 border-slate-200 text-slate-700 rounded-xl font-bold text-lg hover:border-slate-300 transition-all"
                 disabled={submitting}
               >

@@ -26,6 +26,7 @@ interface EliteStudent {
     total_study_time: number;
     completed_days: number;
     simulation_scores: number[];
+    completion_rate: number;
   }>;
   last_active: string;
   total_xp: number;
@@ -126,7 +127,18 @@ export default function AdminEliteDashboard() {
       .eq('status', 'completed')
       .order('created_at', { ascending: false })
       .limit(4);
-    return data || [];
+
+    return (data || []).map((entry: any) => {
+      const perf = entry.performance || {};
+      const completedDays = Number(perf.completedDays || 0);
+      return {
+        week_start: entry.week_start,
+        total_study_time: Number(perf.totalStudyTime || 0),
+        completed_days: completedDays,
+        simulation_scores: Array.isArray(perf.simulationScores) ? perf.simulationScores : [],
+        completion_rate: Math.round((completedDays / 7) * 100)
+      };
+    });
   };
 
   const calculateMetrics = (studentsData: EliteStudent[]) => {
@@ -161,8 +173,8 @@ export default function AdminEliteDashboard() {
       : 0;
 
     // Taxa de conclusão semanal
-    const completedPlans = studentsData.filter(student => 
-      student.current_plan?.status === 'completed'
+    const completedPlans = studentsData.filter(student =>
+      student.weekly_stats.some((stat) => stat.completion_rate >= 85)
     ).length;
     const completionRate = studentsData.length > 0 ? (completedPlans / studentsData.length) * 100 : 0;
 

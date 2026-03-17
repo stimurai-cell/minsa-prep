@@ -34,7 +34,6 @@ import NotificationCenter from '../components/NotificationCenter';
 import { useOfflineStore } from '../store/useOfflineStore';
 import { usePermissions } from '../lib/permissions';
 import { EliteStrategyManager } from '../lib/eliteStrategy';
-import EliteAutoDiagnosis from '../components/EliteAutoDiagnosis';
 
 const DAILY_TIPS = [
   "Treinar 15 minutos todos os dias gera mais resultado do que estudar 3 horas só no domingo!",
@@ -87,6 +86,12 @@ export default function Dashboard() {
     fetchAreas();
   }, [fetchAreas]);
 
+  useEffect(() => {
+    if (showEliteWelcome) {
+      navigate('/elite-welcome');
+    }
+  }, [showEliteWelcome, navigate]);
+
   // Check Elite user onboarding
   useEffect(() => {
     const checkEliteOnboarding = async () => {
@@ -123,7 +128,18 @@ export default function Dashboard() {
 
         // Load current strategy
         const strategy = await EliteStrategyManager.getCurrentWeekStrategy(profile.id);
-        setCurrentStrategy(strategy);
+        if (strategy) {
+          setCurrentStrategy(strategy);
+        } else {
+          const { data: legacyPlan } = await supabase
+            .from('study_plans')
+            .select('plan_json')
+            .eq('user_id', profile.id)
+            .order('generated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          setCurrentStrategy(legacyPlan?.plan_json || null);
+        }
 
         // Check if week needs reassessment
         const needsReassessment = await EliteStrategyManager.checkWeekCompletion(profile.id);
@@ -510,11 +526,6 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
-            )}
-
-            {/* Elite Auto Diagnosis - Always Visible for Elite Users */}
-            {profile?.role === 'elite' && (
-              <EliteAutoDiagnosis />
             )}
 
             <div className="grid gap-3 sm:grid-cols-3">

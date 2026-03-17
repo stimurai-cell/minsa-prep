@@ -34,6 +34,16 @@ interface StudyPlan {
   progress?: number;
 }
 
+const WEEK_DAY_ALIASES: Record<number, string[]> = {
+  0: ['sunday', 'domingo'],
+  1: ['monday', 'segunda'],
+  2: ['tuesday', 'terca', 'terça'],
+  3: ['wednesday', 'quarta'],
+  4: ['thursday', 'quinta'],
+  5: ['friday', 'sexta'],
+  6: ['saturday', 'sabado', 'sábado']
+};
+
 export default function EliteStrategy() {
   const { profile } = useAuthStore();
   const navigate = useNavigate();
@@ -45,6 +55,22 @@ export default function EliteStrategy() {
   useEffect(() => {
     loadCurrentStudyPlan();
   }, []);
+
+  const normalizeText = (value: string) =>
+    value
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+  const getDayIndexFromKey = (key: string) => {
+    const normalized = normalizeText(key);
+    for (const [idx, aliases] of Object.entries(WEEK_DAY_ALIASES)) {
+      if (aliases.map(normalizeText).includes(normalized)) {
+        return Number(idx);
+      }
+    }
+    return -1;
+  };
 
   const loadCurrentStudyPlan = async () => {
     if (!profile?.id) return;
@@ -95,10 +121,7 @@ export default function EliteStrategy() {
   };
 
   const calculateProgress = (plan: StudyPlan) => {
-    const today = new Date().toLocaleDateString('pt-BR', { weekday: 'long' });
-    const todayKey = Object.keys(plan.daily_plan).find(day => 
-      day.toLowerCase().includes(today.toLowerCase().substring(0, 3))
-    );
+    const todayIndex = new Date().getDay();
 
     let completedToday = 0;
     let totalToday = 0;
@@ -107,13 +130,14 @@ export default function EliteStrategy() {
 
     Object.entries(plan.daily_plan).forEach(([day, dailyPlan]) => {
       totalWeek++;
+      const dayIndex = getDayIndexFromKey(day);
       if (dailyPlan.completed) {
         completedWeek++;
-        if (day === todayKey) {
+        if (dayIndex === todayIndex) {
           completedToday++;
         }
       }
-      if (day === todayKey) {
+      if (dayIndex === todayIndex) {
         totalToday++;
       }
     });
@@ -170,23 +194,70 @@ export default function EliteStrategy() {
   };
 
   const getDayStatus = (day: string, activity: DailyPlan) => {
-    const today = new Date().toLocaleDateString('pt-BR', { weekday: 'long' });
-    const isToday = day.toLowerCase().includes(today.toLowerCase().substring(0, 3));
-    const isPast = new Date(day) < new Date() && !isToday;
+    const todayIndex = new Date().getDay();
+    const dayIndex = getDayIndexFromKey(day);
 
     if (activity.completed) return 'completed';
-    if (isToday) return 'today';
-    if (isPast) return 'overdue';
+    if (dayIndex === todayIndex) return 'today';
+    if (dayIndex !== -1) {
+      const daysAgo = (todayIndex - dayIndex + 7) % 7;
+      if (daysAgo > 0) return 'overdue';
+    }
     return 'upcoming';
   };
 
   const getActivityIcon = (type: string) => {
     switch (type) {
+      case 'training':
+      case 'practice':
       case 'study': return <BookOpen className="h-5 w-5" />;
+      case 'mini_simulation':
       case 'simulation': return <BarChart3 className="h-5 w-5" />;
       case 'planning': return <Calendar className="h-5 w-5" />;
+      case 'srs':
+      case 'speed_mode':
       case 'review': return <Target className="h-5 w-5" />;
       default: return <BookOpen className="h-5 w-5" />;
+    }
+  };
+
+  const getActivityLabel = (type: DailyPlan['type']) => {
+    switch (type) {
+      case 'training':
+      case 'study':
+        return 'Estudo';
+      case 'practice':
+        return 'Pratica';
+      case 'srs':
+        return 'Revisao SRS';
+      case 'simulation':
+        return 'Simulado';
+      case 'mini_simulation':
+        return 'Mini Simulado';
+      case 'planning':
+        return 'Planejamento';
+      case 'speed_mode':
+        return 'Modo Relampago';
+      case 'review':
+        return 'Revisao';
+      case 'rest':
+        return 'Descanso';
+      default:
+        return 'Estudo';
+    }
+  };
+
+  const getEstimatedMinutes = (activity: DailyPlan) => {
+    if (typeof activity.estimatedTime === 'number') return activity.estimatedTime;
+    switch (activity.type) {
+      case 'simulation':
+        return 120;
+      case 'mini_simulation':
+        return 45;
+      case 'rest':
+        return 0;
+      default:
+        return 90;
     }
   };
 
@@ -310,9 +381,7 @@ export default function EliteStrategy() {
                     <div className="flex items-center gap-2">
                       {getActivityIcon(activity.type)}
                       <span className="text-xs font-medium">
-                        {activity.type === 'study' ? 'Estudo' :
-                         activity.type === 'simulation' ? 'Simulado' :
-                         activity.type === 'planning' ? 'Planejamento' : 'Revisão'}
+                        {getActivityLabel(activity.type)}
                       </span>
                     </div>
 
@@ -322,7 +391,7 @@ export default function EliteStrategy() {
 
                     <div className="flex items-center gap-1 text-xs text-slate-500">
                       <Clock className="h-3 w-3" />
-                      {activity.estimatedTime}min
+                      {getEstimatedMinutes(activity)}min
                     </div>
 
                     {!activity.completed && status === 'today' && (
