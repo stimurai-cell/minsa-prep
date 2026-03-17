@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, Clock, Target, Calendar, User } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { supabase } from '../lib/supabase';
+import { archiveCurrentPlans, createPlanRevision } from '../lib/elitePlans';
 
 interface PersonalAnswers {
   daily_study_time: 'LOW' | 'MEDIUM' | 'HIGH' | 'INTENSIVE';
@@ -266,19 +267,21 @@ export default function EliteAssessment() {
       week_end: weekEnd.toISOString(),
       daily_plan: normalizedPlan,
       focus_topics: focusTopics || [],
-      status: 'active',
+      status: 'draft',
+      status_changed_at: new Date().toISOString(),
       source,
       created_at: new Date().toISOString()
     };
 
-    // Garante apenas um plano ativo por estudante antes de criar o novo
-    await supabase
-      .from('elite_study_plans')
-      .update({ status: 'archived', updated_at: new Date().toISOString() })
-      .eq('user_id', profile?.id)
-      .eq('status', 'active');
+    if (profile?.id) {
+      await archiveCurrentPlans(profile.id);
+    }
 
-    const { error: planError } = await supabase.from('elite_study_plans').insert(planPayload);
+    const { data: createdPlan, error: planError } = await supabase
+      .from('elite_study_plans')
+      .insert(planPayload)
+      .select('id')
+      .single();
 
     if (planError) {
       console.warn('elite_study_plans indisponivel, salvando fallback em study_plans', planError);
@@ -286,6 +289,21 @@ export default function EliteAssessment() {
         user_id: profile?.id,
         plan_json: planPayload,
         generated_at: new Date().toISOString()
+      });
+    } else if (createdPlan?.id && profile?.id) {
+      await createPlanRevision({
+        planId: createdPlan.id,
+        userId: profile.id,
+        eventType: 'created',
+        actorRole: 'student',
+        previousStatus: null,
+        newStatus: 'draft',
+        changeSummary: 'Plano inicial gerado a partir do diagnostico Elite.',
+        snapshot: {
+          daily_plan: normalizedPlan,
+          focus_topics: focusTopics || [],
+          source
+        }
       });
     }
 

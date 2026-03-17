@@ -36,10 +36,13 @@ CREATE TABLE IF NOT EXISTS elite_study_plans (
     week_end TIMESTAMPTZ NOT NULL,
     daily_plan JSONB NOT NULL, -- estrutura com atividades diárias
     focus_topics TEXT[] DEFAULT '{}',
-    status VARCHAR(20) DEFAULT 'active', -- 'active', 'completed', 'archived'
+    status VARCHAR(20) DEFAULT 'draft', -- 'draft', 'finalized', 'active', 'completed', 'archived'
     performance JSONB, -- métricas de desempenho da semana
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
+    status_changed_at TIMESTAMPTZ DEFAULT NOW(),
+    finalized_at TIMESTAMPTZ,
+    activated_at TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
     UNIQUE(user_id, week_start)
 );
@@ -94,6 +97,20 @@ CREATE TABLE IF NOT EXISTS elite_insights (
     expires_at TIMESTAMPTZ
 );
 
+-- 7. Trilho de revisões do plano Elite
+CREATE TABLE IF NOT EXISTS elite_plan_revisions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    plan_id UUID REFERENCES elite_study_plans(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    event_type VARCHAR(30) NOT NULL, -- 'created', 'autosave', 'manual_save', 'finalized', 'activated', 'completed', 'archived'
+    actor_role VARCHAR(20) DEFAULT 'student',
+    previous_status VARCHAR(20),
+    new_status VARCHAR(20),
+    change_summary TEXT,
+    snapshot JSONB NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Índices para performance
 CREATE INDEX IF NOT EXISTS idx_elite_onboarding_user_id ON elite_onboarding(user_id);
 CREATE INDEX IF NOT EXISTS idx_elite_assessments_user_id ON elite_assessments(user_id);
@@ -101,11 +118,15 @@ CREATE INDEX IF NOT EXISTS idx_elite_assessments_created_at ON elite_assessments
 CREATE INDEX IF NOT EXISTS idx_elite_study_plans_user_id ON elite_study_plans(user_id);
 CREATE INDEX IF NOT EXISTS idx_elite_study_plans_status ON elite_study_plans(status);
 CREATE INDEX IF NOT EXISTS idx_elite_study_plans_week_start ON elite_study_plans(week_start);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_elite_current_plan_per_user ON elite_study_plans(user_id) WHERE status IN ('draft', 'finalized', 'active');
 CREATE INDEX IF NOT EXISTS idx_elite_reassessments_user_id ON elite_reassessments(user_id);
 CREATE INDEX IF NOT EXISTS idx_elite_daily_activities_user_id ON elite_daily_activities(user_id);
 CREATE INDEX IF NOT EXISTS idx_elite_daily_activities_date ON elite_daily_activities(date DESC);
 CREATE INDEX IF NOT EXISTS idx_elite_insights_user_id ON elite_insights(user_id);
 CREATE INDEX IF NOT EXISTS idx_elite_insights_priority ON elite_insights(priority);
+CREATE INDEX IF NOT EXISTS idx_elite_plan_revisions_plan_id ON elite_plan_revisions(plan_id);
+CREATE INDEX IF NOT EXISTS idx_elite_plan_revisions_user_id ON elite_plan_revisions(user_id);
+CREATE INDEX IF NOT EXISTS idx_elite_plan_revisions_created_at ON elite_plan_revisions(created_at DESC);
 
 -- Comentários nas tabelas
 COMMENT ON TABLE elite_onboarding IS 'Controle de onboarding de usuários Elite';
@@ -114,6 +135,7 @@ COMMENT ON TABLE elite_study_plans IS 'Planos de estudo semanais personalizados'
 COMMENT ON TABLE elite_reassessments IS 'Reavaliações semanais automáticas';
 COMMENT ON TABLE elite_daily_activities IS 'Registro de atividades diárias Elite';
 COMMENT ON TABLE elite_insights IS 'Insights e recomendações inteligentes';
+COMMENT ON TABLE elite_plan_revisions IS 'Histórico de revisões e mudanças do plano Elite';
 
 -- ========= RLS / Policies (idempotente) =========
 
@@ -124,6 +146,7 @@ ALTER TABLE elite_study_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE elite_reassessments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE elite_daily_activities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE elite_insights ENABLE ROW LEVEL SECURITY;
+ALTER TABLE elite_plan_revisions ENABLE ROW LEVEL SECURITY;
 
 -- Remove policies antigas se já existirem (evita erro 42710)
 DO $$
@@ -134,14 +157,17 @@ BEGIN
         SELECT policyname, tablename
         FROM pg_policies
         WHERE schemaname = 'public'
-          AND tablename IN ('elite_onboarding','elite_assessments','elite_study_plans','elite_reassessments','elite_daily_activities','elite_insights')
+          AND tablename IN ('elite_onboarding','elite_assessments','elite_study_plans','elite_reassessments','elite_daily_activities','elite_insights','elite_plan_revisions')
           AND policyname IN (
             'Users can view own elite data','Users can view own assessments','Users can view own study plans',
             'Users can view own reassessments','Users can view own daily activities','Users can view own insights',
+            'Users can view own plan revisions',
             'Users can insert own elite data','Users can insert own assessments','Users can insert own study plans',
             'Users can insert own reassessments','Users can insert own daily activities','Users can insert own insights',
+            'Users can insert own plan revisions',
             'Users can update own elite data','Users can update own assessments','Users can update own study plans',
             'Users can update own reassessments','Users can update own daily activities','Users can update own insights',
+            'Admins can view all plan revisions',
             'Admins can view all elite data','Admins can view all assessments','Admins can view all study plans',
             'Admins can view all reassessments','Admins can view all daily activities','Admins can view all insights'
           )
@@ -158,6 +184,7 @@ CREATE POLICY "Users can view own study plans" ON elite_study_plans FOR SELECT U
 CREATE POLICY "Users can view own reassessments" ON elite_reassessments FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can view own daily activities" ON elite_daily_activities FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can view own insights" ON elite_insights FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can view own plan revisions" ON elite_plan_revisions FOR SELECT USING (auth.uid() = user_id);
 
 -- Usuários podem inserir seus próprios dados
 CREATE POLICY "Users can insert own elite data" ON elite_onboarding FOR INSERT WITH CHECK (auth.uid() = user_id);
@@ -166,6 +193,7 @@ CREATE POLICY "Users can insert own study plans" ON elite_study_plans FOR INSERT
 CREATE POLICY "Users can insert own reassessments" ON elite_reassessments FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can insert own daily activities" ON elite_daily_activities FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can insert own insights" ON elite_insights FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can insert own plan revisions" ON elite_plan_revisions FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 -- Usuários podem atualizar seus próprios dados
 CREATE POLICY "Users can update own elite data" ON elite_onboarding FOR UPDATE USING (auth.uid() = user_id);
@@ -192,6 +220,9 @@ CREATE POLICY "Admins can view all daily activities" ON elite_daily_activities F
     EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
 );
 CREATE POLICY "Admins can view all insights" ON elite_insights FOR SELECT USING (
+    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+);
+CREATE POLICY "Admins can view all plan revisions" ON elite_plan_revisions FOR SELECT USING (
     EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
 );
 

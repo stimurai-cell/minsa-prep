@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar, Clock, Target, Brain, Edit2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { supabase } from '../lib/supabase';
+import { CURRENT_PLAN_STATUSES, createPlanRevision, getLatestPlanByStatuses, getPlanStatusLabel, type ElitePlanStatus } from '../lib/elitePlans';
 
 interface DailyPlan {
   type:
@@ -30,7 +31,7 @@ interface StudyPlan {
   daily_plan: Record<string, DailyPlan>;
   focus_topics: string[];
   source: string;
-  status?: string;
+  status?: ElitePlanStatus;
 }
 
 interface DayConfig {
@@ -44,6 +45,15 @@ interface PersonalProfile {
   self_declared_weak_area: string;
   preferred_study_period: 'MORNING' | 'AFTERNOON' | 'EVENING';
   preferred_study_hour: string;
+}
+
+interface PlanRevision {
+  id: string;
+  event_type: string;
+  previous_status: string | null;
+  new_status: string | null;
+  change_summary: string | null;
+  created_at: string;
 }
 
 const WEEK_DAYS: DayConfig[] = [
@@ -66,10 +76,35 @@ export default function ElitePlanPreview() {
   const [editablePlan, setEditablePlan] = useState<Record<string, DailyPlan>>({});
   const [planStorage, setPlanStorage] = useState<'elite' | 'legacy' | null>(null);
   const [saving, setSaving] = useState(false);
+  const [autosaveState, setAutosaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState('');
+  const [revisions, setRevisions] = useState<PlanRevision[]>([]);
 
   useEffect(() => {
     loadStudyPlan();
   }, []);
+
+  useEffect(() => {
+    if (!editingMode || !studyPlan || !profile?.id) return;
+
+    const nextSnapshot = JSON.stringify(editablePlan || {});
+    if (!lastSavedSnapshot || nextSnapshot === lastSavedSnapshot) return;
+
+    setAutosaveState('saving');
+    const timeout = setTimeout(async () => {
+      const ok = await persistPlan(studyPlan.status || 'draft', 'autosave');
+      setAutosaveState(ok ? 'saved' : 'error');
+    }, 1200);
+
+    return () => clearTimeout(timeout);
+  }, [editingMode, editablePlan, lastSavedSnapshot, profile?.id, studyPlan]);
+
+  useEffect(() => {
+    if (editingMode && studyPlan) {
+      setAutosaveState('idle');
+      setLastSavedSnapshot(JSON.stringify(studyPlan.daily_plan || {}));
+    }
+  }, [editingMode, studyPlan]);
 
   const resolveDayKey = (plan: Record<string, DailyPlan>, config: DayConfig): string => {
     const byAlias = config.keys.find((key) => plan[key]);
@@ -95,33 +130,21 @@ export default function ElitePlanPreview() {
     if (!profile?.id) return;
 
     try {
-      // Carregar plano de estudos (tabela nova)
-      const { data: plan, error: elitePlanError } = await supabase
-        .from('elite_study_plans')
-        .select('*')
-        .eq('user_id', profile.id)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+      const plan = await getLatestPlanByStatuses<StudyPlan>(profile.id, CURRENT_PLAN_STATUSES);
 
       if (plan) {
         setStudyPlan(plan as StudyPlan);
         setEditablePlan(plan.daily_plan);
         setPlanStorage('elite');
+        setLastSavedSnapshot(JSON.stringify(plan.daily_plan || {}));
       } else {
-        // Fallback para tabela existente study_plans (estrutura mais simples)
-        if (elitePlanError) {
-          console.warn('elite_study_plans indisponível, buscando fallback em study_plans', elitePlanError);
-        }
-
         const { data: legacyPlan, error: legacyError } = await supabase
           .from('study_plans')
           .select('*')
           .eq('user_id', profile.id)
           .order('generated_at', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (legacyPlan?.plan_json) {
           const parsed = legacyPlan.plan_json as any;
@@ -136,6 +159,7 @@ export default function ElitePlanPreview() {
           setStudyPlan(mappedPlan);
           setEditablePlan(mappedPlan.daily_plan);
           setPlanStorage('legacy');
+          setLastSavedSnapshot(JSON.stringify(mappedPlan.daily_plan || {}));
         } else if (legacyError) {
           console.warn('Nenhum plano encontrado em study_plans', legacyError);
         }
@@ -152,6 +176,17 @@ export default function ElitePlanPreview() {
         setPersonalProfile(profileData as PersonalProfile);
       } else if (profileError) {
         console.warn('Perfil elite não encontrado, usando dados básicos', profileError);
+      }
+
+      const { data: revisionData, error: revisionError } = await supabase
+        .from('elite_plan_revisions')
+        .select('id,event_type,previous_status,new_status,change_summary,created_at')
+        .eq('user_id', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(6);
+
+      if (!revisionError) {
+        setRevisions((revisionData as PlanRevision[]) || []);
       }
     } catch (error) {
       console.error('Error loading study plan:', error);
@@ -193,25 +228,31 @@ export default function ElitePlanPreview() {
     }));
   };
 
-  const persistPlan = async (finalized: boolean): Promise<boolean> => {
+  const persistPlan = async (
+    targetStatus?: ElitePlanStatus,
+    eventType: 'autosave' | 'manual_save' | 'finalized' = 'manual_save'
+  ): Promise<boolean> => {
     if (!studyPlan || !profile?.id) return false;
 
     const now = new Date().toISOString();
-    const source = finalized ? 'confirmed_by_student' : (studyPlan.source || 'template');
+    const nextStatus = targetStatus || studyPlan.status || 'draft';
+    const source = eventType === 'finalized' ? 'confirmed_by_student' : (studyPlan.source || 'template');
     const planPayload = {
       user_id: profile.id,
       week_start: studyPlan.week_start,
       week_end: studyPlan.week_end,
       daily_plan: editablePlan,
       focus_topics: studyPlan.focus_topics || [],
-      status: 'active',
+      status: nextStatus,
+      status_changed_at: now,
+      finalized_at: nextStatus === 'finalized' ? now : null,
       source,
       updated_at: now
     };
 
     try {
       if (planStorage === 'legacy') {
-        await supabase
+        const { error: legacyUpdateError } = await supabase
           .from('study_plans')
           .update({
             plan_json: {
@@ -222,17 +263,11 @@ export default function ElitePlanPreview() {
             }
           })
           .eq('id', studyPlan.id);
+        if (legacyUpdateError) throw legacyUpdateError;
       }
 
       let elitePlanId = studyPlan.id;
-      const { data: existingActive } = await supabase
-        .from('elite_study_plans')
-        .select('id')
-        .eq('user_id', profile.id)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const existingActive = await getLatestPlanByStatuses<{ id: string }>(profile.id, CURRENT_PLAN_STATUSES);
 
       if (existingActive?.id) {
         const { error: updateError } = await supabase
@@ -254,8 +289,40 @@ export default function ElitePlanPreview() {
         elitePlanId = inserted.id;
       }
 
-      setStudyPlan((prev) => (prev ? { ...prev, id: elitePlanId, daily_plan: editablePlan, source, status: 'active' } : null));
+      const revisionEntry: PlanRevision = {
+        id: `${elitePlanId}-${now}-${eventType}`,
+        event_type: eventType,
+        previous_status: studyPlan.status || null,
+        new_status: nextStatus,
+        change_summary:
+          eventType === 'autosave'
+            ? 'Rascunho salvo automaticamente no editor.'
+            : eventType === 'finalized'
+            ? 'Plano confirmado pelo estudante.'
+            : 'Plano ajustado manualmente pelo estudante.',
+        created_at: now
+      };
+
+      await createPlanRevision({
+        planId: elitePlanId,
+        userId: profile.id,
+        eventType,
+        actorRole: 'student',
+        previousStatus: revisionEntry.previous_status,
+        newStatus: revisionEntry.new_status,
+        changeSummary: revisionEntry.change_summary,
+        snapshot: {
+          daily_plan: editablePlan,
+          focus_topics: studyPlan.focus_topics || [],
+          source,
+          status: nextStatus
+        }
+      });
+
+      setStudyPlan((prev) => (prev ? { ...prev, id: elitePlanId, daily_plan: editablePlan, source, status: nextStatus } : null));
       setPlanStorage('elite');
+      setLastSavedSnapshot(JSON.stringify(editablePlan || {}));
+      setRevisions((prev) => [revisionEntry, ...prev].slice(0, 6));
       return true;
     } catch (error) {
       console.error('Error persisting study plan:', error);
@@ -265,13 +332,14 @@ export default function ElitePlanPreview() {
 
   const handleConfirmPlan = async () => {
     setSaving(true);
-    const ok = await persistPlan(false);
+    const ok = await persistPlan(studyPlan?.status || 'draft', 'manual_save');
     setSaving(false);
 
     if (!ok) {
       alert('Erro ao atualizar plano. Tente novamente.');
       return;
     }
+    setAutosaveState('saved');
     setEditingMode(false);
   };
 
@@ -279,7 +347,7 @@ export default function ElitePlanPreview() {
     if (!profile?.id) return;
     setSaving(true);
 
-    const saved = await persistPlan(true);
+    const saved = await persistPlan('finalized', 'finalized');
     if (!saved) {
       setSaving(false);
       alert('Nao foi possivel concluir o plano agora. Tente novamente.');
@@ -304,6 +372,7 @@ export default function ElitePlanPreview() {
     });
 
     setSaving(false);
+    setAutosaveState('saved');
     setEditingMode(false);
     navigate('/dashboard');
   };
@@ -311,7 +380,9 @@ export default function ElitePlanPreview() {
   const handleCancelEdit = () => {
     if (studyPlan) {
       setEditablePlan(studyPlan.daily_plan);
+      setLastSavedSnapshot(JSON.stringify(studyPlan.daily_plan || {}));
     }
+    setAutosaveState('idle');
     setEditingMode(false);
   };
 
@@ -565,12 +636,18 @@ export default function ElitePlanPreview() {
 
         {/* Plan Info */}
         <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-lg mb-8">
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid md:grid-cols-3 gap-6">
             <div>
               <h4 className="font-bold text-slate-900 mb-3">Período do Plano</h4>
               <div className="text-slate-600">
                 <div>Início: {new Date(studyPlan.week_start).toLocaleDateString('pt-BR')}</div>
                 <div>Fim: {new Date(studyPlan.week_end).toLocaleDateString('pt-BR')}</div>
+              </div>
+            </div>
+            <div>
+              <h4 className="font-bold text-slate-900 mb-3">Status do Plano</h4>
+              <div className="text-slate-600">
+                {getPlanStatusLabel(studyPlan.status)}
               </div>
             </div>
             <div>
@@ -584,7 +661,40 @@ export default function ElitePlanPreview() {
               </div>
             </div>
           </div>
+          {editingMode && (
+            <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {autosaveState === 'saving' && 'Salvando rascunho automaticamente...'}
+              {autosaveState === 'saved' && 'Rascunho salvo automaticamente.'}
+              {autosaveState === 'error' && 'Autosave falhou. Use Confirmar Alteracoes para tentar novamente.'}
+              {autosaveState === 'idle' && 'As alteracoes serao salvas automaticamente apos uma pequena pausa.'}
+            </div>
+          )}
         </div>
+
+        {revisions.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-lg mb-8">
+            <h3 className="text-xl font-bold text-slate-900 mb-4">Historico recente do plano</h3>
+            <div className="space-y-3">
+              {revisions.map((revision) => (
+                <div key={revision.id} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-semibold text-slate-900">
+                      {revision.change_summary || revision.event_type}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {new Date(revision.created_at).toLocaleString('pt-BR')}
+                    </div>
+                  </div>
+                  <div className="mt-1 text-sm text-slate-600">
+                    {revision.previous_status && revision.new_status
+                      ? `${getPlanStatusLabel(revision.previous_status)} -> ${getPlanStatusLabel(revision.new_status)}`
+                      : getPlanStatusLabel(revision.new_status || studyPlan.status)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="text-center">

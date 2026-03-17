@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar, CheckCircle2, Clock, Target, TrendingUp, AlertCircle, Play, BarChart3, BookOpen } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { supabase } from '../lib/supabase';
+import { activatePlan, EXECUTION_PLAN_STATUSES, getLatestPlanByStatuses, type ElitePlanStatus } from '../lib/elitePlans';
 
 interface DailyPlan {
   type:
@@ -30,7 +31,7 @@ interface StudyPlan {
   week_end: string;
   daily_plan: Record<string, DailyPlan>;
   focus_topics: string[];
-  status: 'active' | 'completed';
+  status: ElitePlanStatus;
   progress?: number;
 }
 
@@ -76,14 +77,7 @@ export default function EliteStrategy() {
     if (!profile?.id) return;
 
     try {
-      const { data: plan } = await supabase
-        .from('elite_study_plans')
-        .select('*')
-        .eq('user_id', profile.id)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+      const plan = await getLatestPlanByStatuses<StudyPlan>(profile.id, EXECUTION_PLAN_STATUSES);
 
       if (plan) {
         setStudyPlan(plan);
@@ -147,6 +141,11 @@ export default function EliteStrategy() {
   };
 
   const handleStartDailyActivity = async (day: string, activity: DailyPlan) => {
+    if (studyPlan?.status === 'finalized' && profile?.id) {
+      await activatePlan(studyPlan.id, profile.id);
+      setStudyPlan((prev) => (prev ? { ...prev, status: 'active' } : null));
+    }
+
     if (activity.type === 'simulation' || activity.type === 'mini_simulation') {
       navigate('/simulation?mode=weekly');
     } else if (activity.type === 'speed_mode') {
@@ -165,8 +164,13 @@ export default function EliteStrategy() {
   const markActivityCompleted = async (day: string) => {
     if (!studyPlan || !profile?.id) return;
 
+    if (studyPlan.status === 'finalized') {
+      await activatePlan(studyPlan.id, profile.id);
+    }
+
     const updatedPlan = {
       ...studyPlan,
+      status: 'active' as const,
       daily_plan: {
         ...studyPlan.daily_plan,
         [day]: {
@@ -181,6 +185,7 @@ export default function EliteStrategy() {
       await supabase
         .from('elite_study_plans')
         .update({
+          status: 'active',
           daily_plan: updatedPlan.daily_plan,
           updated_at: new Date().toISOString()
         })

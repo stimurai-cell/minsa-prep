@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Users, TrendingUp, Calendar, Clock, Target, Brain, BarChart3, AlertCircle, CheckCircle2, Eye, Download } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { supabase } from '../lib/supabase';
+import { CURRENT_PLAN_STATUSES, getPlanStatusLabel } from '../lib/elitePlans';
 
 interface EliteStudent {
   id: string;
@@ -13,8 +14,17 @@ interface EliteStudent {
     week_end: string;
     focus_topics: string[];
     status: string;
+    updated_at?: string;
     performance?: any;
   };
+  plan_revisions: Array<{
+    id: string;
+    event_type: string;
+    previous_status: string | null;
+    new_status: string | null;
+    change_summary: string | null;
+    created_at: string;
+  }>;
   assessments: Array<{
     created_at: string;
     score: number;
@@ -73,17 +83,19 @@ export default function AdminEliteDashboard() {
       // Para cada usuário, buscar dados detalhados
       const studentsWithData = await Promise.all(
         eliteUsers.map(async (user) => {
-          const [currentPlan, assessments, weeklyStats] = await Promise.all([
+          const [currentPlan, assessments, weeklyStats, planRevisions] = await Promise.all([
             getCurrentPlan(user.id),
             getUserAssessments(user.id),
-            getUserWeeklyStats(user.id)
+            getUserWeeklyStats(user.id),
+            getPlanRevisions(user.id)
           ]);
 
           return {
             ...user,
             current_plan: currentPlan,
             assessments,
-            weekly_stats: weeklyStats
+            weekly_stats: weeklyStats,
+            plan_revisions: planRevisions
           } as EliteStudent;
         })
       );
@@ -102,11 +114,22 @@ export default function AdminEliteDashboard() {
       .from('elite_study_plans')
       .select('*')
       .eq('user_id', userId)
-      .eq('status', 'active')
+      .in('status', [...CURRENT_PLAN_STATUSES])
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
     return data;
+  };
+
+  const getPlanRevisions = async (userId: string) => {
+    const { data } = await supabase
+      .from('elite_plan_revisions')
+      .select('id,event_type,previous_status,new_status,change_summary,created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    return data || [];
   };
 
   const getUserAssessments = async (userId: string) => {
@@ -219,6 +242,7 @@ export default function AdminEliteDashboard() {
       total_xp: student.total_xp,
       last_active: student.last_active,
       current_plan: student.current_plan,
+      plan_revisions: student.plan_revisions,
       assessments: student.assessments,
       weekly_stats: student.weekly_stats
     };
@@ -230,6 +254,21 @@ export default function AdminEliteDashboard() {
     a.download = `elite_student_${student.full_name.replace(/\s+/g, '_')}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const getStatusBadgeClass = (status?: string) => {
+    switch (status) {
+      case 'draft':
+        return 'bg-amber-100 text-amber-700';
+      case 'finalized':
+        return 'bg-blue-100 text-blue-700';
+      case 'active':
+        return 'bg-green-100 text-green-700';
+      case 'completed':
+        return 'bg-emerald-100 text-emerald-700';
+      default:
+        return 'bg-slate-100 text-slate-700';
+    }
   };
 
   if (loading) {
@@ -413,12 +452,8 @@ export default function AdminEliteDashboard() {
                       </div>
                     </td>
                     <td className="p-3">
-                      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
-                        student.current_plan?.status === 'active' 
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-slate-100 text-slate-700'
-                      }`}>
-                        {student.current_plan?.status === 'active' ? 'Ativo' : 'Inativo'}
+                      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${getStatusBadgeClass(student.current_plan?.status)}`}>
+                        {getPlanStatusLabel(student.current_plan?.status)}
                       </div>
                     </td>
                     <td className="p-3">
@@ -479,14 +514,16 @@ export default function AdminEliteDashboard() {
 
               <div className="space-y-6">
                 {/* Current Plan */}
-                {selectedStudent.current_plan && (
+{selectedStudent.current_plan && (
                   <div>
                     <h3 className="font-bold text-slate-900 mb-3">Plano Atual</h3>
                     <div className="bg-slate-50 rounded-xl p-4">
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <span className="text-slate-600">Status:</span>
-                          <span className="ml-2 font-semibold">{selectedStudent.current_plan.status}</span>
+                          <span className={`ml-2 inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ${getStatusBadgeClass(selectedStudent.current_plan.status)}`}>
+                            {getPlanStatusLabel(selectedStudent.current_plan.status)}
+                          </span>
                         </div>
                         <div>
                           <span className="text-slate-600">Período:</span>
@@ -495,17 +532,52 @@ export default function AdminEliteDashboard() {
                             {new Date(selectedStudent.current_plan.week_end).toLocaleDateString('pt-BR')}
                           </span>
                         </div>
+                        <div>
+                          <span className="text-slate-600">Ultima atualizacao:</span>
+                          <span className="ml-2 font-semibold">
+                            {selectedStudent.current_plan.updated_at
+                              ? new Date(selectedStudent.current_plan.updated_at).toLocaleString('pt-BR')
+                              : 'Sem registro'}
+                          </span>
+                        </div>
                       </div>
                       <div className="mt-3">
                         <span className="text-slate-600">Tópicos de foco:</span>
                         <div className="flex flex-wrap gap-2 mt-1">
-                          {selectedStudent.current_plan.focus_topics.map((topic, index) => (
+                          {(selectedStudent.current_plan.focus_topics || []).map((topic, index) => (
                             <span key={index} className="bg-amber-100 text-amber-700 px-2 py-1 rounded-lg text-xs">
                               {topic}
                             </span>
                           ))}
                         </div>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedStudent.plan_revisions.length > 0 && (
+                  <div>
+                    <h3 className="font-bold text-slate-900 mb-3">Historico Recente do Plano</h3>
+                    <div className="space-y-2">
+                      {selectedStudent.plan_revisions.map((revision) => (
+                        <div key={revision.id} className="bg-slate-50 rounded-xl p-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="font-semibold text-slate-900">
+                                {revision.change_summary || revision.event_type}
+                              </div>
+                              <div className="mt-1 text-sm text-slate-600">
+                                {revision.previous_status && revision.new_status
+                                  ? `${getPlanStatusLabel(revision.previous_status)} -> ${getPlanStatusLabel(revision.new_status)}`
+                                  : getPlanStatusLabel(revision.new_status || undefined)}
+                              </div>
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {new Date(revision.created_at).toLocaleString('pt-BR')}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { archiveCurrentPlans, createPlanRevision, CURRENT_PLAN_STATUSES, EXECUTION_PLAN_STATUSES, getLatestPlanByStatuses } from './elitePlans';
 
 export interface WeeklyPerformance {
   weekStart: string;
@@ -18,7 +19,7 @@ export interface StudyStrategy {
   weekEnd: string;
   dailyPlan: Record<string, DailyActivity>;
   focusTopics: string[];
-  status: 'active' | 'completed' | 'archived';
+  status: 'draft' | 'finalized' | 'active' | 'completed' | 'archived';
   performance?: WeeklyPerformance;
   source?: string;
 }
@@ -44,13 +45,16 @@ export interface PersonalProfile {
 }
 
 export class EliteStrategyManager {
-  static async createWeeklyStrategy(userId: string, assessmentResults: any, personalProfile: PersonalProfile): Promise<StudyStrategy> {
+static async createWeeklyStrategy(userId: string, assessmentResults: any, personalProfile: PersonalProfile): Promise<StudyStrategy> {
     const weekStart = new Date();
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
+    const now = new Date().toISOString();
 
     // Tentar gerar plano personalizado com base nas informações
     const personalizedPlan = this.generatePersonalizedPlan(assessmentResults, personalProfile);
+
+    await archiveCurrentPlans(userId);
 
     const { data, error } = await supabase
       .from('elite_study_plans')
@@ -61,13 +65,32 @@ export class EliteStrategyManager {
         daily_plan: personalizedPlan,
         focus_topics: assessmentResults.weakTopics || [],
         status: 'active',
+        status_changed_at: now,
+        activated_at: now,
         source: 'personalized',
-        created_at: new Date().toISOString()
+        created_at: now,
+        updated_at: now
       })
       .select()
       .single();
 
     if (error) throw error;
+    await createPlanRevision({
+      planId: data.id,
+      userId,
+      eventType: 'created',
+      actorRole: 'system',
+      previousStatus: null,
+      newStatus: 'active',
+      changeSummary: 'Plano semanal personalizado gerado automaticamente pelo sistema.',
+      snapshot: {
+        daily_plan: personalizedPlan,
+        focus_topics: assessmentResults.weakTopics || [],
+        source: 'personalized',
+        week_start: weekStart.toISOString(),
+        week_end: weekEnd.toISOString()
+      }
+    });
     return data as StudyStrategy;
   }
 
@@ -192,9 +215,12 @@ export class EliteStrategyManager {
     const weekStart = new Date();
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
+    const now = new Date().toISOString();
 
     const dailyPlan = this.generateDailyPlan(assessmentResults);
     const focusTopics = assessmentResults.weakTopics || [];
+
+    await archiveCurrentPlans(userId);
 
     const { data, error } = await supabase
       .from('elite_study_plans')
@@ -205,12 +231,31 @@ export class EliteStrategyManager {
         daily_plan: dailyPlan,
         focus_topics: focusTopics,
         status: 'active',
-        created_at: new Date().toISOString()
+        status_changed_at: now,
+        activated_at: now,
+        created_at: now,
+        updated_at: now
       })
       .select()
       .single();
 
     if (error) throw error;
+    await createPlanRevision({
+      planId: data.id,
+      userId,
+      eventType: 'created',
+      actorRole: 'system',
+      previousStatus: null,
+      newStatus: 'active',
+      changeSummary: 'Plano semanal padrão gerado automaticamente pelo sistema.',
+      snapshot: {
+        daily_plan: dailyPlan,
+        focus_topics: focusTopics,
+        source: 'template',
+        week_start: weekStart.toISOString(),
+        week_end: weekEnd.toISOString()
+      }
+    });
     return data as StudyStrategy;
   }
 
@@ -257,12 +302,7 @@ export class EliteStrategyManager {
     day: string,
     activityData: Partial<DailyActivity>
   ): Promise<void> {
-    const { data: currentPlan } = await supabase
-      .from('elite_study_plans')
-      .select('daily_plan')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .single();
+    const currentPlan = await getLatestPlanByStatuses<any>(userId, EXECUTION_PLAN_STATUSES);
 
     if (!currentPlan) return;
 
@@ -279,21 +319,16 @@ export class EliteStrategyManager {
     await supabase
       .from('elite_study_plans')
       .update({
+        status: 'active',
         daily_plan: updatedPlan,
         updated_at: new Date().toISOString()
       })
-      .eq('user_id', userId)
-      .eq('status', 'active');
+      .eq('id', currentPlan.id);
   }
 
   static async completeWeekAndReassess(userId: string): Promise<void> {
     // Buscar plano atual
-    const { data: currentPlan } = await supabase
-      .from('elite_study_plans')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .single();
+    const currentPlan = await getLatestPlanByStatuses<any>(userId, EXECUTION_PLAN_STATUSES);
 
     if (!currentPlan) return;
 
@@ -306,9 +341,29 @@ export class EliteStrategyManager {
       .update({
         status: 'completed',
         performance: weeklyPerformance,
-        completed_at: new Date().toISOString()
+        completed_at: new Date().toISOString(),
+        status_changed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       })
       .eq('id', currentPlan.id);
+
+    await createPlanRevision({
+      planId: currentPlan.id,
+      userId,
+      eventType: 'completed',
+      actorRole: 'system',
+      previousStatus: currentPlan.status,
+      newStatus: 'completed',
+      changeSummary: 'Plano semanal concluído e enviado para reavaliação automática.',
+      snapshot: {
+        daily_plan: currentPlan.daily_plan,
+        focus_topics: currentPlan.focus_topics,
+        source: currentPlan.source,
+        performance: weeklyPerformance,
+        week_start: currentPlan.week_start,
+        week_end: currentPlan.week_end
+      }
+    });
 
     // Criar nova avaliação baseada na performance
     await this.createReassessment(userId, weeklyPerformance);
@@ -414,12 +469,7 @@ export class EliteStrategyManager {
   }
 
   static async checkWeekCompletion(userId: string): Promise<boolean> {
-    const { data: plan } = await supabase
-      .from('elite_study_plans')
-      .select('daily_plan, week_end')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .single();
+    const plan = await getLatestPlanByStatuses<any>(userId, EXECUTION_PLAN_STATUSES);
 
     if (!plan) return false;
 
@@ -436,14 +486,7 @@ export class EliteStrategyManager {
   }
 
   static async getCurrentWeekStrategy(userId: string): Promise<StudyStrategy | null> {
-    const { data } = await supabase
-      .from('elite_study_plans')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .single();
-
-    return data as StudyStrategy | null;
+    return await getLatestPlanByStatuses<StudyStrategy>(userId, CURRENT_PLAN_STATUSES);
   }
 
   static async getWeeklyStats(userId: string): Promise<any[]> {
@@ -463,12 +506,7 @@ export class EliteStrategyManager {
     accuracy: number,
     timeSpent: number
   ): Promise<void> {
-    const { data: currentPlan } = await supabase
-      .from('elite_study_plans')
-      .select('daily_plan')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .single();
+    const currentPlan = await getLatestPlanByStatuses<any>(userId, EXECUTION_PLAN_STATUSES);
 
     if (!currentPlan) return;
 
@@ -486,11 +524,11 @@ export class EliteStrategyManager {
     await supabase
       .from('elite_study_plans')
       .update({
+        status: 'active',
         daily_plan: updatedPlan,
         updated_at: new Date().toISOString()
       })
-      .eq('user_id', userId)
-      .eq('status', 'active');
+      .eq('id', currentPlan.id);
   }
 
   static async getFallbackPlan(intensity: string): Promise<Record<string, DailyActivity>> {
@@ -508,8 +546,11 @@ export class EliteStrategyManager {
     const weekStart = new Date();
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
+    const now = new Date().toISOString();
 
-    await supabase
+    await archiveCurrentPlans(userId);
+
+    const { data, error } = await supabase
       .from('elite_study_plans')
       .insert({
         user_id: userId,
@@ -518,8 +559,32 @@ export class EliteStrategyManager {
         daily_plan: plan,
         focus_topics: [],
         status: 'active',
+        status_changed_at: now,
+        activated_at: now,
         source,
-        created_at: new Date().toISOString()
-      });
+        created_at: now,
+        updated_at: now
+      })
+      .select('id')
+      .single();
+
+    if (error) throw error;
+
+    await createPlanRevision({
+      planId: data.id,
+      userId,
+      eventType: 'created',
+      actorRole: 'system',
+      previousStatus: null,
+      newStatus: 'active',
+      changeSummary: 'Plano salvo diretamente pelo motor de estratégia Elite.',
+      snapshot: {
+        daily_plan: plan,
+        focus_topics: [],
+        source,
+        week_start: weekStart.toISOString(),
+        week_end: weekEnd.toISOString()
+      }
+    });
   }
 }
