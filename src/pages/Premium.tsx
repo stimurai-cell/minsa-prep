@@ -52,7 +52,7 @@ export default function Premium() {
   const { profile } = useAuthStore();
   const isPremium = ['premium', 'elite', 'admin'].includes(profile?.role || '');
   const paidPlans = useMemo(() => premiumPlans.filter((plan) => plan.id !== 'free'), []);
-  const [selectedPeriod, setSelectedPeriod] = useState<PlanPeriod>('monthly');
+  const selectedPeriod: PlanPeriod = 'monthly';
   const [selectedPlanId, setSelectedPlanId] = useState(paidPlans.find(p => p.id === 'premium')?.id || paidPlans[0]?.id || 'premium');
 
   const selectPlanAndScroll = (planId: string) => {
@@ -141,13 +141,26 @@ export default function Premium() {
 
       const { data: publicUrlData } = supabase.storage.from('payment-proofs').getPublicUrl(filePath);
 
+      const isExtraPackage = (selectedPlan as any).priceAmount !== undefined;
+      const amount = isExtraPackage ? (selectedPlan as any).priceAmount : selectedPlan.prices[selectedPeriod].amount;
+      const planLabel = isExtraPackage
+        ? selectedPlan.name
+        : selectedPlan.id === 'elite'
+          ? `${selectedPlan.name} (vitalicio)`
+          : `${selectedPlan.name} (mensal)`;
+      const durationMonths = isExtraPackage
+        ? null
+        : selectedPlan.id === 'elite'
+          ? 0 // 0 = vitalicio/pagamento unico
+          : 1;
+
       const { error: requestError } = await supabase.from('payment_requests').insert({
         user_id: profile.id,
         payer_name: payerName.trim(),
         plan_id: selectedPlan.id,
-        plan_name: selectedPlan.id === 'pacote_concurso' ? selectedPlan.name : `${selectedPlan.name} (${selectedPeriod})`,
-        amount_kwanza: selectedPlan.id === 'pacote_concurso' ? selectedPlan.priceAmount : selectedPlan.prices[selectedPeriod].amount,
-        duration_months: selectedPlan.id === 'pacote_concurso' ? parseInt(prepTime) : (selectedPeriod === 'monthly' ? 1 : selectedPeriod === 'quarterly' ? 3 : 6),
+        plan_name: planLabel,
+        amount_kwanza: selectedPlan.id === 'pacote_concurso' ? selectedPlan.priceAmount : amount,
+        duration_months: selectedPlan.id === 'pacote_concurso' ? parseInt(prepTime) : durationMonths,
         payment_reference: paymentReference.trim(),
         proof_url: publicUrlData.publicUrl,
         proof_storage_path: filePath,
@@ -232,18 +245,6 @@ export default function Premium() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">Planos</p>
             <h2 className="mt-2 text-2xl font-black text-slate-900">Escolha o seu ciclo de estudo</h2>
           </div>
-          <div className="flex bg-slate-100 p-1 rounded-full">
-            {(['monthly', 'quarterly', 'semiannual'] as PlanPeriod[]).map((period) => (
-              <button
-                key={period}
-                onClick={() => setSelectedPeriod(period)}
-                className={`px-4 py-2 text-sm font-bold uppercase rounded-full transition-colors ${selectedPeriod === period ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-              >
-                {period === 'monthly' ? 'Mensal' : period === 'quarterly' ? 'Trimestral' : 'Semestral'}
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="mt-6 grid gap-4 xl:grid-cols-3">
@@ -266,7 +267,9 @@ export default function Premium() {
               </div>
               <h3 className="mt-4 text-2xl font-black text-slate-900">{plan.name}</h3>
               <p className="mt-1 text-2xl font-black text-slate-900">{plan.prices[selectedPeriod].label}</p>
-              <p className="mt-1 text-sm font-semibold text-emerald-700">por {selectedPeriod === 'monthly' ? 'mês' : selectedPeriod === 'quarterly' ? '3 meses' : '6 meses'}</p>
+              <p className="mt-1 text-sm font-semibold text-emerald-700">
+                {plan.id === 'elite' ? 'Acesso vitalício (pagamento único)' : 'por mês'}
+              </p>
               <p className="mt-4 text-sm font-semibold text-slate-800">{plan.headline}</p>
               <p className="mt-3 text-sm leading-6 text-slate-600">{plan.description}</p>
               <div className="mt-5 space-y-2">
@@ -295,7 +298,7 @@ export default function Premium() {
 
       <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-6 mt-8">
         <h2 className="text-2xl font-black text-slate-900 mb-2">Pacotes Extras Intensivos</h2>
-        <p className="text-sm text-slate-600 mb-6">Se você já é Basic ou Premium mas precisa daquele foco final, adicione ao seu plano.</p>
+        <p className="text-sm text-slate-600 mb-6">Se você já é Premium ou Elite mas precisa daquele foco final, adicione ao seu plano.</p>
         <div className="grid gap-4 md:grid-cols-3">
           {extraPackages.map((pkg) => (
             <div key={pkg.id} className="rounded-2xl border border-sky-200 bg-sky-50/50 p-5">

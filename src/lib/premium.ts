@@ -1,4 +1,4 @@
-export type PlanPeriod = 'monthly' | 'quarterly' | 'semiannual';
+export type PlanPeriod = 'monthly';
 
 export type PremiumPlan = {
   id: string;
@@ -11,8 +11,6 @@ export type PremiumPlan = {
   role: 'free' | 'basic' | 'premium' | 'elite';
   prices: {
     monthly: { amount: number; label: string };
-    quarterly: { amount: number; label: string };
-    semiannual: { amount: number; label: string };
   };
 };
 
@@ -32,28 +30,6 @@ export const premiumPlans: PremiumPlan[] = [
     ],
     prices: {
       monthly: { amount: 0, label: '0 Kz' },
-      quarterly: { amount: 0, label: '0 Kz' },
-      semiannual: { amount: 0, label: '0 Kz' },
-    },
-  },
-  {
-    id: 'basic',
-    name: 'Basic (Estudante)',
-    badge: 'Essencial',
-    headline: 'Para quem precisa de preparacao consistente.',
-    description: 'Liberte simulacoes ilimitadas e acompanhe as suas estatisticas e desempenho.',
-    role: 'basic',
-    features: [
-      'Simulacoes de prova ilimitadas',
-      'Treino diário sem limites (Exceto Dificil)',
-      'Ranking completo',
-      'Historico de provas',
-      'Sistema de revisao inteligente',
-    ],
-    prices: {
-      monthly: { amount: 1500, label: '1.500 Kz' },
-      quarterly: { amount: 3900, label: '3.900 Kz' },
-      semiannual: { amount: 7000, label: '7.000 Kz' },
     },
   },
   {
@@ -65,16 +41,17 @@ export const premiumPlans: PremiumPlan[] = [
     role: 'premium',
     highlight: true,
     features: [
-      'Tudo do Basic +',
+      'Simulacoes de prova ilimitadas',
+      'Treino diario sem limites (todos os niveis, inclui Dificil)',
+      'Ranking completo',
+      'Historico de provas',
+      'Sistema de revisao inteligente',
       'Modo Dificil desbloqueado',
       'Banco completo de questoes',
-      'Radar de Fraquezas (Insights Inteligentes)',
-      'Sistema de revisao inteligente',
+      'Revisao guiada por IA (sem radar completo)',
     ],
     prices: {
-      monthly: { amount: 4000, label: '4.000 Kz' },
-      quarterly: { amount: 10000, label: '10.000 Kz' },
-      semiannual: { amount: 18000, label: '18.000 Kz' },
+      monthly: { amount: 8000, label: '8.000 Kz (mensal)' },
     },
   },
   {
@@ -86,15 +63,14 @@ export const premiumPlans: PremiumPlan[] = [
     role: 'elite',
     features: [
       'Tudo do Premium +',
+      'Radar de Fraquezas (Insights Inteligentes)',
       'Simulacao Nacional (Prova de Evento)',
       'Estatisticas profundas em PDF',
       'Modo Batalha XP Plus',
       'Sistema de revisao inteligente',
     ],
     prices: {
-      monthly: { amount: 8000, label: '8.000 Kz' },
-      quarterly: { amount: 21000, label: '21.000 Kz' },
-      semiannual: { amount: 38000, label: '38.000 Kz' },
+      monthly: { amount: 15000, label: '15.000 Kz (vitalicio)' },
     },
   },
 ];
@@ -111,8 +87,8 @@ export type ExtraPackage = {
 export const extraPackages: ExtraPackage[] = [
   {
     id: 'intensivo_farmacia',
-    name: 'Pacote Intensivo Farmácia',
-    description: 'Reforce o seu estudo focado apenas em Farmácia.',
+    name: 'Pacote Intensivo Farmacia',
+    description: 'Reforce o seu estudo focado apenas em Farmacia.',
     priceAmount: 3000,
     priceLabel: '3.000 Kz',
     features: ['500 questoes extras de farmacologia', 'Simulacoes especificas de alto nivel'],
@@ -135,18 +111,18 @@ export const extraPackages: ExtraPackage[] = [
   },
   {
     id: 'pacote_concurso',
-    name: 'Módulo Concurso Público',
-    description: 'Acesso vitalício ao simulador focado no edital do MINSA.',
+    name: 'Modulo Concurso Publico',
+    description: 'Acesso vitalicio ao simulador focado no edital do MINSA.',
     priceAmount: 5000,
     priceLabel: '5.000 Kz',
-    features: ['Simulados de Legislação e Ética', 'Cronómetro e ambiente de prova real', 'Destaques do edital atualizado'],
+    features: ['Simulados de Legislacao e Etica', 'Cronometro e ambiente de prova real', 'Destaques do edital atualizado'],
   },
   {
     id: 'pacote_offline',
     name: 'Pacote Offline (PWA)',
-    description: 'Estude em qualquer lugar, mesmo sem internet ou dados móveis.',
+    description: 'Estude em qualquer lugar, mesmo sem internet ou dados moveis.',
     priceAmount: 900,
     priceLabel: '900 Kz',
-    features: ['Download de questões para uso offline', 'Sincronização automática ao reconectar', 'Acesso ilimitado ao treino diário offline'],
+    features: ['Download de questoes para uso offline', 'Sincronizacao automatica ao reconectar', 'Acesso ilimitado ao treino diario offline'],
   },
 ];

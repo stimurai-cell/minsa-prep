@@ -4,8 +4,8 @@
  * Lógica de Planos (role):
  *  - free    : treino livre (fácil, médio, misto), 30 questões/dia, 1 simulação/semana, ranking básico
  *  - basic   : simulações ilimitadas, treino diário sem limite (EXCETO difícil), ranking completo, histórico de provas
- *  - premium : tudo do basic + modo difícil + banco completo de questões + radar de fraquezas
- *  - elite   : tudo do premium + simulação nacional + estatísticas em PDF + modo batalha XP Plus
+ *  - premium : tudo do basic + modo difícil + banco completo de questões (mas sem radar avançado)
+ *  - elite   : tudo do premium + radar de fraquezas + simulação nacional + estatísticas em PDF + modo batalha XP Plus
  *  - admin   : acesso total (sem restrições)
  *
  * Lógica de Extras (active_packages[]):
@@ -33,7 +33,7 @@ export interface UserPermissions {
 
     // --- Estatísticas ---
     hasHistorico: boolean;               // basic+
-    hasWeaknessRadar: boolean;           // premium+ (Radar de Fraquezas)
+    hasWeaknessRadar: boolean;           // elite+ (Radar de Fraquezas)
     hasStatisticsPDF: boolean;           // elite+
 
     // --- Funcionalidades Elite ---
@@ -78,7 +78,7 @@ export function getPermissions(
         hasHistorico: isBasic,
 
         // Estatísticas avançadas
-        hasWeaknessRadar: isPremium,
+    hasWeaknessRadar: isElite,
         hasStatisticsPDF: isElite,
 
         // Funcionalidades Elite
