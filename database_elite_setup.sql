@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS elite_study_plans (
     week_end TIMESTAMPTZ NOT NULL,
     daily_plan JSONB NOT NULL, -- estrutura com atividades diárias
     focus_topics TEXT[] DEFAULT '{}',
+    source VARCHAR(50) DEFAULT 'template', -- origem do plano (template, personalized, confirmed_by_student)
     status VARCHAR(20) DEFAULT 'draft', -- 'draft', 'finalized', 'active', 'completed', 'archived'
     performance JSONB, -- métricas de desempenho da semana
     created_at TIMESTAMPTZ DEFAULT NOW(),

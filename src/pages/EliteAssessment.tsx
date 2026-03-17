@@ -46,7 +46,7 @@ const DEFAULT_TOPICS = [
 
 
 export default function EliteAssessment() {
-  const { profile } = useAuthStore();
+  const { profile, refreshProfile } = useAuthStore();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
@@ -155,6 +155,27 @@ export default function EliteAssessment() {
       throw new Error('Perfil do usuario indisponivel para salvar respostas Elite.');
     }
 
+    const persistEliteProfilePayload = async (payload: Record<string, unknown>) => {
+      const { data: existingProfile, error: lookupError } = await supabase
+        .from('elite_profiles')
+        .select('id')
+        .eq('user_id', profile.id)
+        .maybeSingle();
+
+      if (lookupError) throw lookupError;
+
+      if (existingProfile?.id) {
+        return supabase
+          .from('elite_profiles')
+          .update(payload)
+          .eq('id', existingProfile.id);
+      }
+
+      return supabase
+        .from('elite_profiles')
+        .insert(payload);
+    };
+
     const basePayload = {
       user_id: profile.id,
       daily_study_time: personalAnswers.daily_study_time,
@@ -169,18 +190,27 @@ export default function EliteAssessment() {
       selected_area_id: profile.selected_area_id || null
     };
 
-    let { error } = await supabase
-      .from('elite_profiles')
-      .upsert(extendedPayload, { onConflict: 'user_id' });
+    let { error } = await persistEliteProfilePayload(extendedPayload);
 
     if (error && isLegacyEliteProfileSchemaError(error)) {
       console.warn('elite_profiles ainda sem colunas novas; salvando com schema basico', error);
-      ({ error } = await supabase
-        .from('elite_profiles')
-        .upsert(basePayload, { onConflict: 'user_id' }));
+      ({ error } = await persistEliteProfilePayload(basePayload));
     }
 
     if (error) throw error;
+
+    if (profile.selected_area_id) {
+      const { error: syncProfileError } = await supabase
+        .from('profiles')
+        .update({ selected_area_id: String(profile.selected_area_id) })
+        .eq('id', profile.id);
+
+      if (syncProfileError) {
+        console.warn('Nao foi possivel sincronizar a area principal em profiles', syncProfileError);
+      }
+    }
+
+    await refreshProfile(profile.id);
   };
 
   const getTimeSuggestions = () => {

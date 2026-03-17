@@ -228,6 +228,18 @@ export default function ElitePlanPreview() {
     }));
   };
 
+  const isLegacyElitePlanSchemaError = (error: any) => {
+    const errorText = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+    return (
+      error?.code === 'PGRST204' ||
+      error?.code === '42703' ||
+      errorText.includes('status_changed_at') ||
+      errorText.includes('finalized_at') ||
+      errorText.includes('activated_at') ||
+      errorText.includes('source')
+    );
+  };
+
   const persistPlan = async (
     targetStatus?: ElitePlanStatus,
     eventType: 'autosave' | 'manual_save' | 'finalized' = 'manual_save'
@@ -237,26 +249,31 @@ export default function ElitePlanPreview() {
     const now = new Date().toISOString();
     const nextStatus = targetStatus || studyPlan.status || 'draft';
     const source = eventType === 'finalized' ? 'confirmed_by_student' : (studyPlan.source || 'template');
-    const planPayload = {
+    const basePlanPayload = {
       user_id: profile.id,
       week_start: studyPlan.week_start,
       week_end: studyPlan.week_end,
       daily_plan: editablePlan,
       focus_topics: studyPlan.focus_topics || [],
       status: nextStatus,
+      updated_at: now
+    };
+    const planPayload = {
+      ...basePlanPayload,
       status_changed_at: now,
       finalized_at: nextStatus === 'finalized' ? now : null,
-      source,
-      updated_at: now
+      source
     };
 
     try {
+      let legacySaved = false;
       if (planStorage === 'legacy') {
         const { error: legacyUpdateError } = await supabase
           .from('study_plans')
           .update({
             plan_json: {
               ...studyPlan,
+              status: nextStatus,
               source,
               daily_plan: editablePlan,
               focus_topics: studyPlan.focus_topics || []
@@ -264,29 +281,51 @@ export default function ElitePlanPreview() {
           })
           .eq('id', studyPlan.id);
         if (legacyUpdateError) throw legacyUpdateError;
+        legacySaved = true;
       }
 
       let elitePlanId = studyPlan.id;
       const existingActive = await getLatestPlanByStatuses<{ id: string }>(profile.id, CURRENT_PLAN_STATUSES);
+      let elitePersisted = false;
 
-      if (existingActive?.id) {
-        const { error: updateError } = await supabase
-          .from('elite_study_plans')
-          .update(planPayload)
-          .eq('id', existingActive.id);
-        if (updateError) throw updateError;
-        elitePlanId = existingActive.id;
-      } else {
+      const persistToEliteTable = async (payload: typeof basePlanPayload | typeof planPayload) => {
+        if (existingActive?.id) {
+          const { error: updateError } = await supabase
+            .from('elite_study_plans')
+            .update(payload)
+            .eq('id', existingActive.id);
+
+          if (updateError) return { error: updateError, id: existingActive.id };
+          return { error: null, id: existingActive.id };
+        }
+
         const { data: inserted, error: insertError } = await supabase
           .from('elite_study_plans')
           .insert({
-            ...planPayload,
+            ...payload,
             created_at: now
           })
           .select('id')
           .single();
-        if (insertError) throw insertError;
-        elitePlanId = inserted.id;
+
+        return { error: insertError, id: inserted?.id || studyPlan.id };
+      };
+
+      let persistedEliteResult = await persistToEliteTable(planPayload);
+      if (persistedEliteResult.error && isLegacyElitePlanSchemaError(persistedEliteResult.error)) {
+        console.warn('elite_study_plans ainda sem schema completo; tentando persistencia basica', persistedEliteResult.error);
+        persistedEliteResult = await persistToEliteTable(basePlanPayload);
+      }
+
+      if (persistedEliteResult.error) {
+        if (legacySaved && isLegacyElitePlanSchemaError(persistedEliteResult.error)) {
+          console.warn('Plano mantido no fallback study_plans por incompatibilidade do schema Elite', persistedEliteResult.error);
+        } else {
+          throw persistedEliteResult.error;
+        }
+      } else {
+        elitePlanId = persistedEliteResult.id;
+        elitePersisted = true;
       }
 
       const revisionEntry: PlanRevision = {
@@ -320,7 +359,7 @@ export default function ElitePlanPreview() {
       });
 
       setStudyPlan((prev) => (prev ? { ...prev, id: elitePlanId, daily_plan: editablePlan, source, status: nextStatus } : null));
-      setPlanStorage('elite');
+      setPlanStorage(elitePersisted ? 'elite' : planStorage);
       setLastSavedSnapshot(JSON.stringify(editablePlan || {}));
       setRevisions((prev) => [revisionEntry, ...prev].slice(0, 6));
       return true;
@@ -354,15 +393,19 @@ export default function ElitePlanPreview() {
       return;
     }
 
-    await supabase
+    const { error: onboardingError } = await supabase
       .from('elite_onboarding')
       .upsert({
         user_id: profile.id,
         completed: true,
         completed_at: new Date().toISOString()
-      });
+      }, { onConflict: 'user_id' });
 
-    await supabase.from('elite_insights').insert({
+    if (onboardingError) {
+      console.warn('Nao foi possivel atualizar elite_onboarding', onboardingError);
+    }
+
+    const { error: insightError } = await supabase.from('elite_insights').insert({
       user_id: profile.id,
       insight_type: 'milestone',
       title: 'Plano Elite confirmado',
@@ -370,6 +413,10 @@ export default function ElitePlanPreview() {
       priority: 'medium',
       actionable: false
     });
+
+    if (insightError) {
+      console.warn('Nao foi possivel registrar insight de confirmacao do plano', insightError);
+    }
 
     setSaving(false);
     setAutosaveState('saved');

@@ -33,6 +33,57 @@ interface AuthState {
   checkSession: () => Promise<void>;
 }
 
+const normalizeAreaId = (value: unknown): string | null => {
+  if (value === null || value === undefined || value === '') return null;
+  return String(value);
+};
+
+const resolveProfileArea = async (resolvedUserId: string, profile: any): Promise<UserProfile> => {
+  const normalizedProfile: UserProfile = {
+    ...(profile as UserProfile),
+    selected_area_id: normalizeAreaId(profile?.selected_area_id),
+  };
+
+  if (normalizedProfile.selected_area_id) {
+    return normalizedProfile;
+  }
+
+  try {
+    const { data: eliteProfile, error } = await supabase
+      .from('elite_profiles')
+      .select('selected_area_id')
+      .eq('user_id', resolvedUserId)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('Elite profile area fallback error:', error);
+      return normalizedProfile;
+    }
+
+    const fallbackAreaId = normalizeAreaId(eliteProfile?.selected_area_id);
+    if (!fallbackAreaId) {
+      return normalizedProfile;
+    }
+
+    const { error: syncError } = await supabase
+      .from('profiles')
+      .update({ selected_area_id: fallbackAreaId })
+      .eq('id', resolvedUserId);
+
+    if (syncError) {
+      console.warn('Profile area sync error:', syncError);
+    }
+
+    return {
+      ...normalizedProfile,
+      selected_area_id: fallbackAreaId,
+    };
+  } catch (error) {
+    console.error('Profile area resolution error:', error);
+    return normalizedProfile;
+  }
+};
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   profile: null,
@@ -64,8 +115,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       return null;
     }
 
-    set({ profile: profile as UserProfile });
-    return profile as UserProfile;
+    const resolvedProfile = await resolveProfileArea(resolvedUserId, profile);
+    set({ profile: resolvedProfile });
+    return resolvedProfile;
   },
   checkSession: async () => {
     try {
@@ -78,7 +130,8 @@ export const useAuthStore = create<AuthState>((set) => ({
           .eq('id', session.user.id)
           .single();
         if (profile) {
-          set({ profile: profile as UserProfile });
+          const resolvedProfile = await resolveProfileArea(session.user.id, profile);
+          set({ profile: resolvedProfile });
         }
       } else {
         set({ user: null, profile: null });

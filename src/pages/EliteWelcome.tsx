@@ -79,7 +79,7 @@ export default function EliteWelcome() {
           user_id: profile.id,
           completed: true,
           completed_at: new Date().toISOString()
-        });
+        }, { onConflict: 'user_id' });
       
       navigate('/elite-assessment');
     } catch (error) {

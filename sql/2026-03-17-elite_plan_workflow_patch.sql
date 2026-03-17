@@ -2,6 +2,7 @@
 -- Idempotente
 
 ALTER TABLE elite_study_plans
+    ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'template',
     ADD COLUMN IF NOT EXISTS status_changed_at TIMESTAMPTZ DEFAULT NOW(),
     ADD COLUMN IF NOT EXISTS finalized_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS activated_at TIMESTAMPTZ;

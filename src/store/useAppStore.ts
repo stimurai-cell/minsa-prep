@@ -41,6 +41,7 @@ const normalizeArea = (area: Area): Area => {
 
   return {
     ...area,
+    id: String(area.id),
     name: canonicalAreaNames[key] || area.name,
   };
 };
