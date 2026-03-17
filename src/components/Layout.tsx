@@ -22,6 +22,7 @@ import {
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import { getRoleLabel } from '../lib/labels';
+import { supabase } from '../lib/supabase';
 import ErrorBoundary from './ErrorBoundary';
 
 export default function Layout() {
@@ -31,6 +32,7 @@ export default function Layout() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [accountOpen, setAccountOpen] = useState(false);
+  const [resolvedAreaName, setResolvedAreaName] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAreas();
@@ -39,14 +41,54 @@ export default function Layout() {
   useEffect(() => {
     setAccountOpen(false);
   }, [location.pathname, location.search]);
+  useEffect(() => {
+    if (!profile?.selected_area_id) {
+      setResolvedAreaName(null);
+      return;
+    }
+
+    const knownAreaName = areas.find((area) => area.id === profile.selected_area_id)?.name;
+    if (knownAreaName) {
+      setResolvedAreaName(knownAreaName);
+      return;
+    }
+
+    let active = true;
+    const loadAreaName = async () => {
+      const { data, error } = await supabase
+        .from('areas')
+        .select('name')
+        .eq('id', profile.selected_area_id)
+        .maybeSingle();
+
+      if (!active) return;
+
+      if (error) {
+        console.warn('Nao foi possivel resolver a area no layout', error);
+        setResolvedAreaName(null);
+        return;
+      }
+
+      setResolvedAreaName(data?.name || null);
+    };
+
+    void loadAreaName();
+
+    return () => {
+      active = false;
+    };
+  }, [areas, profile?.selected_area_id]);
 
   const handleSignOut = async () => {
     await signOut();
     navigate('/login');
   };
 
+  const matchedAreaName = areas.find((area) => area.id === profile?.selected_area_id)?.name;
   const areaName =
-    areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Área ainda não definida';
+    matchedAreaName ||
+    resolvedAreaName ||
+    (profile?.selected_area_id ? 'Carregando area...' : 'Area ainda nao definida');
 
   const adminLinks = [
     { to: '/admin?tab=dashboard', label: 'Visao geral', icon: LayoutDashboard, key: 'dashboard' },
@@ -359,3 +401,4 @@ export default function Layout() {
     </div>
   );
 }
+

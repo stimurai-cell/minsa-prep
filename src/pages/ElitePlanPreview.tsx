@@ -66,6 +66,49 @@ const WEEK_DAYS: DayConfig[] = [
   { label: 'Domingo', keys: ['sunday', 'domingo'] }
 ];
 
+const ELITE_PLAN_KEYS = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+  'segunda',
+  'terca',
+  'quarta',
+  'quinta',
+  'sexta',
+  'sabado',
+  'domingo'
+];
+
+const getWeekRange = (weekStartInput?: string | null, weekEndInput?: string | null) => {
+  const weekStart = new Date(weekStartInput || new Date().toISOString());
+  const safeStart = Number.isNaN(weekStart.getTime()) ? new Date() : weekStart;
+  const rawEnd = weekEndInput ? new Date(weekEndInput) : null;
+  const safeEnd =
+    rawEnd && !Number.isNaN(rawEnd.getTime()) && rawEnd.getTime() > safeStart.getTime()
+      ? rawEnd
+      : new Date(safeStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  return {
+    weekStart: safeStart.toISOString(),
+    weekEnd: safeEnd.toISOString()
+  };
+};
+
+const extractLegacyDailyPlan = (payload: any): Record<string, DailyPlan> | null => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+
+  if (payload.daily_plan && typeof payload.daily_plan === 'object' && !Array.isArray(payload.daily_plan)) {
+    return payload.daily_plan as Record<string, DailyPlan>;
+  }
+
+  const hasWeeklyShape = ELITE_PLAN_KEYS.some((key) => key in payload);
+  return hasWeeklyShape ? (payload as Record<string, DailyPlan>) : null;
+};
+
 export default function ElitePlanPreview() {
   const { profile } = useAuthStore();
   const navigate = useNavigate();
@@ -138,28 +181,39 @@ export default function ElitePlanPreview() {
         setPlanStorage('elite');
         setLastSavedSnapshot(JSON.stringify(plan.daily_plan || {}));
       } else {
-        const { data: legacyPlan, error: legacyError } = await supabase
+        const { data: legacyPlans, error: legacyError } = await supabase
           .from('study_plans')
           .select('*')
           .eq('user_id', profile.id)
           .order('generated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          .limit(10);
 
-        if (legacyPlan?.plan_json) {
-          const parsed = legacyPlan.plan_json as any;
-          const mappedPlan: StudyPlan = {
-            id: legacyPlan.id,
-            week_start: parsed.week_start || legacyPlan.generated_at,
-            week_end: parsed.week_end || legacyPlan.generated_at,
-            daily_plan: parsed.daily_plan || parsed,
-            focus_topics: parsed.focus_topics || [],
-            source: parsed.source || 'fallback'
-          };
-          setStudyPlan(mappedPlan);
-          setEditablePlan(mappedPlan.daily_plan);
-          setPlanStorage('legacy');
-          setLastSavedSnapshot(JSON.stringify(mappedPlan.daily_plan || {}));
+        const compatibleLegacyPlan = (legacyPlans || []).find((candidate) =>
+          !!extractLegacyDailyPlan(candidate?.plan_json)
+        );
+
+        if (compatibleLegacyPlan?.plan_json) {
+          const parsed = compatibleLegacyPlan.plan_json as any;
+          const dailyPlan = extractLegacyDailyPlan(parsed);
+          if (dailyPlan) {
+            const { weekStart, weekEnd } = getWeekRange(
+              parsed.week_start || compatibleLegacyPlan.generated_at,
+              parsed.week_end || compatibleLegacyPlan.generated_at
+            );
+            const mappedPlan: StudyPlan = {
+              id: compatibleLegacyPlan.id,
+              week_start: weekStart,
+              week_end: weekEnd,
+              daily_plan: dailyPlan,
+              focus_topics: parsed.focus_topics || [],
+              source: parsed.source || 'fallback',
+              status: parsed.status || 'draft'
+            };
+            setStudyPlan(mappedPlan);
+            setEditablePlan(mappedPlan.daily_plan);
+            setPlanStorage('legacy');
+            setLastSavedSnapshot(JSON.stringify(mappedPlan.daily_plan || {}));
+          }
         } else if (legacyError) {
           console.warn('Nenhum plano encontrado em study_plans', legacyError);
         }
@@ -247,12 +301,13 @@ export default function ElitePlanPreview() {
     if (!studyPlan || !profile?.id) return false;
 
     const now = new Date().toISOString();
+    const { weekStart, weekEnd } = getWeekRange(studyPlan.week_start, studyPlan.week_end);
     const nextStatus = targetStatus || studyPlan.status || 'draft';
     const source = eventType === 'finalized' ? 'confirmed_by_student' : (studyPlan.source || 'template');
     const basePlanPayload = {
       user_id: profile.id,
-      week_start: studyPlan.week_start,
-      week_end: studyPlan.week_end,
+      week_start: weekStart,
+      week_end: weekEnd,
       daily_plan: editablePlan,
       focus_topics: studyPlan.focus_topics || [],
       status: nextStatus,
@@ -275,6 +330,8 @@ export default function ElitePlanPreview() {
               ...studyPlan,
               status: nextStatus,
               source,
+              week_start: weekStart,
+              week_end: weekEnd,
               daily_plan: editablePlan,
               focus_topics: studyPlan.focus_topics || []
             }
@@ -358,7 +415,11 @@ export default function ElitePlanPreview() {
         }
       });
 
-      setStudyPlan((prev) => (prev ? { ...prev, id: elitePlanId, daily_plan: editablePlan, source, status: nextStatus } : null));
+      setStudyPlan((prev) => (
+        prev
+          ? { ...prev, id: elitePlanId, week_start: weekStart, week_end: weekEnd, daily_plan: editablePlan, source, status: nextStatus }
+          : null
+      ));
       setPlanStorage(elitePersisted ? 'elite' : planStorage);
       setLastSavedSnapshot(JSON.stringify(editablePlan || {}));
       setRevisions((prev) => [revisionEntry, ...prev].slice(0, 6));

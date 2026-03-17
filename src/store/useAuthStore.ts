@@ -38,6 +38,21 @@ const normalizeAreaId = (value: unknown): string | null => {
   return String(value);
 };
 
+const syncAreaToEliteProfile = async (userId: string, selectedAreaId: string) => {
+  try {
+    const { error } = await supabase
+      .from('elite_profiles')
+      .update({ selected_area_id: selectedAreaId })
+      .eq('user_id', userId);
+
+    if (error) {
+      console.warn('Elite profile area backfill error:', error);
+    }
+  } catch (error) {
+    console.error('Elite profile area backfill failed:', error);
+  }
+};
+
 const resolveProfileArea = async (resolvedUserId: string, profile: any): Promise<UserProfile> => {
   const normalizedProfile: UserProfile = {
     ...(profile as UserProfile),
@@ -45,6 +60,7 @@ const resolveProfileArea = async (resolvedUserId: string, profile: any): Promise
   };
 
   if (normalizedProfile.selected_area_id) {
+    void syncAreaToEliteProfile(resolvedUserId, normalizedProfile.selected_area_id);
     return normalizedProfile;
   }
 

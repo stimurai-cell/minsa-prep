@@ -150,31 +150,38 @@ export default function EliteAssessment() {
     );
   };
 
+  const persistPersonalDataViaApi = async () => {
+    const response = await fetch('/api/elite-profile', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        userId: profile?.id,
+        dailyStudyTime: personalAnswers.daily_study_time,
+        examExperience: personalAnswers.exam_experience,
+        preferredStudyPeriod: personalAnswers.preferred_study_period,
+        preferredStudyHour: personalAnswers.preferred_study_hour,
+        studyDays: selectedDays,
+        selectedAreaId: profile?.selected_area_id || null
+      })
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.details || payload?.error || 'Falha ao salvar perfil Elite no backend.');
+    }
+  };
+
   const persistPersonalData = async () => {
     if (!profile?.id) {
       throw new Error('Perfil do usuario indisponivel para salvar respostas Elite.');
     }
 
-    const persistEliteProfilePayload = async (payload: Record<string, unknown>) => {
-      const { data: existingProfile, error: lookupError } = await supabase
+    const persistEliteProfilePayload = async (payload: Record<string, unknown>) =>
+      supabase
         .from('elite_profiles')
-        .select('id')
-        .eq('user_id', profile.id)
-        .maybeSingle();
-
-      if (lookupError) throw lookupError;
-
-      if (existingProfile?.id) {
-        return supabase
-          .from('elite_profiles')
-          .update(payload)
-          .eq('id', existingProfile.id);
-      }
-
-      return supabase
-        .from('elite_profiles')
-        .insert(payload);
-    };
+        .upsert(payload, { onConflict: 'user_id' });
 
     const basePayload = {
       user_id: profile.id,
@@ -190,11 +197,18 @@ export default function EliteAssessment() {
       selected_area_id: profile.selected_area_id || null
     };
 
-    let { error } = await persistEliteProfilePayload(extendedPayload);
+    let error: any = null;
 
-    if (error && isLegacyEliteProfileSchemaError(error)) {
-      console.warn('elite_profiles ainda sem colunas novas; salvando com schema basico', error);
-      ({ error } = await persistEliteProfilePayload(basePayload));
+    try {
+      await persistPersonalDataViaApi();
+    } catch (apiError) {
+      console.warn('Persistencia via API falhou; tentando caminho direto compativel', apiError);
+      ({ error } = await persistEliteProfilePayload(extendedPayload));
+
+      if (error && isLegacyEliteProfileSchemaError(error)) {
+        console.warn('elite_profiles ainda sem colunas novas; salvando com schema basico', error);
+        ({ error } = await persistEliteProfilePayload(basePayload));
+      }
     }
 
     if (error) throw error;
