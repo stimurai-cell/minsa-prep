@@ -19,6 +19,8 @@ if (requiredKeys.length) {
     throw new Error(`[Firebase] Variáveis ausentes: ${requiredKeys.join(', ')}. Configure-as em .env (VITE_FIREBASE_...).`);
 }
 
+const DEFAULT_VAPID_KEY = 'BCZoJ_IJDIngAEx4jVxNExarkIekybf1W4bgx6z1M1oe2WHiULJ1U-8w_ysXOscrdTVHX8i2bg5IX2AUt54WToes';
+
 const app = initializeApp(firebaseConfig as any);
 
 // Initialize Firebase Cloud Messaging and get a reference to the service
@@ -48,9 +50,13 @@ export const requestFirebaseNotificationPermission = async () => {
 
             console.log('[Firebase] A obter token FCM...');
 
+            const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY || DEFAULT_VAPID_KEY;
+            if (!import.meta.env.VITE_FIREBASE_VAPID_KEY) {
+                console.warn('[Firebase] VAPID key ausente em env; usando fallback embedado.');
+            }
             const token = await getToken(messaging, {
                 serviceWorkerRegistration: registration,
-                vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY
+                ...(vapidKey ? { vapidKey } : {})
             });
 
             if (!token) {
