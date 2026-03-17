@@ -1,22 +1,58 @@
-// Gerado automaticamente por scripts/generate-sw.ts
+import { writeFileSync } from 'fs';
+import path from 'path';
+import { config } from 'dotenv';
+
+// Carrega .env.local se existir, depois .env padrão
+config({ path: path.join(process.cwd(), '.env.local'), override: true });
+config();
+
+const requiredEnv = [
+  'VITE_FIREBASE_API_KEY',
+  'VITE_FIREBASE_AUTH_DOMAIN',
+  'VITE_FIREBASE_PROJECT_ID',
+  'VITE_FIREBASE_STORAGE_BUCKET',
+  'VITE_FIREBASE_SENDER_ID',
+  'VITE_FIREBASE_APP_ID',
+  'VITE_FIREBASE_MEASUREMENT_ID',
+];
+
+const missing = requiredEnv.filter((key) => !process.env[key]);
+if (missing.length) {
+  console.error(`[generate-sw] Faltam variáveis: ${missing.join(', ')}`);
+  process.exit(1);
+}
+
+const cfg = {
+  apiKey: process.env.VITE_FIREBASE_API_KEY,
+  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.VITE_FIREBASE_SENDER_ID,
+  appId: process.env.VITE_FIREBASE_APP_ID,
+  measurementId: process.env.VITE_FIREBASE_MEASUREMENT_ID,
+};
+
+// Version string para cache bust. Usa package.json version se existir; senão timestamp.
+let cacheVersion = `v-${Date.now()}`;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const pkg = require('../package.json');
+  cacheVersion = `v-${pkg.version || cacheVersion}`;
+} catch {
+  // ignore
+}
+
+const swContent = `// Gerado automaticamente por scripts/generate-sw.ts
 importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-messaging-compat.js');
 
-const firebaseConfig = {
-    "apiKey": "AIzaSyAuwBxj9rJMo4UA9AUTMqQtsbY_-LcrKI",
-    "authDomain": "farmolink-28.firebaseapp.com",
-    "projectId": "farmolink-28",
-    "storageBucket": "farmolink-28.firebasestorage.app",
-    "messagingSenderId": "845647802142",
-    "appId": "1:845647802142:web:47c11bd7fd9ae06be6a30f",
-    "measurementId": "G-L9SM8DDHCP"
-};
+const firebaseConfig = ${JSON.stringify(cfg, null, 4)};
 
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
-const CACHE_NAME = 'minsa-prep-v-1773737207318';
-const DATA_CACHE_NAME = 'minsa-prep-data-v-1773737207318';
+const CACHE_NAME = 'minsa-prep-${cacheVersion}';
+const DATA_CACHE_NAME = 'minsa-prep-data-${cacheVersion}';
 
 const ASSETS_TO_CACHE = [
   '/',
@@ -166,3 +202,8 @@ self.addEventListener('notificationclick', (event) => {
     })
   );
 });
+`;
+
+const outPath = path.join(process.cwd(), 'public', 'sw.js');
+writeFileSync(outPath, swContent, { encoding: 'utf8' });
+console.log(`[generate-sw] Service worker escrito em ${outPath}`);

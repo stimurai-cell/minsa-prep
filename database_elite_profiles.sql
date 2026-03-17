@@ -1,4 +1,4 @@
--- Tabela adicional para perfis Elite com dados pessoais
+-- Tabela adicional para perfis Elite com dados pessoais (idempotente)
 -- Complementa o sistema Elite existente
 
 -- Tabela de perfis Elite com informações pessoais
@@ -99,3 +99,54 @@ FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 -- Comentários
 COMMENT ON TABLE elite_profiles IS 'Dados pessoais de usuários Elite para personalização de planos';
 COMMENT ON TABLE elite_plan_templates IS 'Templates de planos predefinidos como fallback';
+
+-- RLS
+ALTER TABLE elite_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE elite_plan_templates ENABLE ROW LEVEL SECURITY;
+
+-- Drop policies existentes para evitar erro 42710 e recriar
+DO $$
+DECLARE
+    pol RECORD;
+BEGIN
+    FOR pol IN
+        SELECT policyname, tablename
+        FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename IN ('elite_profiles','elite_plan_templates')
+          AND policyname IN (
+            'Users can view own elite profile','Users can insert own elite profile','Users can update own elite profile','Admins can view all elite profiles',
+            'Everyone can view active templates','Admins can manage templates'
+          )
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON %I', pol.policyname, pol.tablename);
+    END LOOP;
+END$$;
+
+-- Políticas RLS para elite_profiles
+CREATE POLICY "Users can view own elite profile" ON elite_profiles FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own elite profile" ON elite_profiles FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own elite profile" ON elite_profiles FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Admins can view all elite profiles" ON elite_profiles FOR SELECT USING (
+    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+);
+
+-- Políticas RLS para templates (todos podem ver, apenas admin altera)
+CREATE POLICY "Everyone can view active templates" ON elite_plan_templates FOR SELECT USING (is_active = TRUE);
+CREATE POLICY "Admins can manage templates" ON elite_plan_templates FOR ALL USING (
+    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+);
+
+-- Triggers updated_at
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS update_elite_profiles_updated_at ON elite_profiles;
+CREATE TRIGGER update_elite_profiles_updated_at 
+BEFORE UPDATE ON elite_profiles 
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

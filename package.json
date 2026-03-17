@@ -7,6 +7,7 @@
     "dev": "vite --port=3000 --host=0.0.0.0",
     "dev:api": "tsx api/dev-server.ts",
     "dev:full": "concurrently \"npm run dev:api\" \"npm run dev\"",
+    "prebuild": "tsx scripts/generate-sw.ts",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",

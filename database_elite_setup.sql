@@ -1,4 +1,4 @@
--- Elite Package Database Setup
+-- Elite Package Database Setup (idempotente)
 -- Tabelas necessárias para o funcionamento do pacote Elite
 
 -- 1. Controle de Onboarding Elite
@@ -107,13 +107,48 @@ CREATE INDEX IF NOT EXISTS idx_elite_daily_activities_date ON elite_daily_activi
 CREATE INDEX IF NOT EXISTS idx_elite_insights_user_id ON elite_insights(user_id);
 CREATE INDEX IF NOT EXISTS idx_elite_insights_priority ON elite_insights(priority);
 
--- RLS (Row Level Security) para as tabelas
+-- Comentários nas tabelas
+COMMENT ON TABLE elite_onboarding IS 'Controle de onboarding de usuários Elite';
+COMMENT ON TABLE elite_assessments IS 'Avaliações personalizadas para usuários Elite';
+COMMENT ON TABLE elite_study_plans IS 'Planos de estudo semanais personalizados';
+COMMENT ON TABLE elite_reassessments IS 'Reavaliações semanais automáticas';
+COMMENT ON TABLE elite_daily_activities IS 'Registro de atividades diárias Elite';
+COMMENT ON TABLE elite_insights IS 'Insights e recomendações inteligentes';
+
+-- ========= RLS / Policies (idempotente) =========
+
+-- Habilita RLS
 ALTER TABLE elite_onboarding ENABLE ROW LEVEL SECURITY;
 ALTER TABLE elite_assessments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE elite_study_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE elite_reassessments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE elite_daily_activities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE elite_insights ENABLE ROW LEVEL SECURITY;
+
+-- Remove policies antigas se já existirem (evita erro 42710)
+DO $$
+DECLARE
+    pol RECORD;
+BEGIN
+    FOR pol IN
+        SELECT policyname, tablename
+        FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename IN ('elite_onboarding','elite_assessments','elite_study_plans','elite_reassessments','elite_daily_activities','elite_insights')
+          AND policyname IN (
+            'Users can view own elite data','Users can view own assessments','Users can view own study plans',
+            'Users can view own reassessments','Users can view own daily activities','Users can view own insights',
+            'Users can insert own elite data','Users can insert own assessments','Users can insert own study plans',
+            'Users can insert own reassessments','Users can insert own daily activities','Users can insert own insights',
+            'Users can update own elite data','Users can update own assessments','Users can update own study plans',
+            'Users can update own reassessments','Users can update own daily activities','Users can update own insights',
+            'Admins can view all elite data','Admins can view all assessments','Admins can view all study plans',
+            'Admins can view all reassessments','Admins can view all daily activities','Admins can view all insights'
+          )
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON %I', pol.policyname, pol.tablename);
+    END LOOP;
+END$$;
 
 -- Políticas RLS
 -- Usuários podem ver seus próprios dados
@@ -160,19 +195,25 @@ CREATE POLICY "Admins can view all insights" ON elite_insights FOR SELECT USING 
     EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
 );
 
--- Trigger para atualizar updated_at
+-- ========= Função/Triggers updated_at =========
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
+
+-- Drop triggers se já existirem para evitar duplicação
+DROP TRIGGER IF EXISTS update_elite_onboarding_updated_at ON elite_onboarding;
+DROP TRIGGER IF EXISTS update_elite_study_plans_updated_at ON elite_study_plans;
+DROP TRIGGER IF EXISTS update_elite_daily_activities_updated_at ON elite_daily_activities;
 
 CREATE TRIGGER update_elite_onboarding_updated_at BEFORE UPDATE ON elite_onboarding FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_elite_study_plans_updated_at BEFORE UPDATE ON elite_study_plans FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_elite_daily_activities_updated_at BEFORE UPDATE ON elite_daily_activities FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- ========= Tarefas auxiliares =========
 -- Função para limpar insights expirados
 CREATE OR REPLACE FUNCTION cleanup_expired_insights()
 RETURNS void AS $$
@@ -181,11 +222,3 @@ BEGIN
     WHERE expires_at IS NOT NULL AND expires_at < NOW();
 END;
 $$ LANGUAGE plpgsql;
-
--- Comentários nas tabelas
-COMMENT ON TABLE elite_onboarding IS 'Controle de onboarding de usuários Elite';
-COMMENT ON TABLE elite_assessments IS 'Avaliações personalizadas para usuários Elite';
-COMMENT ON TABLE elite_study_plans IS 'Planos de estudo semanais personalizados';
-COMMENT ON TABLE elite_reassessments IS 'Reavaliações semanais automáticas';
-COMMENT ON TABLE elite_daily_activities IS 'Registro de atividades diárias Elite';
-COMMENT ON TABLE elite_insights IS 'Insights e recomendações inteligentes';

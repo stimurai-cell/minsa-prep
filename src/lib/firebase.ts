@@ -49,7 +49,8 @@ export const requestFirebaseNotificationPermission = async () => {
             console.log('[Firebase] A obter token FCM...');
 
             const token = await getToken(messaging, {
-                serviceWorkerRegistration: registration
+                serviceWorkerRegistration: registration,
+                vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY
             });
 
             if (!token) {
