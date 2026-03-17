@@ -5,12 +5,23 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 
+type BattleMatch = {
+    id: string;
+    challenger_id: string;
+    opponent_id: string;
+    area_id: string;
+    status: 'pending' | 'active' | 'rejected' | 'expired' | string;
+    created_at: string;
+    challenger?: { full_name?: string };
+    opponent?: { full_name?: string };
+};
+
 export default function Battle() {
     const { profile } = useAuthStore();
     const { areas } = useAppStore();
     const navigate = useNavigate();
     const [opponents, setOpponents] = useState<any[]>([]);
-    const [matches, setMatches] = useState<any[]>([]);
+    const [matches, setMatches] = useState<BattleMatch[]>([]);
     const [loading, setLoading] = useState(false);
     const [autoJoinedMatchId, setAutoJoinedMatchId] = useState<string | null>(null);
     const EXPIRATION_MINUTES = 5;
@@ -81,19 +92,22 @@ export default function Battle() {
                 schema: 'public',
                 table: 'battle_matches'
             }, (payload) => {
+                const p: any = payload;
+                const newRow = p.new as BattleMatch | undefined;
+                const oldRow = p.old as BattleMatch | undefined;
+
                 fetchMatches();
 
-                // Se uma batalha que envolve o jogador ficou ativa, leva-o direto para a arena
-                const becameActive = payload.eventType === 'UPDATE'
-                    && payload.old?.status !== 'active'
-                    && payload.new?.status === 'active';
+                const becameActive = p.eventType === 'UPDATE'
+                    && oldRow?.status !== 'active'
+                    && newRow?.status === 'active';
 
                 const involvesUser = profile?.id
-                    && (payload.new?.challenger_id === profile.id || payload.new?.opponent_id === profile.id);
+                    && (newRow?.challenger_id === profile.id || newRow?.opponent_id === profile.id);
 
-                if (becameActive && involvesUser) {
-                    setAutoJoinedMatchId(payload.new.id);
-                    navigate(`/battle/${payload.new.id}`);
+                if (becameActive && involvesUser && newRow) {
+                    setAutoJoinedMatchId(newRow.id);
+                    navigate(`/battle/${newRow.id}`);
                 }
             })
             .subscribe();

@@ -17,7 +17,8 @@ import {
   WifiOff,
   CreditCard,
   ArrowRight,
-  Circle
+  Circle,
+  Calendar
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { createStudyPlanForUser } from '../lib/studyPlan';
@@ -476,8 +477,8 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Elite Study Plan Button - For Elite users without plan */}
-            {profile?.role === 'elite' && !currentStrategy && (
+            {/* Elite Study Plan - always visible for Elite */}
+            {profile?.role === 'elite' && (
               <div className="rounded-[2rem] border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-6 shadow-sm">
                 <div className="flex items-center gap-4 mb-4">
                   <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center">
@@ -485,16 +486,29 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <h3 className="text-lg font-black text-slate-900">Plano de Estudo Elite</h3>
-                    <p className="text-sm text-slate-600">Crie seu plano personalizado para acelerar sua aprovação</p>
+                    <p className="text-sm text-slate-600">
+                      {currentStrategy ? 'Atualize ou veja seu plano ativo' : 'Crie seu plano personalizado para acelerar sua aprovação'}
+                    </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => navigate('/elite-assessment')}
-                  className="w-full bg-gradient-to-r from-amber-500 to-emerald-500 text-white font-black px-6 py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3"
-                >
-                  <Target className="w-5 h-5" />
-                  Criar Plano de Estudo
-                </button>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={() => navigate('/elite-assessment')}
+                    className="flex-1 bg-gradient-to-r from-amber-500 to-emerald-500 text-white font-black px-6 py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3"
+                  >
+                    <Target className="w-5 h-5" />
+                    {currentStrategy ? 'Atualizar plano / refazer avaliação' : 'Criar Plano de Estudo'}
+                  </button>
+                  {currentStrategy && (
+                    <button
+                      onClick={() => navigate('/elite-plan-preview')}
+                      className="flex-1 border-2 border-amber-300 text-amber-800 font-bold px-6 py-4 rounded-2xl bg-white hover:bg-amber-50 transition-all flex items-center justify-center gap-3"
+                    >
+                      <Calendar className="w-5 h-5" />
+                      Ver plano atual
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 

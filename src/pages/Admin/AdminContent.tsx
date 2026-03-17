@@ -3,6 +3,14 @@ import { supabase } from '../../lib/supabase';
 import { useAppStore } from '../../store/useAppStore';
 import { FolderTree, Plus, Trash2, Sparkles, Loader2, Database, Zap } from 'lucide-react';
 
+type GeneratedQuestion = {
+    question: string;
+    alternatives: { text: string; isCorrect: boolean }[];
+    explanation?: string;
+    difficulty?: string;
+    is_contest_highlight?: boolean;
+};
+
 export default function AdminContent() {
     const { areas, fetchAreas, topics, fetchTopics } = useAppStore();
     const [managementArea, setManagementArea] = useState<string>('');
@@ -56,6 +64,19 @@ export default function AdminContent() {
             console.error('Resposta não-JSON da API:', text.substring(0, 500));
             throw new Error(`A API retornou uma resposta inválida. Verifique o Vercel. (${res.status} ${res.statusText})`);
         }
+    };
+
+    const normalizeQuestions = (raw: any[] = []): GeneratedQuestion[] => {
+        return raw.map((q) => ({
+            question: q.question || q.content || '',
+            alternatives: (q.alternatives || []).map((a: any) => ({
+                text: a.text || a.content || '',
+                isCorrect: typeof a.isCorrect === 'boolean' ? a.isCorrect : Boolean(a.is_correct),
+            })),
+            explanation: q.explanation || '',
+            difficulty: q.difficulty || 'medium',
+            is_contest_highlight: Boolean(q.is_contest_highlight),
+        }));
     };
 
     const fetchGeminiStatus = async () => {
@@ -188,9 +209,19 @@ export default function AdminContent() {
             });
 
             const data = await safeJson(res);
-            if (!res.ok) throw new Error(data.error || 'Erro na API');
+            if (!res.ok) {
+                const detail = Array.isArray(data.validation_errors) ? ` Detalhes: ${data.validation_errors.join('; ')}` : '';
+                throw new Error((data.error || 'Erro na API') + detail);
+            }
 
-            setGenResult(data);
+            const normalized = normalizeQuestions(data.questions);
+            setGenResult({
+                ...data,
+                area_id: data.area_id || genArea,
+                topic_id: data.topic_id ?? (isCustomTopic ? null : genTopic),
+                custom_topic_name: data.custom_topic_name ?? (isCustomTopic ? customTopic : null),
+                questions: normalized,
+            });
             alert(`A IA gerou ${data.questions?.length || 0} perguntas com sucesso! Reveja e guarde.`);
         } catch (err: any) {
             alert(`Falha na IA: ${err.message}`);
@@ -208,7 +239,12 @@ export default function AdminContent() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'save',
-                    generated_data: genResult
+                    generated_data: {
+                        ...genResult,
+                        area_id: genResult.area_id || genArea,
+                        topic_id: genResult.topic_id ?? (isCustomTopic ? null : genTopic),
+                        custom_topic_name: genResult.custom_topic_name ?? (isCustomTopic ? customTopic : null),
+                    }
                 })
             });
 

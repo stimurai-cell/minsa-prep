@@ -51,15 +51,13 @@ RETORNE APENAS O JSON ABAIXO:
 {
   "questions": [
     {
-      "content": "Texto da pergunta",
+      "question": "Texto da pergunta",
       "alternatives": [
-        {"content": "Opção A", "is_correct": false},
-        {"content": "Opção B", "is_correct": false},
-        {"content": "Opção C", "is_correct": true},
-        {"content": "Opção D", "is_correct": false}${
-          alternativesCount === 5 ? `,
-        {"content": "Opção E", "is_correct": false}` : ''
-        }
+        {"text": "Opção A", "isCorrect": false},
+        {"text": "Opção B", "isCorrect": false},
+        {"text": "Opção C", "isCorrect": true},
+        {"text": "Opção D", "isCorrect": false}${alternativesCount === 5 ? `,
+        {"text": "Opção E", "isCorrect": false}` : ''}
       ],
       "explanation": "Explicação detalhada",
       "difficulty": "${difficulty}",
@@ -69,6 +67,81 @@ RETORNE APENAS O JSON ABAIXO:
 }
 `;
 
+type IncomingQuestion = {
+  question?: string;
+  content?: string;
+  alternatives: Array<{
+    text?: string;
+    content?: string;
+    isCorrect?: boolean;
+    is_correct?: boolean;
+  }>;
+  explanation?: string;
+  difficulty?: string;
+  is_contest_highlight?: boolean;
+};
+
+const normalizeQuestions = (rawQuestions: IncomingQuestion[] = []) => {
+  return rawQuestions.map((q) => {
+    const questionText = q.question || q.content || '';
+    const alternatives = (q.alternatives || []).map((alt) => ({
+      text: alt.text || alt.content || '',
+      isCorrect: typeof alt.isCorrect === 'boolean' ? alt.isCorrect : Boolean(alt.is_correct),
+    }));
+
+    return {
+      question: questionText,
+      alternatives,
+      explanation: q.explanation || '',
+      difficulty: q.difficulty || 'medium',
+      is_contest_highlight: Boolean(q.is_contest_highlight),
+    };
+  });
+};
+
+const validateQuestions = (questions: ReturnType<typeof normalizeQuestions>, expectedAlts: number) => {
+  const errors: string[] = [];
+
+  questions.forEach((q, idx) => {
+    if (!q.question || q.question.trim().length < 10) {
+      errors.push(`Q${idx + 1}: enunciado vazio/curto`);
+    }
+    if (!q.alternatives || q.alternatives.length !== expectedAlts) {
+      errors.push(`Q${idx + 1}: precisa de ${expectedAlts} alternativas`);
+    } else {
+      const correct = q.alternatives.filter((a) => a.isCorrect === true).length;
+      if (correct !== 1) {
+        errors.push(`Q${idx + 1}: deve ter exatamente 1 correta (achou ${correct})`);
+      }
+      const seenAlt = new Set<string>();
+      q.alternatives.forEach((a, aIdx) => {
+        if (!a.text || a.text.trim().length < 2) {
+          errors.push(`Q${idx + 1} alt ${aIdx + 1}: texto vazio`);
+        }
+        const key = a.text.trim().toLowerCase();
+        if (seenAlt.has(key)) {
+          errors.push(`Q${idx + 1} alt ${aIdx + 1}: alternativa duplicada`);
+        } else {
+          seenAlt.add(key);
+        }
+      });
+    }
+  });
+
+  // Duplicação de enunciado
+  const seenQuestions = new Set<string>();
+  questions.forEach((q, idx) => {
+    const key = q.question.trim().toLowerCase();
+    if (seenQuestions.has(key)) {
+      errors.push(`Q${idx + 1}: enunciado duplicado`);
+    } else {
+      seenQuestions.add(key);
+    }
+  });
+
+  return errors;
+};
+
 const getErrorMessage = (error: unknown) => {
   if (!(error instanceof Error)) {
     return 'Falha desconhecida ao comunicar com o Gemini.';
@@ -77,13 +150,16 @@ const getErrorMessage = (error: unknown) => {
   if (message.includes('RESOURCE_EXHAUSTED') || message.includes('"code":429')) {
     return 'A quota do Gemini acabou. Tente novamente mais tarde.';
   }
+  if (message.toLowerCase().includes('permission') || message.toLowerCase().includes('apikey')) {
+    return 'A chave do Gemini parece inválida ou sem acesso ao modelo.';
+  }
   return message;
 };
 
 export default async function handler(req: any, res: any) {
   console.log('API called:', req.method, req.url);
   console.log('Body:', req.body);
-  
+
   try {
     if (req.method !== 'POST') {
       return res.status(405).json({ error: 'Método não permitido.' });
@@ -94,10 +170,10 @@ export default async function handler(req: any, res: any) {
 
     // Status Action
     if (action === 'status') {
-      return res.status(200).json({ 
-        model: modelName, 
+      return res.status(200).json({
+        model: modelName,
         mode: 'Vercel API',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     }
 
@@ -109,24 +185,28 @@ export default async function handler(req: any, res: any) {
       }
 
       const {
+        area_id,
         area_name,
+        topic_id,
         topic_name,
         custom_topic_name,
         count = 5,
         difficulty = 'medium',
         context = '',
-        is_contest_highlight = false
+        is_contest_highlight = false,
       } = req.body;
 
-      if (!area_name || (!topic_name && !custom_topic_name)) {
+      if (!area_id || !area_name || (!topic_id && !custom_topic_name && !topic_name)) {
         return res.status(400).json({ error: 'Área e tópico são obrigatórios.' });
       }
 
       const topic = custom_topic_name || topic_name;
-      
+      const alternativesCount = is_contest_highlight ? 5 : 4;
+
       const ai = new GoogleGenAI({ apiKey });
 
-      try {
+      const runGeneration = async () => {
+        const start = Date.now();
         const response = await ai.models.generateContent({
           model: modelName,
           contents: buildQuestionsPrompt({
@@ -135,7 +215,7 @@ export default async function handler(req: any, res: any) {
             count,
             difficulty,
             context,
-            alternativesCount: 4
+            alternativesCount,
           }),
           config: {
             responseMimeType: 'application/json',
@@ -147,47 +227,78 @@ export default async function handler(req: any, res: any) {
                   items: {
                     type: Type.OBJECT,
                     properties: {
-                      content: { type: Type.STRING },
+                      question: { type: Type.STRING },
                       alternatives: {
                         type: Type.ARRAY,
                         items: {
                           type: Type.OBJECT,
                           properties: {
-                            content: { type: Type.STRING },
-                            is_correct: { type: Type.BOOLEAN }
+                            text: { type: Type.STRING },
+                            isCorrect: { type: Type.BOOLEAN },
                           },
-                          required: ['content', 'is_correct']
-                        }
+                          required: ['text', 'isCorrect'],
+                        },
                       },
                       explanation: { type: Type.STRING },
                       difficulty: { type: Type.STRING },
-                      is_contest_highlight: { type: Type.BOOLEAN }
+                      is_contest_highlight: { type: Type.BOOLEAN },
                     },
-                    required: ['content', 'alternatives', 'explanation', 'difficulty', 'is_contest_highlight']
-                  }
-                }
+                    required: ['question', 'alternatives', 'explanation', 'difficulty'],
+                  },
+                },
               },
-              required: ['questions']
-            }
-          }
+              required: ['questions'],
+            },
+          },
         });
+        console.log('[generate-questions] duration_ms=', Date.now() - start);
+        return response;
+      };
 
-        if (!response.text) {
-          return res.status(502).json({ error: 'Gemini retornou vazio.' });
+      try {
+        let response = await runGeneration();
+        let parsed = response.text ? JSON.parse(response.text) : null;
+
+        const attemptValidation = (parsedPayload: any) => {
+          if (!parsedPayload) {
+            return { normalized: [], validationErrors: ['Gemini retornou vazio'] };
+          }
+          const normalized = normalizeQuestions(parsedPayload.questions);
+          const validationErrors = validateQuestions(normalized, alternativesCount);
+          return { normalized, validationErrors };
+        };
+
+        let { normalized, validationErrors } = attemptValidation(parsed);
+
+        if (validationErrors.length) {
+          console.warn('[generate-questions] primeira validação falhou', validationErrors);
+          response = await runGeneration(); // segunda tentativa (2-pass)
+          parsed = response.text ? JSON.parse(response.text) : null;
+          ({ normalized, validationErrors } = attemptValidation(parsed));
         }
 
-        const result = JSON.parse(response.text);
-        console.log('Raw Gemini response:', response.text);
-        console.log('Parsed result:', JSON.stringify(result, null, 2));
-        
-        // Mark as contest highlight if requested
-        if (is_contest_highlight && result.questions) {
-          result.questions.forEach((q: any) => {
-            q.is_contest_highlight = true;
+        if (validationErrors?.length) {
+          return res.status(422).json({
+            error: 'A IA devolveu perguntas inválidas após 2 tentativas.',
+            validation_errors: validationErrors,
           });
         }
 
-        return res.status(200).json(result);
+        if (is_contest_highlight) {
+          normalized.forEach((q: any) => (q.is_contest_highlight = true));
+        }
+
+        return res.status(200).json({
+          area_id,
+          area_name,
+          topic_id,
+          topic_name,
+          custom_topic_name,
+          count,
+          difficulty,
+          is_contest_highlight,
+          questions: normalized,
+        });
       } catch (error: any) {
         console.error('Error generating questions:', error);
         return res.status(500).json({ error: getErrorMessage(error) });
@@ -206,7 +317,7 @@ export default async function handler(req: any, res: any) {
       }
 
       const { area_id, topic_id, custom_topic_name, questions } = generated_data;
-      
+
       if (!area_id || (!topic_id && !custom_topic_name)) {
         return res.status(400).json({ error: 'Área e tópico são obrigatórios.' });
       }
@@ -220,7 +331,7 @@ export default async function handler(req: any, res: any) {
           .insert({
             area_id: area_id,
             name: custom_topic_name,
-            description: `Tópico gerado por IA: ${custom_topic_name}`
+            description: `Tópico gerado por IA: ${custom_topic_name}`,
           })
           .select('id')
           .single();
@@ -234,16 +345,16 @@ export default async function handler(req: any, res: any) {
 
       // Save questions
       const savedQuestions = [];
-      for (const question of questions) {
-        console.log('Saving question with content:', question.content);
-        console.log('Question alternatives:', question.alternatives);
+      const normalizedForSave = normalizeQuestions(questions);
+
+      for (const question of normalizedForSave) {
         const { data: newQuestion, error: questionError } = await supabase
           .from('questions')
           .insert({
             topic_id: finalTopicId,
-            content: question.content,
+            content: question.question,
             difficulty: question.difficulty,
-            is_contest_highlight: question.is_contest_highlight || false
+            is_contest_highlight: question.is_contest_highlight || false,
           })
           .select('id')
           .single();
@@ -255,31 +366,27 @@ export default async function handler(req: any, res: any) {
 
         // Save alternatives
         for (const alternative of question.alternatives) {
-          await supabase
-            .from('alternatives')
-            .insert({
-              question_id: newQuestion.id,
-              content: alternative.content,
-              is_correct: alternative.is_correct
-            });
+          await supabase.from('alternatives').insert({
+            question_id: newQuestion.id,
+            content: alternative.text,
+            is_correct: alternative.isCorrect,
+          });
         }
 
         // Save explanation
         if (question.explanation) {
-          await supabase
-            .from('question_explanations')
-            .insert({
-              question_id: newQuestion.id,
-              content: question.explanation
-            });
+          await supabase.from('question_explanations').insert({
+            question_id: newQuestion.id,
+            content: question.explanation,
+          });
         }
 
         savedQuestions.push(newQuestion);
       }
 
-      return res.status(200).json({ 
+      return res.status(200).json({
         success: true,
-        saved_count: savedQuestions.length
+        saved_count: savedQuestions.length,
       });
     }
 
@@ -289,3 +396,6 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({ error: getErrorMessage(error) });
   }
 }
+
+// Export for lightweight tests
+export const _validateQuestionsForTest = validateQuestions;

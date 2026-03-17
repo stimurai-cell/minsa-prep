@@ -2,16 +2,24 @@ import { initializeApp } from "firebase/app";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyAuwBXj9rJM6o4U9AAUTMhQTsbY_-LcrKI",
-    authDomain: "farmolink-28.firebaseapp.com",
-    projectId: "farmolink-28",
-    storageBucket: "farmolink-28.firebasestorage.app",
-    messagingSenderId: "845647802142",
-    appId: "1:845647802142:web:47c11bd7fd9ae06be6a30f",
-    measurementId: "G-L9SM8DDHCP"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-const app = initializeApp(firebaseConfig);
+const requiredKeys = Object.entries(firebaseConfig)
+    .filter(([_, value]) => !value)
+    .map(([key]) => key);
+
+if (requiredKeys.length) {
+    throw new Error(`[Firebase] Variáveis ausentes: ${requiredKeys.join(', ')}. Configure-as em .env (VITE_FIREBASE_...).`);
+}
+
+const app = initializeApp(firebaseConfig as any);
 
 // Initialize Firebase Cloud Messaging and get a reference to the service
 export const messaging = typeof window !== 'undefined' && 'Notification' in window ? getMessaging(app) : null;

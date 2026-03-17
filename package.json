@@ -10,7 +10,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:validate-ai": "tsx scripts/validate-sample-questions.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.2.0",

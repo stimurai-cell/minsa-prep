@@ -44,8 +44,8 @@ export default function ElitePlanPreview() {
     if (!profile?.id) return;
 
     try {
-      // Carregar plano de estudos
-      const { data: plan } = await supabase
+      // Carregar plano de estudos (tabela nova)
+      const { data: plan, error: elitePlanError } = await supabase
         .from('elite_study_plans')
         .select('*')
         .eq('user_id', profile.id)
@@ -57,10 +57,39 @@ export default function ElitePlanPreview() {
       if (plan) {
         setStudyPlan(plan as StudyPlan);
         setEditablePlan(plan.daily_plan);
+      } else {
+        // Fallback para tabela existente study_plans (estrutura mais simples)
+        if (elitePlanError) {
+          console.warn('elite_study_plans indisponível, buscando fallback em study_plans', elitePlanError);
+        }
+
+        const { data: legacyPlan, error: legacyError } = await supabase
+          .from('study_plans')
+          .select('*')
+          .eq('user_id', profile.id)
+          .order('generated_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (legacyPlan?.plan_json) {
+          const parsed = legacyPlan.plan_json as any;
+          const mappedPlan: StudyPlan = {
+            id: legacyPlan.id,
+            week_start: parsed.week_start || legacyPlan.generated_at,
+            week_end: parsed.week_end || legacyPlan.generated_at,
+            daily_plan: parsed.daily_plan || parsed,
+            focus_topics: parsed.focus_topics || [],
+            source: parsed.source || 'fallback'
+          };
+          setStudyPlan(mappedPlan);
+          setEditablePlan(mappedPlan.daily_plan);
+        } else if (legacyError) {
+          console.warn('Nenhum plano encontrado em study_plans', legacyError);
+        }
       }
 
       // Carregar perfil pessoal
-      const { data: profileData } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('elite_profiles')
         .select('*')
         .eq('user_id', profile.id)
@@ -68,6 +97,8 @@ export default function ElitePlanPreview() {
 
       if (profileData) {
         setPersonalProfile(profileData as PersonalProfile);
+      } else if (profileError) {
+        console.warn('Perfil elite não encontrado, usando dados básicos', profileError);
       }
     } catch (error) {
       console.error('Error loading study plan:', error);

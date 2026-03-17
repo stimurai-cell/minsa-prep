@@ -15,6 +15,24 @@ export default function ToastNotification() {
     const { profile } = useAuthStore();
     const [activeToast, setActiveToast] = useState<Notification | null>(null);
 
+    const showToast = (notif: Notification) => {
+        setActiveToast(notif);
+
+        // Play notification sound (optional)
+        try {
+            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+            audio.volume = 0.5;
+            audio.play().catch(() => { }); // Browser might block auto-play
+        } catch (e) {
+            console.warn('Could not play notification sound');
+        }
+
+        // Auto-hide after 6 seconds
+        setTimeout(() => {
+            setActiveToast(null);
+        }, 6000);
+    };
+
     useEffect(() => {
         if (!profile?.id) return;
 
@@ -36,24 +54,6 @@ export default function ToastNotification() {
             supabase.removeChannel(subscription);
         };
     }, [profile?.id]);
-
-    const showToast = (notif: Notification) => {
-        setActiveToast(notif);
-
-        // Play notification sound (optional)
-        try {
-            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-            audio.volume = 0.5;
-            audio.play().catch(() => { }); // Browser might block auto-play
-        } catch (e) {
-            console.warn('Could not play notification sound');
-        }
-
-        // Auto-hide after 6 seconds
-        setTimeout(() => {
-            setActiveToast(null);
-        }, 6000);
-    };
 
     return (
         <AnimatePresence>
