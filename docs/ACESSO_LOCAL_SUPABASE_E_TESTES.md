@@ -36,10 +36,10 @@ E2E_PASSWORD=
 - Guarde esse valor em `SUPABASE_DB_PASSWORD`.
 
 ### 4. `DATABASE_URL`
-- No projeto do Supabase, abra `Project Settings`.
-- Entre em `Database`.
-- Copie a `Connection string`.
-- Prefira o formato `URI`.
+- No projeto do Supabase, abra o botao `Connect` no topo do dashboard.
+- Copie a connection string em formato `URI`.
+- Se o seu terminal nao usar IPv6, prefira `Session pooler` ou `Transaction pooler`.
+- Se o seu ambiente aceitar IPv6, voce tambem pode usar a conexao direta.
 - Cole em `DATABASE_URL`.
 
 ### 5. `E2E_EMAIL` e `E2E_PASSWORD`
