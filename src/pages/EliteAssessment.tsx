@@ -30,12 +30,27 @@ const WEEK_DAYS: { key: string; label: string }[] = [
   { key: 'sunday', label: 'Domingo' }
 ];
 
+const DEFAULT_TOPICS = [
+  'Revisao geral',
+  'Saude publica',
+  'Epidemiologia',
+  'Anatomia',
+  'Farmacologia',
+  'Urgencias',
+  'Pediatria',
+  'Saude materna',
+  'Saude mental',
+  'Etica profissional'
+];
+
+
 export default function EliteAssessment() {
   const { profile } = useAuthStore();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
   const [showPersonalQuestions, setShowPersonalQuestions] = useState(true);
+  const [showTechnicalStep, setShowTechnicalStep] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [results, setResults] = useState<AssessmentResult | null>(null);
   const [selectedDays, setSelectedDays] = useState<string[]>([
@@ -56,15 +71,84 @@ export default function EliteAssessment() {
     preferred_study_hour: '21:00'
   });
 
+  const [technicalTopics, setTechnicalTopics] = useState<string[]>([]);
+  const [selectedTechnicalTopics, setSelectedTechnicalTopics] = useState<string[]>([]);
+  const [loadingTopics, setLoadingTopics] = useState(false);
+
   useEffect(() => {
     setLoading(false);
   }, []);
+
+  useEffect(() => {
+    const loadTopics = async () => {
+      if (!profile?.selected_area_id) {
+        setTechnicalTopics(DEFAULT_TOPICS);
+        setSelectedTechnicalTopics(DEFAULT_TOPICS.slice(0, 3));
+        return;
+      }
+      setLoadingTopics(true);
+      const { data, error } = await supabase
+        .from('topics')
+        .select('name')
+        .eq('area_id', profile.selected_area_id)
+        .order('name')
+        .limit(10);
+
+      if (error || !data || data.length === 0) {
+        setTechnicalTopics(DEFAULT_TOPICS);
+        setSelectedTechnicalTopics(DEFAULT_TOPICS.slice(0, 3));
+      } else {
+        const names = data.map(t => t.name);
+        setTechnicalTopics(names);
+        setSelectedTechnicalTopics(prev => (prev.length ? prev : names.slice(0, Math.min(3, names.length))));
+      }
+      setLoadingTopics(false);
+    };
+    void loadTopics();
+  }, [profile?.selected_area_id]);
+
+  useEffect(() => {
+    const loadLatestAssessment = async () => {
+      if (!profile?.id) return;
+      const { data } = await supabase
+        .from('elite_assessments')
+        .select('weak_topics')
+        .eq('user_id', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      if (data?.weak_topics?.length) {
+        setSelectedTechnicalTopics(data.weak_topics.slice(0, 5));
+      }
+    };
+    void loadLatestAssessment();
+  }, [profile?.id]);
 
   const handlePersonalAnswer = (field: keyof PersonalAnswers, value: string) => {
     setPersonalAnswers(prev => ({
       ...prev,
       [field]: value
     }));
+  };
+
+  const toggleTopic = (topic: string) => {
+    setSelectedTechnicalTopics(prev => {
+      if (prev.includes(topic)) return prev.filter(t => t !== topic);
+      if (prev.length >= 10) return prev;
+      return [...prev, topic];
+    });
+  };
+
+  const persistPersonalData = async () => {
+    await supabase.from('elite_profiles').upsert({
+      user_id: profile?.id,
+      daily_study_time: personalAnswers.daily_study_time,
+      exam_experience: personalAnswers.exam_experience,
+      preferred_study_period: personalAnswers.preferred_study_period,
+      preferred_study_hour: personalAnswers.preferred_study_hour,
+      study_days: selectedDays,
+      selected_area_id: profile?.selected_area_id || null
+    });
   };
 
   const getTimeSuggestions = () => {
@@ -157,7 +241,12 @@ export default function EliteAssessment() {
     return templates[intensity as keyof typeof templates] || templates.MEDIUM;
   };
 
-  const saveStudyPlan = async (plan: any, source: string) => {
+  const saveStudyPlan = async (
+    plan: any,
+    source: string,
+    focusTopics: string[],
+    assessmentResults?: AssessmentResult
+  ) => {
     const weekStart = new Date();
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
@@ -175,17 +264,16 @@ export default function EliteAssessment() {
       week_start: weekStart.toISOString(),
       week_end: weekEnd.toISOString(),
       daily_plan: normalizedPlan,
-      focus_topics: [],
+      focus_topics: focusTopics || [],
       status: 'active',
       source,
       created_at: new Date().toISOString()
     };
 
-    // Tenta salvar na tabela dedicada; se falhar (ex.: relaçao inexistente), usa tabela genérica
     const { error: planError } = await supabase.from('elite_study_plans').insert(planPayload);
 
     if (planError) {
-      console.warn('elite_study_plans indisponível, salvando fallback em study_plans', planError);
+      console.warn('elite_study_plans indisponivel, salvando fallback em study_plans', planError);
       await supabase.from('study_plans').insert({
         user_id: profile?.id,
         plan_json: planPayload,
@@ -193,70 +281,81 @@ export default function EliteAssessment() {
       });
     }
 
-    const { error: assessError } = await supabase.from('elite_assessments').insert({
-      user_id: profile?.id,
-      assessment_type: 'weekly_personal_only',
-      total_questions: 0,
-      correct_answers: 0,
-      score: 0,
-      duration_seconds: 0,
-      weak_topics: [],
-      strong_topics: [],
-      recommendations: generateRecommendations([], []),
-      created_at: new Date().toISOString()
-    });
+    if (assessmentResults) {
+      const { error: assessError } = await supabase.from('elite_assessments').insert({
+        user_id: profile?.id,
+        assessment_type: 'weekly_personal_only',
+        total_questions: assessmentResults.totalQuestions || 0,
+        correct_answers: assessmentResults.correctAnswers || 0,
+        score: assessmentResults.score || 0,
+        duration_seconds: 0,
+        weak_topics: assessmentResults.weakTopics || [],
+        strong_topics: assessmentResults.strongTopics || [],
+        recommendations: assessmentResults.recommendations || generateRecommendations([], []),
+        created_at: new Date().toISOString()
+      });
 
-    if (assessError) {
-      console.warn('elite_assessments indisponível, prosseguindo sem gravar avaliação', assessError);
+      if (assessError) {
+        console.warn('elite_assessments indisponivel, prosseguindo sem gravar avaliacao', assessError);
+      }
     }
   };
 
-  const generatePersonalizedStrategy = async (_assessmentResults: AssessmentResult, personalData: PersonalAnswers) => {
+  const generatePersonalizedStrategy = async (assessmentResults: AssessmentResult, personalData: PersonalAnswers) => {
     try {
       const fallbackPlan = getFallbackPlan(personalData.daily_study_time);
-      await saveStudyPlan(fallbackPlan, 'template');
+      await saveStudyPlan(fallbackPlan, 'template', assessmentResults.weakTopics || [], assessmentResults);
     } catch (error) {
       console.error('Error generating personalized strategy:', error);
     }
   };
 
-  const handleStartKnowledgeAssessment = async () => {
+  const handleContinueFromPersonal = async () => {
     if (selectedDays.length === 0) {
       alert('Escolha ao menos um dia da semana para estudar.');
       return;
     }
     setSubmitting(true);
     try {
-      await supabase.from('elite_profiles').upsert({
-        user_id: profile?.id,
-        daily_study_time: personalAnswers.daily_study_time,
-        exam_experience: personalAnswers.exam_experience,
-        preferred_study_period: personalAnswers.preferred_study_period,
-        preferred_study_hour: personalAnswers.preferred_study_hour,
-        study_days: selectedDays
-      });
-
-      const syntheticResults: AssessmentResult = {
-        totalQuestions: 0,
-        correctAnswers: 0,
-        score: 0,
-        weakTopics: [],
-        strongTopics: [],
-        recommendations: generateRecommendations([], [])
-      };
-
-      await generatePersonalizedStrategy(syntheticResults, personalAnswers);
-      setResults(syntheticResults);
-      setShowPersonalQuestions(false);
-      setShowResults(true);
+      await persistPersonalData();
+      if (technicalTopics.length > 0) {
+        setShowPersonalQuestions(false);
+        setShowTechnicalStep(true);
+      } else {
+        await finalizeAssessment();
+      }
     } catch (error) {
       console.error('Error saving personal answers:', error);
-      alert('Erro ao salvar suas informações. Tente novamente.');
+      alert('Erro ao salvar suas informacoes. Tente novamente.');
     } finally {
       setSubmitting(false);
     }
   };
 
+  const finalizeAssessment = async () => {
+    setSubmitting(true);
+    try {
+      const syntheticResults: AssessmentResult = {
+        totalQuestions: 0,
+        correctAnswers: 0,
+        score: 0,
+        weakTopics: selectedTechnicalTopics,
+        strongTopics: [],
+        recommendations: generateRecommendations(selectedTechnicalTopics, [])
+      };
+
+      await generatePersonalizedStrategy(syntheticResults, personalAnswers);
+      setResults(syntheticResults);
+      setShowPersonalQuestions(false);
+      setShowTechnicalStep(false);
+      setShowResults(true);
+    } catch (error) {
+      console.error('Error generating plan:', error);
+      alert('Erro ao gerar plano. Tente novamente.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
   const handleContinueToPlan = () => {
     // Garantir que o plano foi gerado; se ainda não houver, gerar fallback e depois navegar
     if (!results) {
@@ -341,6 +440,65 @@ export default function EliteAssessment() {
               <Calendar className="h-6 w-6" />
               Ver Plano de Estudos Detalhado
             </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (showTechnicalStep) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-emerald-50 py-8">
+        <div className="container mx-auto px-4 max-w-3xl">
+          <div className="text-center mb-8">
+            <Target className="h-16 w-16 text-emerald-600 mx-auto mb-4" />
+            <h1 className="text-3xl font-black text-slate-900 mb-4">Escolha os topicos de foco</h1>
+            <p className="text-lg text-slate-600">
+              Usaremos os topicos mais fracos e o radar ja existente; selecione ate 10 ou pule se quiser seguir o padrao.
+            </p>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-emerald-200 p-8 shadow-lg space-y-6">
+            {loadingTopics ? (
+              <div className="flex items-center justify-center py-10 text-emerald-700">Carregando topicos...</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {technicalTopics.map(topic => {
+                  const active = selectedTechnicalTopics.includes(topic);
+                  return (
+                    <button
+                      key={topic}
+                      onClick={() => toggleTopic(topic)}
+                      className={`p-4 rounded-xl border-2 text-left transition-all ${
+                        active
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-900'
+                          : 'border-slate-200 hover:border-slate-300 bg-white text-slate-700'
+                      }`}
+                    >
+                      <div className="font-semibold">{topic}</div>
+                      <div className="text-sm text-slate-500">Clique para {active ? 'remover' : 'focar'}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="flex flex-col md:flex-row gap-3 mt-4">
+              <button
+                onClick={finalizeAssessment}
+                className="flex-1 py-4 bg-gradient-to-r from-amber-500 to-emerald-500 text-white rounded-xl font-bold text-lg hover:opacity-90 transition-all"
+                disabled={submitting}
+              >
+                {submitting ? 'Gerando plano...' : 'Gerar plano com topicos'}
+              </button>
+              <button
+                onClick={finalizeAssessment}
+                className="flex-1 py-4 border-2 border-slate-200 text-slate-700 rounded-xl font-bold text-lg hover:border-slate-300 transition-all"
+                disabled={submitting}
+              >
+                Pular (usar padrao)
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -499,7 +657,7 @@ export default function EliteAssessment() {
             </div>
 
             <button
-              onClick={handleStartKnowledgeAssessment}
+              onClick={handleContinueFromPersonal}
               className="w-full py-4 bg-gradient-to-r from-amber-500 to-emerald-500 text-white rounded-xl font-bold text-lg hover:opacity-90 transition-all"
               disabled={submitting}
             >
