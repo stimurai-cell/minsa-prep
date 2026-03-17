@@ -140,16 +140,46 @@ export default function EliteAssessment() {
     });
   };
 
+  const isLegacyEliteProfileSchemaError = (error: any) => {
+    const errorText = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+    return (
+      error?.code === 'PGRST204' ||
+      error?.code === '42703' ||
+      errorText.includes('study_days') ||
+      errorText.includes('selected_area_id')
+    );
+  };
+
   const persistPersonalData = async () => {
-    const { error } = await supabase.from('elite_profiles').upsert({
-      user_id: profile?.id,
+    if (!profile?.id) {
+      throw new Error('Perfil do usuario indisponivel para salvar respostas Elite.');
+    }
+
+    const basePayload = {
+      user_id: profile.id,
       daily_study_time: personalAnswers.daily_study_time,
       exam_experience: personalAnswers.exam_experience,
       preferred_study_period: personalAnswers.preferred_study_period,
-      preferred_study_hour: personalAnswers.preferred_study_hour,
+      preferred_study_hour: personalAnswers.preferred_study_hour
+    };
+
+    const extendedPayload = {
+      ...basePayload,
       study_days: selectedDays,
-      selected_area_id: profile?.selected_area_id || null
-    });
+      selected_area_id: profile.selected_area_id || null
+    };
+
+    let { error } = await supabase
+      .from('elite_profiles')
+      .upsert(extendedPayload, { onConflict: 'user_id' });
+
+    if (error && isLegacyEliteProfileSchemaError(error)) {
+      console.warn('elite_profiles ainda sem colunas novas; salvando com schema basico', error);
+      ({ error } = await supabase
+        .from('elite_profiles')
+        .upsert(basePayload, { onConflict: 'user_id' }));
+    }
+
     if (error) throw error;
   };
 
