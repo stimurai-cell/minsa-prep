@@ -14,8 +14,6 @@ import {
   Flame,
   ShieldCheck,
   Download,
-  WifiOff,
-  CreditCard,
   ArrowRight,
   Circle,
   Calendar
@@ -31,7 +29,6 @@ import { useNavigate } from 'react-router-dom';
 import DailyTasks from '../components/DailyTasks';
 import AIMentor from '../components/AIMentor';
 import NotificationCenter from '../components/NotificationCenter';
-import { useOfflineStore } from '../store/useOfflineStore';
 import { usePermissions } from '../lib/permissions';
 import { EliteStrategyManager } from '../lib/eliteStrategy';
 
@@ -47,10 +44,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { profile } = useAuthStore();
   const { areas, fetchAreas } = useAppStore();
-  const { questionCount, lastDownloadAt } = useOfflineStore();
   const perms = usePermissions();
   const isPaidUser = perms.canAccessSimulation;
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [stats, setStats] = useState({
     totalQuestions: 0,
     avgScore: 0,
@@ -72,24 +67,6 @@ export default function Dashboard() {
   const dailyTip = useMemo(() => {
     const day = new Date().getDay();
     return DAILY_TIPS[day % DAILY_TIPS.length];
-  }, []);
-
-  const lastOfflineSyncLabel = useMemo(() => {
-    if (!lastDownloadAt) return 'Ainda sem pacote local';
-
-    try {
-      return new Date(lastDownloadAt).toLocaleString('pt-PT');
-    } catch {
-      return 'Ultima sincronizacao indisponivel';
-    }
-  }, [lastDownloadAt]);
-
-  useEffect(() => {
-    const onOnline = () => setIsOnline(true);
-    const onOffline = () => setIsOnline(false);
-    window.addEventListener('online', onOnline);
-    window.addEventListener('offline', onOffline);
-    return () => { window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); };
   }, []);
 
   useEffect(() => {
@@ -438,84 +415,6 @@ export default function Dashboard() {
       )}
 
       {/* Banner Pacote Offline — mostra para todos que ainda não compraram o pacote */}
-      {isOnline && !perms.hasOfflinePackage && profile?.role !== 'admin' && (
-        <div
-          onClick={() => navigate('/premium')}
-          className="cursor-pointer rounded-[2rem] overflow-hidden border border-slate-200 bg-gradient-to-r from-slate-800 to-slate-700 p-5 md:p-6 shadow-xl flex flex-col sm:flex-row items-center gap-5 hover:shadow-2xl transition-all group"
-        >
-          <div className="relative shrink-0">
-            <div className="w-16 h-16 rounded-[1.5rem] bg-emerald-500/20 border-2 border-emerald-400/30 flex items-center justify-center">
-              <WifiOff className="w-8 h-8 text-emerald-400" />
-            </div>
-            <div className="absolute -top-1 -right-1 w-5 h-5 bg-amber-400 rounded-full border-2 border-slate-800 flex items-center justify-center">
-              <Zap className="w-3 h-3 text-slate-900 fill-current" />
-            </div>
-          </div>
-          <div className="flex-1 text-center sm:text-left">
-            <h3 className="text-lg font-black text-white tracking-tight">Offline agora vem no Premium e no Elite</h3>
-            <p className="mt-1 text-slate-300 text-sm font-medium">
-              Atualize para um dos planos principais e leve o Treino Diario e o Modo Relampago consigo, mesmo sem internet.
-            </p>
-          </div>
-          <div className="flex items-center gap-3 rounded-[1.5rem] bg-white px-6 py-3 text-sm font-black uppercase tracking-tight text-slate-900 shadow-lg hover:scale-105 active:scale-95 transition-all shrink-0 group-hover:bg-emerald-50">
-            <CreditCard className="h-4 w-4" />
-            Ver planos
-          </div>
-        </div>
-      )}
-
-      {perms.hasOfflinePackage && (
-        <div className="rounded-[2rem] border border-emerald-200 bg-[radial-gradient(circle_at_top_right,#d9ffe9,transparent_35%),linear-gradient(135deg,#ffffff_0%,#f7fff9_55%,#eefcf6_100%)] p-5 shadow-[0_24px_70px_-42px_rgba(16,185,129,0.35)] md:p-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-start gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[1.4rem] bg-emerald-600 text-white shadow-lg shadow-emerald-500/20">
-                {!isOnline ? <WifiOff className="h-7 w-7" /> : <Download className="h-7 w-7" />}
-              </div>
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-700">Offline Premium e Elite</p>
-                <h3 className="mt-2 text-2xl font-black text-slate-900">Treino Diario e Modo Relampago prontos para continuar sem internet</h3>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                  O sistema guarda um pacote local da sua area para manter as rotinas mais rapidas sempre disponiveis.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[420px]">
-              <div className="rounded-[1.4rem] border border-white bg-white/80 px-4 py-4 shadow-sm">
-                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Questoes locais</p>
-                <p className="mt-2 text-2xl font-black text-slate-900">{questionCount}</p>
-              </div>
-              <div className="rounded-[1.4rem] border border-white bg-white/80 px-4 py-4 shadow-sm">
-                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Sincronizacao</p>
-                <p className="mt-2 text-sm font-black text-slate-900">{lastOfflineSyncLabel}</p>
-              </div>
-              <div className="rounded-[1.4rem] border border-white bg-white/80 px-4 py-4 shadow-sm">
-                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Estado</p>
-                <p className={`mt-2 text-sm font-black ${!isOnline ? 'text-orange-600' : 'text-emerald-700'}`}>
-                  {!isOnline ? 'Offline em uso' : questionCount > 0 ? 'Pacote ativo' : 'Preparando pacote'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-5 flex flex-col gap-3 md:flex-row">
-            <Link
-              to="/training"
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-700"
-            >
-              Abrir treino guiado
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-
-          {questionCount === 0 && (
-            <div className="mt-4 rounded-[1.4rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
-              O pacote offline esta ativo e sera preparado silenciosamente enquanto este dispositivo tiver internet.
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Dica do dia */}
       <div className="rounded-[1.5rem] bg-indigo-50 border border-indigo-100 p-4 flex items-start gap-4">
         <div className="p-2 bg-indigo-100 rounded-xl text-indigo-600 shrink-0">

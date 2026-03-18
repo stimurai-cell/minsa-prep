@@ -13,7 +13,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { playSuccessSound, playErrorSound } from '../lib/sounds';
 import { getDifficultyLabel } from '../lib/labels';
-import { WifiOff, CreditCard, RefreshCw, Download } from 'lucide-react';
+import { WifiOff, RefreshCw, Download } from 'lucide-react';
 import { useOfflineStore } from '../store/useOfflineStore';
 import { usePermissions } from '../lib/permissions';
 import {
@@ -49,7 +49,7 @@ export default function Training() {
   const { areas, topics, fetchAreas, fetchTopics } = useAppStore();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { hasStatisticsPDF, hasOfflinePackage } = usePermissions();
+  const { hasStatisticsPDF } = usePermissions();
 
   const [selectedTopic, setSelectedTopic] = useState('');
   const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyPreference>('mixed');
@@ -956,13 +956,6 @@ export default function Training() {
           </div>
         </div>
 
-        {hasOfflinePackage && (
-          <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
-            <WifiOff className="h-4 w-4" />
-            Pacote offline ativo
-            <span className="text-emerald-600/70">{questionCount > 0 ? `${questionCount} questões locais` : 'a preparar conteúdo'}</span>
-          </div>
-        )}
       </section>
 
       {!isOnline && (
@@ -978,24 +971,11 @@ export default function Training() {
             <div className="flex-1 text-center md:text-left">
               <h3 className="text-xl font-black text-orange-200">Você está offline</h3>
               <p className="mt-1 text-slate-300">
-                {hasOfflinePackage
-                  ? "Seu acesso offline esta ativo. O pacote local guardado permite continuar no Treino Diario."
-                  : "O estudo offline agora faz parte dos planos Premium e Elite."}
+                {questionCount > 0
+                  ? 'Existem questoes guardadas neste dispositivo, por isso o treino pode continuar normalmente.'
+                  : 'Algumas funcoes dependem de internet para carregar novas questoes.'}
               </p>
             </div>
-            {!hasOfflinePackage ? (
-              <Link
-                to="/premium"
-                className="flex items-center gap-2 rounded-2xl bg-white px-6 py-4 text-sm font-black uppercase tracking-tight text-slate-900 transition-all hover:scale-105"
-              >
-                <CreditCard className="h-4 w-4" />
-                Ver Premium
-              </Link>
-            ) : (
-              <div className="rounded-2xl bg-emerald-500 px-6 py-4 text-sm font-black uppercase tracking-tight text-white shadow-lg shadow-emerald-500/20">
-                Pacote local ativo
-              </div>
-            )}
           </div>
         </motion.div>
       )}

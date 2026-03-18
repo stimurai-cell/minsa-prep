@@ -352,12 +352,6 @@ export default function SpeedMode() {
                         A dificuldade aumenta conforme avança! <br />
                         <span className="font-bold text-yellow-400">45 segundos</span> por questão.
                     </p>
-                    {!navigator.onLine && hasOfflineAccess && (
-                        <p className="mt-4 text-sm font-semibold text-emerald-300">
-                            Pacote local ativo: o Modo Relampago vai usar as questoes guardadas neste dispositivo.
-                        </p>
-                    )}
-
                     <div className="mt-12 flex flex-col gap-4">
                         <button
                             onClick={startSession}
