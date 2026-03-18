@@ -489,6 +489,19 @@ export default function Dashboard() {
               </div>
             )}
 
+            <Link
+              to="/training"
+              className="inline-flex w-full items-center justify-between rounded-[1.6rem] border border-emerald-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-emerald-400 hover:bg-emerald-50/40"
+            >
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Foco automatico</p>
+                <p className="mt-1 text-lg font-black text-slate-900">Abrir treino guiado</p>
+              </div>
+              <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-sm">
+                <ArrowRight className="h-5 w-5" />
+              </span>
+            </Link>
+
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-[1.6rem] border-2 border-orange-100 bg-orange-50 shadow-[0_6px_0_0_#ffedd5] p-4 md:p-5 flex flex-col gap-3 transition-transform hover:-translate-y-1 relative group">
                 <p className="text-sm font-bold text-orange-600 uppercase tracking-widest">Ofensiva</p>
