@@ -24,12 +24,15 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import { awardXp as unifiedAwardXp } from '../lib/xp';
 import { sendPushNotification } from '../lib/pushNotifications';
+import { useOfflineStore } from '../store/useOfflineStore';
+import { savePendingLog, savePendingXp } from '../lib/offlineStore';
 
 const TIMER_SECONDS = 45;
 
 export default function SpeedMode() {
     const { profile, refreshProfile } = useAuthStore();
     const { areas, fetchAreas } = useAppStore();
+    const { downloadedQuestions, questionCount, hydrateBundle, syncBundle } = useOfflineStore();
     const navigate = useNavigate();
 
     const [loading, setLoading] = useState(false);
@@ -44,6 +47,7 @@ export default function SpeedMode() {
     const [bestStreak, setBestStreak] = useState(0);
     const [showLevelUp, setShowLevelUp] = useState<string | null>(null);
     const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('easy');
+    const hasOfflineAccess = ['premium', 'elite', 'admin'].includes(profile?.role || '');
 
     const ttsRef = useRef<SpeechSynthesisUtterance | null>(null);
     const timerRef = useRef<number | null>(null);
@@ -51,6 +55,18 @@ export default function SpeedMode() {
     useEffect(() => {
         fetchAreas();
     }, [fetchAreas]);
+
+    useEffect(() => {
+        if (profile?.selected_area_id) {
+            void hydrateBundle(profile.selected_area_id);
+        }
+    }, [hydrateBundle, profile?.selected_area_id]);
+
+    useEffect(() => {
+        if (hasOfflineAccess && navigator.onLine && profile?.selected_area_id) {
+            void syncBundle({ areaId: profile.selected_area_id, force: false });
+        }
+    }, [hasOfflineAccess, profile?.selected_area_id, syncBundle]);
 
     const stopTTS = useCallback(() => {
         if (window.speechSynthesis) {
@@ -86,11 +102,42 @@ export default function SpeedMode() {
         return filterStandardQuestions(ids.map(id => data.find(q => q.id === id)).filter(Boolean));
     };
 
+    const getOfflinePool = () =>
+        filterStandardQuestions(
+            downloadedQuestions.filter((question) => question.area_id === profile?.selected_area_id)
+        );
+
     const bootQuestions = async (reset = false) => {
         if (!profile?.selected_area_id) return;
         setLoading(true);
         try {
             let currentRemaining = reset ? [] : remainingIds;
+            const offlinePool = getOfflinePool();
+
+            if (!navigator.onLine) {
+                if (!offlinePool.length) {
+                    throw new Error('Sem conteudo offline para o Modo Relampago.');
+                }
+
+                if (currentRemaining.length === 0) {
+                    const prioritizedIds = offlinePool
+                        .filter((question) => question.difficulty === difficulty)
+                        .concat(offlinePool.filter((question) => question.difficulty !== difficulty))
+                        .map((question) => question.id);
+
+                    currentRemaining = prioritizedIds.sort(() => Math.random() - 0.5);
+                }
+
+                const batchToFetch = currentRemaining.slice(0, 30);
+                const newRemaining = currentRemaining.slice(30);
+                const fetchedQuestions = batchToFetch
+                    .map((id) => offlinePool.find((question) => question.id === id))
+                    .filter(Boolean);
+
+                setQuestions(prev => reset ? prepareQuestionSet(fetchedQuestions) : [...prev, ...prepareQuestionSet(fetchedQuestions)]);
+                setRemainingIds(newRemaining);
+                return;
+            }
 
             if (currentRemaining.length === 0) {
                 const { data: topics } = await supabase
@@ -129,6 +176,11 @@ export default function SpeedMode() {
     };
 
     const startSession = () => {
+        if (!navigator.onLine && questionCount === 0) {
+            alert('Sem conteudo local para o Modo Relampago. Conecte-se uma vez para preparar o pacote offline.');
+            return;
+        }
+
         setShowIntro(false);
         setIsGameOver(false);
         setScore(0);
@@ -140,7 +192,7 @@ export default function SpeedMode() {
     };
 
     const handleEliteMerit = async () => {
-        if (!profile?.id) return;
+        if (!profile?.id || !navigator.onLine) return;
 
         // 1. Post to news/feed
         await supabase.from('feed_items').insert({
@@ -173,25 +225,32 @@ export default function SpeedMode() {
 
         if (profile?.id && score > 0) {
             const xpAmount = score * 2;
-            const result = await unifiedAwardXp(profile.id, xpAmount, profile.total_xp || 0);
+            const logPayload = {
+                user_id: profile.id,
+                activity_type: 'completed_speed_mode',
+                activity_date: new Date().toISOString(),
+                activity_metadata: {
+                    score: score,
+                    xp: xpAmount,
+                    reason: reason
+                }
+            };
 
-            try {
-                await supabase.from('activity_logs').insert({
-                    user_id: profile.id,
-                    activity_type: 'completed_speed_mode',
-                    activity_date: new Date().toISOString(),
-                    activity_metadata: {
-                        score: score,
-                        xp: xpAmount,
-                        reason: reason
-                    }
-                });
-            } catch (logErr) {
-                console.error('Error logging speed mode completion:', logErr);
-            }
+            if (navigator.onLine) {
+                const result = await unifiedAwardXp(profile.id, xpAmount, profile.total_xp || 0);
 
-            if (result.success) {
-                await refreshProfile(profile.id);
+                try {
+                    await supabase.from('activity_logs').insert(logPayload);
+                } catch (logErr) {
+                    console.error('Error logging speed mode completion:', logErr);
+                }
+
+                if (result.success) {
+                    await refreshProfile(profile.id);
+                }
+            } else {
+                await savePendingXp(xpAmount);
+                await savePendingLog(logPayload);
             }
         }
     }, [score, bestStreak, profile, refreshProfile, stopTTS]);
@@ -293,6 +352,11 @@ export default function SpeedMode() {
                         A dificuldade aumenta conforme avança! <br />
                         <span className="font-bold text-yellow-400">45 segundos</span> por questão.
                     </p>
+                    {!navigator.onLine && hasOfflineAccess && (
+                        <p className="mt-4 text-sm font-semibold text-emerald-300">
+                            Pacote local ativo: o Modo Relampago vai usar as questoes guardadas neste dispositivo.
+                        </p>
+                    )}
 
                     <div className="mt-12 flex flex-col gap-4">
                         <button

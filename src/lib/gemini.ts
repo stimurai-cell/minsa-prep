@@ -10,8 +10,16 @@ const getErrorMessage = (error: unknown) => {
 
   const message = error.message;
 
+  if (message.toLowerCase().includes('reported as leaked')) {
+    return 'A chave do Gemini foi bloqueada por vazamento. Gere outra chave e atualize as variaveis GEMINI_API_KEY/VITE_GEMINI_API_KEY.';
+  }
+
   if (message.includes('RESOURCE_EXHAUSTED') || message.includes('"code":429')) {
     return 'A chave do Gemini foi encontrada, mas a quota dela acabou ou esse projeto nao tem acesso ao modelo solicitado.';
+  }
+
+  if (message.includes('NOT_FOUND') || (message.toLowerCase().includes('model') && message.toLowerCase().includes('not found'))) {
+    return 'O modelo Gemini configurado nao esta disponivel para esta chave. Ajuste GEMINI_MODEL ou use um fallback suportado.';
   }
 
   if (message.includes('API key') || message.includes('invalid')) {
@@ -138,7 +146,15 @@ export const generateQuestions = async (
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        action: 'generate',
+        area_name: area,
+        topic_name: topic,
+        count,
+        difficulty,
+        context: rawContent,
+        is_contest_highlight: isContestHighlight,
+      }),
     });
 
     const result = await response.json();

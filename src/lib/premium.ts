@@ -43,6 +43,7 @@ export const premiumPlans: PremiumPlan[] = [
     features: [
       'Simulacoes de prova ilimitadas',
       'Treino diario sem limites (todos os niveis, inclui Dificil)',
+      'Treino diario e Modo Relampago offline incluidos',
       'Ranking completo',
       'Historico de provas',
       'Sistema de revisao inteligente',
@@ -63,6 +64,7 @@ export const premiumPlans: PremiumPlan[] = [
     role: 'elite',
     features: [
       'Tudo do Premium +',
+      'Estudo offline completo incluido',
       'Radar de Fraquezas (Insights Inteligentes)',
       'Simulacao Nacional (Prova de Evento)',
       'Estatisticas profundas em PDF',
@@ -116,13 +118,5 @@ export const extraPackages: ExtraPackage[] = [
     priceAmount: 5000,
     priceLabel: '5.000 Kz',
     features: ['Simulados de Legislacao e Etica', 'Cronometro e ambiente de prova real', 'Destaques do edital atualizado'],
-  },
-  {
-    id: 'pacote_offline',
-    name: 'Pacote Offline (PWA)',
-    description: 'Estude em qualquer lugar, mesmo sem internet ou dados moveis.',
-    priceAmount: 900,
-    priceLabel: '900 Kz',
-    features: ['Download de questoes para uso offline', 'Sincronizacao automatica ao reconectar', 'Acesso ilimitado ao treino diario offline'],
   },
 ];

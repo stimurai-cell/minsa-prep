@@ -151,7 +151,7 @@ export default function EliteStrategy() {
     } else if (activity.type === 'speed_mode') {
       navigate('/speed-mode');
     } else if (activity.type === 'study' || activity.type === 'training' || activity.type === 'practice' || activity.type === 'review' || activity.type === 'srs') {
-      navigate(`/training?topic=${encodeURIComponent(activity.focus || 'Revisao geral')}&mode=elite`);
+      navigate(`/training?session=1&focus=${encodeURIComponent(activity.focus || 'Revisao geral')}&mode=elite`);
     } else if (activity.type === 'planning') {
       navigate('/elite-plan-preview');
     } else if (activity.type === 'rest') {

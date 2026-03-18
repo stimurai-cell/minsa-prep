@@ -6,7 +6,7 @@ const PRACTICE_MODES = [
     {
         id: 'training',
         title: 'Treino Diário',
-        description: 'Pratique tópicos específicos ao seu ritmo.',
+        description: 'Siga o foco que o sistema organizar para o seu dia.',
         icon: BookOpen,
         color: 'emerald',
         path: '/training',

@@ -11,6 +11,7 @@ import AdminContent from './Admin/AdminContent';
 import AdminMonitor from './Admin/AdminMonitor';
 import AdminSupport from './Admin/AdminSupport';
 import AdminProfile from './Admin/AdminProfile';
+import AdminEliteDashboard from './AdminEliteDashboard';
 
 import AdminBackup from '../components/AdminBackup';
 import AdminNews from '../components/AdminNews';
@@ -47,6 +48,8 @@ export default function Admin() {
         return <AdminUsers />;
       case 'payments':
         return <AdminFinance />;
+      case 'elite':
+        return <AdminEliteDashboard />;
       case 'content':
         return <AdminContent />;
       case 'monitor':

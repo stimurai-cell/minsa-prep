@@ -47,7 +47,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { profile } = useAuthStore();
   const { areas, fetchAreas } = useAppStore();
-  const { isOfflineMode, downloadedQuestions } = useOfflineStore();
+  const { isOfflineMode, questionCount, lastDownloadAt, syncBundle, setOfflineMode } = useOfflineStore();
   const perms = usePermissions();
   const isPaidUser = perms.canAccessSimulation;
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -73,6 +73,16 @@ export default function Dashboard() {
     const day = new Date().getDay();
     return DAILY_TIPS[day % DAILY_TIPS.length];
   }, []);
+
+  const lastOfflineSyncLabel = useMemo(() => {
+    if (!lastDownloadAt) return 'Ainda sem pacote local';
+
+    try {
+      return new Date(lastDownloadAt).toLocaleString('pt-PT');
+    } catch {
+      return 'Ultima sincronizacao indisponivel';
+    }
+  }, [lastDownloadAt]);
 
   useEffect(() => {
     const onOnline = () => setIsOnline(true);
@@ -395,6 +405,16 @@ export default function Dashboard() {
     setDeferredPrompt(null);
   };
 
+  const handleRefreshOffline = async () => {
+    if (!profile?.selected_area_id || !isOnline) return;
+    const result = await syncBundle({ areaId: profile.selected_area_id, force: true });
+    if (!result.success) {
+      alert(result.message || 'Nao foi possivel atualizar o conteudo offline.');
+      return;
+    }
+    alert(`Conteudo offline atualizado com ${result.count} questoes locais.`);
+  };
+
   return (
     <div className="space-y-5 md:space-y-8">
 
@@ -430,7 +450,7 @@ export default function Dashboard() {
       {/* Banner Pacote Offline — mostra para todos que ainda não compraram o pacote */}
       {isOnline && !perms.hasOfflinePackage && profile?.role !== 'admin' && (
         <div
-          onClick={() => navigate('/premium?package=pacote_offline')}
+          onClick={() => navigate('/premium')}
           className="cursor-pointer rounded-[2rem] overflow-hidden border border-slate-200 bg-gradient-to-r from-slate-800 to-slate-700 p-5 md:p-6 shadow-xl flex flex-col sm:flex-row items-center gap-5 hover:shadow-2xl transition-all group"
         >
           <div className="relative shrink-0">
@@ -442,15 +462,89 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex-1 text-center sm:text-left">
-            <h3 className="text-lg font-black text-white tracking-tight">Estude Sem Limites de Dados</h3>
+            <h3 className="text-lg font-black text-white tracking-tight">Offline agora vem no Premium e no Elite</h3>
             <p className="mt-1 text-slate-300 text-sm font-medium">
-              Ative o <span className="text-emerald-400 font-bold">Pacote Offline (900 Kz)</span> e treine mesmo sem internet ou saldo de dados. Ideal para viagens ou locais com sinal fraco.
+              Atualize para um dos planos principais e leve o Treino Diario e o Modo Relampago consigo, mesmo sem internet.
             </p>
           </div>
           <div className="flex items-center gap-3 rounded-[1.5rem] bg-white px-6 py-3 text-sm font-black uppercase tracking-tight text-slate-900 shadow-lg hover:scale-105 active:scale-95 transition-all shrink-0 group-hover:bg-emerald-50">
             <CreditCard className="h-4 w-4" />
-            Ativar Agora
+            Ver planos
           </div>
+        </div>
+      )}
+
+      {perms.hasOfflinePackage && (
+        <div className="rounded-[2rem] border border-emerald-200 bg-[radial-gradient(circle_at_top_right,#d9ffe9,transparent_35%),linear-gradient(135deg,#ffffff_0%,#f7fff9_55%,#eefcf6_100%)] p-5 shadow-[0_24px_70px_-42px_rgba(16,185,129,0.35)] md:p-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[1.4rem] bg-emerald-600 text-white shadow-lg shadow-emerald-500/20">
+                {isOfflineMode || !isOnline ? <WifiOff className="h-7 w-7" /> : <Download className="h-7 w-7" />}
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-700">Offline Premium e Elite</p>
+                <h3 className="mt-2 text-2xl font-black text-slate-900">Treino Diario e Modo Relampago prontos para continuar sem internet</h3>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                  O sistema guarda um pacote local da sua area para manter as rotinas mais rapidas sempre disponiveis.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[420px]">
+              <div className="rounded-[1.4rem] border border-white bg-white/80 px-4 py-4 shadow-sm">
+                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Questoes locais</p>
+                <p className="mt-2 text-2xl font-black text-slate-900">{questionCount}</p>
+              </div>
+              <div className="rounded-[1.4rem] border border-white bg-white/80 px-4 py-4 shadow-sm">
+                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Sincronizacao</p>
+                <p className="mt-2 text-sm font-black text-slate-900">{lastOfflineSyncLabel}</p>
+              </div>
+              <div className="rounded-[1.4rem] border border-white bg-white/80 px-4 py-4 shadow-sm">
+                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Estado</p>
+                <p className={`mt-2 text-sm font-black ${isOfflineMode || !isOnline ? 'text-orange-600' : 'text-emerald-700'}`}>
+                  {isOfflineMode || !isOnline ? 'Modo offline ativo' : 'Pacote pronto'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-col gap-3 md:flex-row">
+            {isOnline && (
+              <button
+                type="button"
+                onClick={handleRefreshOffline}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-800 transition hover:border-emerald-300 hover:text-emerald-700"
+              >
+                <Download className="h-4 w-4" />
+                Atualizar pacote offline
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setOfflineMode(!isOfflineMode)}
+              className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-black transition ${
+                isOfflineMode
+                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
+                  : 'border border-slate-200 bg-white text-slate-800 hover:border-orange-300 hover:text-orange-700'
+              }`}
+            >
+              <WifiOff className="h-4 w-4" />
+              {isOfflineMode ? 'Desativar modo offline' : 'Ativar modo offline'}
+            </button>
+            <Link
+              to="/training"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-700"
+            >
+              Abrir treino guiado
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+
+          {questionCount === 0 && (
+            <div className="mt-4 rounded-[1.4rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+              Ainda nao existe conteudo guardado neste dispositivo. Conecte-se e atualize o pacote offline pelo menos uma vez.
+            </div>
+          )}
         </div>
       )}
 

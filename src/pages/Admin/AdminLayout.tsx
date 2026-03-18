@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, Users, Database, CreditCard,
     LifeBuoy, User, LogOut, Menu, X, ChevronRight, Activity,
-    Megaphone, HardDrive
+    Megaphone, HardDrive, Brain
 } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 
@@ -46,6 +46,7 @@ export default function AdminLayout({ children, activeTab, onTabChange }: AdminL
             title: "Utilizadores",
             items: [
                 { id: 'users', label: 'Membros', icon: Users },
+                { id: 'elite', label: 'Elite', icon: Brain },
             ]
         },
         {
@@ -74,6 +75,7 @@ export default function AdminLayout({ children, activeTab, onTabChange }: AdminL
     const mobileQuickLinks = [
         { id: 'dashboard', icon: LayoutDashboard, label: 'Resumo' },
         { id: 'users', icon: Users, label: 'Membros' },
+        { id: 'elite', icon: Brain, label: 'Elite' },
         { id: 'news', icon: Megaphone, label: 'Alertas' },
         { id: 'payments', icon: CreditCard, label: 'Finanças' },
     ];

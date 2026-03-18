@@ -28,6 +28,7 @@ const premiumPerks = [
   'Ranking completo da area',
   'Leitura mais profunda do historico de desempenho',
   'Relatórios e filtros avançados para revisão',
+  'Treino diario e Modo Relampago offline incluidos nos planos principais',
 ];
 
 const paymentMethods = [
@@ -51,6 +52,7 @@ type PaymentRequest = {
 export default function Premium() {
   const { profile } = useAuthStore();
   const isPremium = ['premium', 'elite', 'admin'].includes(profile?.role || '');
+  const isAdmin = profile?.role === 'admin';
   const paidPlans = useMemo(() => premiumPlans.filter((plan) => plan.id !== 'free'), []);
   const selectedPeriod: PlanPeriod = 'monthly';
   const [selectedPlanId, setSelectedPlanId] = useState(paidPlans.find(p => p.id === 'premium')?.id || paidPlans[0]?.id || 'premium');
@@ -284,12 +286,13 @@ export default function Premium() {
               <button
                 type="button"
                 onClick={() => selectPlanAndScroll(plan.id)}
+                disabled={isAdmin}
                 className={`mt-5 w-full rounded-2xl px-4 py-4 text-sm font-black uppercase tracking-[0.12em] transition ${plan.highlight
                   ? 'bg-[linear-gradient(90deg,#facc15_0%,#34d399_100%)] text-slate-950 hover:opacity-90'
                   : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
-                  }`}
+                  } disabled:cursor-not-allowed disabled:opacity-50`}
               >
-                Pedir ativação deste plano
+                {isAdmin ? 'Bloqueado para admin' : 'Pedir ativação deste plano'}
               </button>
             </div>
           ))}
@@ -315,9 +318,10 @@ export default function Premium() {
               </ul>
               <button
                 onClick={() => selectPlanAndScroll(pkg.id)}
-                className="w-full rounded-xl bg-white border border-sky-200 py-2 text-sm font-bold text-sky-700 hover:bg-sky-100 transition"
+                disabled={isAdmin}
+                className="w-full rounded-xl bg-white border border-sky-200 py-2 text-sm font-bold text-sky-700 hover:bg-sky-100 transition disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Solicitar Pacote
+                {isAdmin ? 'Bloqueado para admin' : 'Solicitar Pacote'}
               </button>
             </div>
           ))}
@@ -381,6 +385,14 @@ export default function Premium() {
                 {latestRequest.admin_notes && (
                   <p className="mt-2 text-sm text-slate-600">Nota do admin: {latestRequest.admin_notes}</p>
                 )}
+              </div>
+            )}
+
+            {isAdmin && (
+              <div className="mt-4 rounded-[1.4rem] border border-indigo-200 bg-indigo-50 p-4">
+                <p className="text-sm font-bold text-indigo-900">
+                  Conta administrativa detectada: pedidos de pagamento ficam bloqueados para evitar ativacoes acidentais.
+                </p>
               </div>
             )}
 
@@ -461,15 +473,15 @@ export default function Premium() {
                   className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
                 />
               </div>
-              <button
-                type="button"
-                onClick={handleSubmitPaymentRequest}
-                disabled={submitting}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white disabled:opacity-50"
-              >
-                <Upload className="h-4 w-4" />
-                {submitting ? 'A enviar comprovativo...' : `Enviar pedido para ${selectedPlan.name}`}
-              </button>
+                <button
+                  type="button"
+                  onClick={handleSubmitPaymentRequest}
+                  disabled={submitting || isAdmin}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white disabled:opacity-50"
+                >
+                  <Upload className="h-4 w-4" />
+                  {isAdmin ? 'Bloqueado para admin' : submitting ? 'A enviar comprovativo...' : `Enviar pedido para ${selectedPlan.name}`}
+                </button>
               {successMessage && (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-semibold text-emerald-800">
                   {successMessage}

@@ -5,10 +5,10 @@ Este projeto ja aceita credenciais locais via `.env.local`.
 Preencha estas variaveis quando quiser que o Codex consiga operar com mais profundidade:
 
 ```env
-SUPABASE_PROJECT_REF=
+SUPABASE_PROJECT_REF=pyanrrxxdxxassrtycrn
 SUPABASE_ACCESS_TOKEN=
 SUPABASE_DB_PASSWORD=
-DATABASE_URL=
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.pyanrrxxdxxassrtycrn.supabase.co:5432/postgres
 E2E_BASE_URL=https://minsa-prep.vercel.app
 E2E_EMAIL=
 E2E_PASSWORD=

@@ -39,6 +39,22 @@
   - Estatísticas profundas em PDF para análise e acompanhamento.
   - Modo Batalha XP Plus para ritmo de prova.
 
+## 🎮 Modo Batalha XP Plus — fluxo inspirado em jogos competitivos
+- **Matchmaking justo (estilo Elo)**: pareamento automático por força (rating dinâmico do Radar) para evitar partidas desbalanceadas e garantir aprendizado real.
+- **Pré-jogo de 90s (draft de temas)**: cada jogador bane 1 subtema de baixa afinidade e “pica” (prioriza) 2 subtemas fortes. O motor monta a lista final de questões misturando picks/bans + peso do edital.
+- **Rounds em 3 atos (com cronômetro)**
+  - *Sprint de Velocidade*: 10 questões objetivas, 25s cada, vale bônus de combo por acertos consecutivos.
+  - *Round de Precisão*: 5 questões mais densas, 90s cada, penalidade leve por chute repetido.
+  - *Clutch Final*: 1 questão de alta dificuldade, 3 minutos, vale x3 pontos e desempate.
+- **Pontuação e ranking (claro e gamificado)**: pontos por acerto + velocidade; streak multiplica; erros consecutivos cortam streak; abandono dá -15% de rating. Divisões: Bronze, Prata, Ouro, Platina, Diamante, Mestre, Elite.
+- **Power-ups ligados a estudo real**: “Revisar Rápido” (abre flashcard do erro mais comum do Radar, só 1x por partida); “Congelar Tempo” (pausa de 20s, só quem mantém 90% presença semanal ganha); “Double-Down” (aposta +50% pontos na Clutch se estiver ≥70% de acertos na partida).
+- **Anti-cola / fair play**: embaralhamento individual, bloqueio de voltar questão, registro de tempo por item, flag automático se padrão de resposta instantânea >3 em sequência; modo câmera opcional para Simulação Nacional.
+- **Recompensas imediatas**: ganho de XP, subida de divisão e “Cartas de Insight” (3 sugestões concretas de revisão geradas pelo Radar ao final da partida, com links para treinos focados).
+- **Integração com rotina**: resultado da Batalha atualiza plano diário; se perder três seguidas em um eixo, o sistema injeta sessão curta de recuperação antes de nova Batalha.
+- **Modos rápidos**: Solo (1v1) e Blitz (dupla x dupla com tempo total 8 min). Blitz usa mesmas regras, mas cada jogador responde metade das questões; exige comunicação e divide streak.
+- **Calendário de temporadas**: temporadas mensais com reset suave de rating, recompensas cosméticas (badges) e vagas prioritárias na próxima Simulação Nacional para quem fecha no Top 5%.
+- **Onboarding guiado**: primeira Batalha em modo fantasma (contra bot com nível próximo) para aprender o ritmo; tutorial de 2 minutos com botão “Pronto para valendo”.
+
 ## 🔥 Por que decidir agora
 - Edital MINSA 2026: altíssima concorrência; vantagem vem de foco + simulação em ambiente real.
 - Pagamento único reduz custo total vs. mensalidades prolongadas.

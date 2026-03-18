@@ -4,6 +4,7 @@ import { CheckCircle2, Clock, Target, Calendar, User } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { supabase } from '../lib/supabase';
 import { archiveCurrentPlans, createPlanRevision } from '../lib/elitePlans';
+import { chooseSystemFocusTopics } from '../lib/systemTopics';
 
 interface PersonalAnswers {
   daily_study_time: 'LOW' | 'MEDIUM' | 'HIGH' | 'INTENSIVE';
@@ -418,12 +419,7 @@ export default function EliteAssessment() {
     setSubmitting(true);
     try {
       await persistPersonalData();
-      if (technicalTopics.length > 0) {
-        setShowPersonalQuestions(false);
-        setShowTechnicalStep(true);
-      } else {
-        await finalizeAssessment();
-      }
+      await finalizeAssessment();
     } catch (error) {
       console.error('Error saving personal answers:', error);
       alert('Erro ao salvar suas informacoes. Tente novamente.');
@@ -435,15 +431,22 @@ export default function EliteAssessment() {
   const finalizeAssessment = async () => {
     setSubmitting(true);
     try {
+      const autoFocusTopics = chooseSystemFocusTopics({
+        availableTopics: technicalTopics.length ? technicalTopics : DEFAULT_TOPICS,
+        weakTopics: selectedTechnicalTopics,
+        limit: 5
+      });
+
       const syntheticResults: AssessmentResult = {
         totalQuestions: 0,
         correctAnswers: 0,
         score: 0,
-        weakTopics: selectedTechnicalTopics,
+        weakTopics: autoFocusTopics,
         strongTopics: [],
-        recommendations: generateRecommendations(selectedTechnicalTopics, [])
+        recommendations: generateRecommendations(autoFocusTopics, [])
       };
 
+      setSelectedTechnicalTopics(autoFocusTopics);
       await generatePersonalizedStrategy(syntheticResults, personalAnswers);
       setResults(syntheticResults);
       setShowPersonalQuestions(false);
@@ -786,7 +789,7 @@ export default function EliteAssessment() {
               className="w-full py-4 bg-gradient-to-r from-amber-500 to-emerald-500 text-white rounded-xl font-bold text-lg hover:opacity-90 transition-all"
               disabled={submitting}
             >
-              {submitting ? 'Gerando plano...' : 'Continuar para Avaliação de Conhecimento'}
+              {submitting ? 'Gerando plano...' : 'Gerar plano automaticamente'}
             </button>
           </div>
         </div>
