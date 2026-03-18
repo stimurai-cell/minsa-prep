@@ -24,10 +24,12 @@ import { useAppStore } from '../store/useAppStore';
 import { getRoleLabel } from '../lib/labels';
 import { supabase } from '../lib/supabase';
 import ErrorBoundary from './ErrorBoundary';
+import { usePermissions } from '../lib/permissions';
 
 export default function Layout() {
   const { profile, signOut } = useAuthStore();
   const { areas, fetchAreas, deferredPrompt, setDeferredPrompt } = useAppStore();
+  const { hasOfflinePackage } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -220,6 +222,11 @@ export default function Layout() {
                     Área ativa
                   </div>
                   <p className="mt-2 text-sm font-bold text-slate-900">{areaName}</p>
+                  {hasOfflinePackage && (
+                    <div className="mt-3 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                      Pacote offline ativo
+                    </div>
+                  )}
                   <div className="mt-3 rounded-xl bg-white px-3 py-2">
                     <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-yellow-600">XP</p>
                     <p className="mt-1 text-lg font-black text-yellow-600">{profile?.total_xp || 0}</p>

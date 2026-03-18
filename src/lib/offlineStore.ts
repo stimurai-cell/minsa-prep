@@ -149,6 +149,40 @@ export const replaceOfflineQuestions = async (
   });
 };
 
+export const mergeOfflineQuestions = async (
+  areaId: string,
+  questions: OfflineQuestionRecord[],
+  maxQuestions?: number
+): Promise<OfflineBundleMeta> => {
+  const existingMeta = await getOfflineBundleMeta();
+  const existingQuestions =
+    existingMeta?.areaId === areaId ? await getOfflineQuestions(areaId) : [];
+
+  const mergedMap = new Map<string, OfflineQuestionRecord>();
+
+  existingQuestions.forEach((question) => {
+    mergedMap.set(question.id, question);
+  });
+
+  questions.forEach((question) => {
+    mergedMap.set(question.id, {
+      ...question,
+      area_id: areaId,
+      cached_at: question.cached_at || new Date().toISOString(),
+    });
+  });
+
+  const mergedQuestions = [...mergedMap.values()]
+    .sort((left, right) => {
+      const leftTime = new Date(left.cached_at || 0).getTime();
+      const rightTime = new Date(right.cached_at || 0).getTime();
+      return rightTime - leftTime;
+    })
+    .slice(0, maxQuestions || Number.MAX_SAFE_INTEGER);
+
+  return replaceOfflineQuestions(areaId, mergedQuestions);
+};
+
 export const getOfflineQuestions = async (areaId?: string | null): Promise<OfflineQuestionRecord[]> => {
   const questions = await runStoreAction<OfflineQuestionRecord[]>(
     STORE_OFFLINE_QUESTIONS,

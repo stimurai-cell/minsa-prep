@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAppStore } from '../../store/useAppStore';
 import { FolderTree, Plus, Trash2, Sparkles, Loader2, Database, Zap } from 'lucide-react';
+import { getDifficultyLabel } from '../../lib/labels';
 
 type GeneratedQuestion = {
     question: string;
@@ -716,6 +717,22 @@ export default function AdminContent() {
                                                     {String(i + 1).padStart(2, '0')}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
+                                                    <div className="mb-3 flex flex-wrap gap-2">
+                                                        <span className={`rounded-xl px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
+                                                            q.difficulty === 'easy'
+                                                                ? 'bg-emerald-100 text-emerald-700'
+                                                                : q.difficulty === 'hard'
+                                                                    ? 'bg-rose-100 text-rose-700'
+                                                                    : 'bg-amber-100 text-amber-700'
+                                                        }`}>
+                                                            {getDifficultyLabel(q.difficulty)}
+                                                        </span>
+                                                        {q.is_contest_highlight && (
+                                                            <span className="rounded-xl bg-blue-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-blue-700">
+                                                                Concurso
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <p className="font-black text-slate-900 mb-5 text-base leading-snug">{q.question}</p>
                                                     <div className="space-y-2.5">
                                                         {q.alternatives.map((a: any, j: number) => (

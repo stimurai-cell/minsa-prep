@@ -5,12 +5,13 @@ import {
   clearOfflineBundle,
   getOfflineBundleMeta,
   getOfflineQuestions,
-  replaceOfflineQuestions,
+  mergeOfflineQuestions,
   type OfflineBundleMeta,
   type OfflineQuestionRecord,
 } from '../lib/offlineStore';
 
-const MIN_OFFLINE_QUESTIONS = 180;
+const TARGET_OFFLINE_QUESTIONS = 180;
+const OFFLINE_SYNC_BATCH_SIZE = 45;
 const OFFLINE_REFRESH_WINDOW_MS = 18 * 60 * 60 * 1000;
 
 const shuffle = <T,>(items: T[]) => {
@@ -26,15 +27,19 @@ const shuffle = <T,>(items: T[]) => {
 
 const selectOfflineQuestionIds = (
   rows: Array<{ id: string; topic_id: string; difficulty: string }>,
-  desiredCount = MIN_OFFLINE_QUESTIONS
+  desiredCount = TARGET_OFFLINE_QUESTIONS,
+  excludedIds: string[] = []
 ) => {
+  const excludedSet = new Set(excludedIds);
   const topicBuckets = new Map<string, Array<{ id: string; difficulty: string }>>();
 
-  rows.forEach((row) => {
+  rows
+    .filter((row) => !excludedSet.has(row.id))
+    .forEach((row) => {
     const bucket = topicBuckets.get(row.topic_id) || [];
     bucket.push({ id: row.id, difficulty: row.difficulty });
     topicBuckets.set(row.topic_id, bucket);
-  });
+    });
 
   const perTopicQueues = [...topicBuckets.values()].map((bucket) => shuffle(bucket));
   const selectedIds: string[] = [];
@@ -49,7 +54,11 @@ const selectOfflineQuestionIds = (
   }
 
   if (selectedIds.length < desiredCount) {
-    const leftovers = shuffle(rows.map((row) => row.id).filter((id) => !selectedIds.includes(id)));
+    const leftovers = shuffle(
+      rows
+        .map((row) => row.id)
+        .filter((id) => !selectedIds.includes(id) && !excludedSet.has(id))
+    );
     selectedIds.push(...leftovers.slice(0, desiredCount - selectedIds.length));
   }
 
@@ -64,7 +73,7 @@ const shouldRefreshBundle = (
   if (force) return true;
   if (!meta) return true;
   if (meta.areaId !== areaId) return true;
-  if (meta.questionCount < MIN_OFFLINE_QUESTIONS) return true;
+  if (meta.questionCount < TARGET_OFFLINE_QUESTIONS) return true;
 
   const generatedAt = new Date(meta.generatedAt).getTime();
   if (Number.isNaN(generatedAt)) return true;
@@ -133,6 +142,9 @@ export const useOfflineStore = create<OfflineStore>()(
 
         try {
           const existingMeta = await getOfflineBundleMeta();
+          const existingQuestions =
+            existingMeta?.areaId === areaId ? await getOfflineQuestions(areaId) : [];
+
           if (!shouldRefreshBundle(existingMeta, areaId, force)) {
             await get().hydrateBundle(areaId);
             return {
@@ -166,7 +178,36 @@ export const useOfflineStore = create<OfflineStore>()(
             throw new Error('Nao ha questoes suficientes para montar o pacote offline.');
           }
 
-          const selectedIds = selectOfflineQuestionIds(questionIndexRows, MIN_OFFLINE_QUESTIONS);
+          const existingIds = existingQuestions.map((question) => question.id);
+          const remainingCapacity = Math.max(0, TARGET_OFFLINE_QUESTIONS - existingQuestions.length);
+
+          if (!remainingCapacity && !force) {
+            await get().hydrateBundle(areaId);
+            return {
+              success: true,
+              count: get().questionCount,
+              message: 'Conteudo offline ja esta completo neste dispositivo.',
+            };
+          }
+
+          const desiredBatchSize = force
+            ? Math.max(remainingCapacity, OFFLINE_SYNC_BATCH_SIZE)
+            : Math.min(remainingCapacity || OFFLINE_SYNC_BATCH_SIZE, OFFLINE_SYNC_BATCH_SIZE);
+
+          const selectedIds = selectOfflineQuestionIds(
+            questionIndexRows,
+            desiredBatchSize,
+            existingIds
+          );
+
+          if (!selectedIds.length) {
+            await get().hydrateBundle(areaId);
+            return {
+              success: true,
+              count: get().questionCount,
+              message: 'Pacote offline ja esta sincronizado com o conteudo disponivel.',
+            };
+          }
 
           const { data: questionRows, error: questionsError } = await supabase
             .from('questions')
@@ -200,19 +241,21 @@ export const useOfflineStore = create<OfflineStore>()(
               cached_at: new Date().toISOString(),
             })) as OfflineQuestionRecord[];
 
-          const meta = await replaceOfflineQuestions(areaId, orderedQuestions);
+          await mergeOfflineQuestions(areaId, orderedQuestions, TARGET_OFFLINE_QUESTIONS);
+          await get().hydrateBundle(areaId);
+          const latestState = get();
+          const meta = await getOfflineBundleMeta();
 
           set({
-            downloadedQuestions: orderedQuestions,
-            lastDownloadAt: meta.generatedAt,
-            cachedAreaId: meta.areaId,
-            questionCount: orderedQuestions.length,
+            lastDownloadAt: meta?.generatedAt || latestState.lastDownloadAt,
+            cachedAreaId: meta?.areaId || latestState.cachedAreaId,
+            questionCount: latestState.questionCount,
             syncState: 'ready',
           });
 
           return {
             success: true,
-            count: orderedQuestions.length,
+            count: latestState.questionCount,
             message: 'Conteudo offline atualizado com sucesso.',
           };
         } catch (error) {

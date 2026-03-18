@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { supabase } from '../lib/supabase';
 
 interface UserProfile {
@@ -100,77 +101,109 @@ const resolveProfileArea = async (resolvedUserId: string, profile: any): Promise
   }
 };
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  profile: null,
-  loading: true,
-  setUser: (user) => set({ user }),
-  setProfile: (profile) => set({ profile }),
-  signOut: async () => {
-    await supabase.auth.signOut();
-    set({ user: null, profile: null });
-  },
-  refreshProfile: async (userId?: string) => {
-    const resolvedUserId =
-      userId || (await supabase.auth.getUser()).data.user?.id;
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      user: null,
+      profile: null,
+      loading: true,
+      setUser: (user) => set({ user }),
+      setProfile: (profile) => set({ profile }),
+      signOut: async () => {
+        await supabase.auth.signOut();
+        set({ user: null, profile: null, loading: false });
+      },
+      refreshProfile: async (userId?: string) => {
+        const resolvedUserId =
+          userId || (await supabase.auth.getUser()).data.user?.id || get().user?.id;
 
-    if (!resolvedUserId) {
-      set({ profile: null });
-      return null;
-    }
-
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', resolvedUserId)
-      .single();
-
-    if (error) {
-      console.error('Profile refresh error:', error);
-      // Não mostrar erro genérico para usuário - apenas log no console
-      return null;
-    }
-
-    const resolvedProfile = await resolveProfileArea(resolvedUserId, profile);
-    set({ profile: resolvedProfile });
-    return resolvedProfile;
-  },
-  checkSession: async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        set({ user: session.user });
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        if (profile) {
-          const resolvedProfile = await resolveProfileArea(session.user.id, profile);
-          set({ profile: resolvedProfile });
+        if (!resolvedUserId) {
+          set({ profile: null });
+          return null;
         }
-      } else {
-        set({ user: null, profile: null });
-      }
-    } catch (error) {
-      console.error('Session check error:', error);
-      // Não mostrar erro genérico para usuário - apenas log no console
-    } finally {
-      set({ loading: false });
-    }
-  },
-  updateLastActive: async () => {
-    const { user } = useAuthStore.getState();
-    if (!user) return;
 
-    try {
-      await supabase
-        .from('profiles')
-        .update({ last_active: new Date().toISOString() })
-        .eq('id', user.id);
-    } catch (error) {
-      console.error('Error updating last_active:', error);
-      // Não mostrar erro genérico para usuário - apenas log no console
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select('*')
+          .eq('id', resolvedUserId)
+          .single();
+
+        if (error) {
+          console.error('Profile refresh error:', error);
+          return get().profile?.id === resolvedUserId ? get().profile : null;
+        }
+
+        const resolvedProfile = await resolveProfileArea(resolvedUserId, profile);
+        set({ profile: resolvedProfile });
+        return resolvedProfile;
+      },
+      checkSession: async () => {
+        const cachedUser = get().user;
+        const cachedProfile = get().profile;
+
+        try {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+
+          if (session?.user) {
+            set({ user: session.user });
+
+            const { data: profile, error } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .single();
+
+            if (profile && !error) {
+              const resolvedProfile = await resolveProfileArea(session.user.id, profile);
+              set({ profile: resolvedProfile, loading: false });
+              return;
+            }
+
+            if (!navigator.onLine && cachedProfile?.id === session.user.id) {
+              set({ profile: cachedProfile, loading: false });
+              return;
+            }
+          } else if (!navigator.onLine && cachedUser && cachedProfile) {
+            set({ user: cachedUser, profile: cachedProfile, loading: false });
+            return;
+          } else {
+            set({ user: null, profile: null, loading: false });
+            return;
+          }
+        } catch (error) {
+          console.error('Session check error:', error);
+
+          if (!navigator.onLine && cachedUser && cachedProfile) {
+            set({ user: cachedUser, profile: cachedProfile, loading: false });
+            return;
+          }
+        }
+
+        set({ loading: false });
+      },
+      updateLastActive: async () => {
+        const { user } = useAuthStore.getState();
+        if (!user || !navigator.onLine) return;
+
+        try {
+          await supabase
+            .from('profiles')
+            .update({ last_active: new Date().toISOString() })
+            .eq('id', user.id);
+        } catch (error) {
+          console.error('Error updating last_active:', error);
+        }
+      },
+    }),
+    {
+      name: 'minsa-prep-auth-storage',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        user: state.user,
+        profile: state.profile,
+      }),
     }
-  },
-}));
+  )
+);

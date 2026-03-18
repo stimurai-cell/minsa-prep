@@ -47,7 +47,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { profile } = useAuthStore();
   const { areas, fetchAreas } = useAppStore();
-  const { isOfflineMode, questionCount, lastDownloadAt, syncBundle, setOfflineMode } = useOfflineStore();
+  const { questionCount, lastDownloadAt } = useOfflineStore();
   const perms = usePermissions();
   const isPaidUser = perms.canAccessSimulation;
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -405,16 +405,6 @@ export default function Dashboard() {
     setDeferredPrompt(null);
   };
 
-  const handleRefreshOffline = async () => {
-    if (!profile?.selected_area_id || !isOnline) return;
-    const result = await syncBundle({ areaId: profile.selected_area_id, force: true });
-    if (!result.success) {
-      alert(result.message || 'Nao foi possivel atualizar o conteudo offline.');
-      return;
-    }
-    alert(`Conteudo offline atualizado com ${result.count} questoes locais.`);
-  };
-
   return (
     <div className="space-y-5 md:space-y-8">
 
@@ -479,7 +469,7 @@ export default function Dashboard() {
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-4">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[1.4rem] bg-emerald-600 text-white shadow-lg shadow-emerald-500/20">
-                {isOfflineMode || !isOnline ? <WifiOff className="h-7 w-7" /> : <Download className="h-7 w-7" />}
+                {!isOnline ? <WifiOff className="h-7 w-7" /> : <Download className="h-7 w-7" />}
               </div>
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-700">Offline Premium e Elite</p>
@@ -501,36 +491,14 @@ export default function Dashboard() {
               </div>
               <div className="rounded-[1.4rem] border border-white bg-white/80 px-4 py-4 shadow-sm">
                 <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Estado</p>
-                <p className={`mt-2 text-sm font-black ${isOfflineMode || !isOnline ? 'text-orange-600' : 'text-emerald-700'}`}>
-                  {isOfflineMode || !isOnline ? 'Modo offline ativo' : 'Pacote pronto'}
+                <p className={`mt-2 text-sm font-black ${!isOnline ? 'text-orange-600' : 'text-emerald-700'}`}>
+                  {!isOnline ? 'Offline em uso' : questionCount > 0 ? 'Pacote ativo' : 'Preparando pacote'}
                 </p>
               </div>
             </div>
           </div>
 
           <div className="mt-5 flex flex-col gap-3 md:flex-row">
-            {isOnline && (
-              <button
-                type="button"
-                onClick={handleRefreshOffline}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-800 transition hover:border-emerald-300 hover:text-emerald-700"
-              >
-                <Download className="h-4 w-4" />
-                Atualizar pacote offline
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setOfflineMode(!isOfflineMode)}
-              className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-black transition ${
-                isOfflineMode
-                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-                  : 'border border-slate-200 bg-white text-slate-800 hover:border-orange-300 hover:text-orange-700'
-              }`}
-            >
-              <WifiOff className="h-4 w-4" />
-              {isOfflineMode ? 'Desativar modo offline' : 'Ativar modo offline'}
-            </button>
             <Link
               to="/training"
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-700"
@@ -542,7 +510,7 @@ export default function Dashboard() {
 
           {questionCount === 0 && (
             <div className="mt-4 rounded-[1.4rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
-              Ainda nao existe conteudo guardado neste dispositivo. Conecte-se e atualize o pacote offline pelo menos uma vez.
+              O pacote offline esta ativo e sera preparado silenciosamente enquanto este dispositivo tiver internet.
             </div>
           )}
         </div>

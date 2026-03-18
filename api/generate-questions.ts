@@ -44,6 +44,114 @@ type PgClient = {
   release: () => void;
 };
 
+const MAX_REFERENCE_QUESTIONS = 30;
+const QUESTION_SIMILARITY_THRESHOLD = 0.82;
+const fillerWords = new Set([
+  'a',
+  'ao',
+  'aos',
+  'as',
+  'com',
+  'da',
+  'das',
+  'de',
+  'do',
+  'dos',
+  'e',
+  'em',
+  'na',
+  'nas',
+  'no',
+  'nos',
+  'o',
+  'os',
+  'ou',
+  'para',
+  'por',
+  'que',
+  'se',
+  'um',
+  'uma',
+]);
+
+const normalizeDifficulty = (value?: string) => {
+  const normalized = String(value || 'medium').trim().toLowerCase();
+
+  if (['easy', 'facil', 'fácil'].includes(normalized)) return 'easy';
+  if (['medium', 'medio', 'médio', 'normal'].includes(normalized)) return 'medium';
+  if (['hard', 'dificil', 'difícil'].includes(normalized)) return 'hard';
+
+  return 'medium';
+};
+
+const getDifficultyInstruction = (difficulty: string) => {
+  switch (difficulty) {
+    case 'easy':
+      return 'FACIL: enunciado direto, 1 conceito central, distratores simples e sem armadilhas.';
+    case 'hard':
+      return 'DIFICIL: exige interpretacao clinica, relacao entre normas/condutas e distratores plausiveis.';
+    default:
+      return 'MEDIO: exige compreensao pratica, mas sem depender de pegadinhas excessivas.';
+  }
+};
+
+const normalizeQuestionIdentity = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const tokenizeQuestion = (value: string) =>
+  normalizeQuestionIdentity(value)
+    .split(' ')
+    .filter((token) => token.length > 2 && !fillerWords.has(token));
+
+const calculateQuestionSimilarity = (left: string, right: string) => {
+  const normalizedLeft = normalizeQuestionIdentity(left);
+  const normalizedRight = normalizeQuestionIdentity(right);
+
+  if (!normalizedLeft || !normalizedRight) return 0;
+  if (normalizedLeft === normalizedRight) return 1;
+
+  const minLength = Math.min(normalizedLeft.length, normalizedRight.length);
+  if (minLength > 40 && (normalizedLeft.includes(normalizedRight) || normalizedRight.includes(normalizedLeft))) {
+    return 0.97;
+  }
+
+  const leftTokens = tokenizeQuestion(left);
+  const rightTokens = tokenizeQuestion(right);
+  if (!leftTokens.length || !rightTokens.length) return 0;
+
+  const leftSet = new Set(leftTokens);
+  const rightSet = new Set(rightTokens);
+  const intersection = leftTokens.filter((token) => rightSet.has(token)).length;
+  const union = new Set([...leftSet, ...rightSet]).size || 1;
+  const jaccard = intersection / union;
+
+  const prefixWindow = Math.min(8, leftTokens.length, rightTokens.length);
+  const prefixMatches = Array.from({ length: prefixWindow }).filter((_, index) => leftTokens[index] === rightTokens[index]).length;
+  const prefixScore = prefixWindow > 0 ? prefixMatches / prefixWindow : 0;
+
+  return Math.max(jaccard, prefixScore * 0.94);
+};
+
+const isNearDuplicateQuestion = (candidate: string, references: string[]) =>
+  references.some((reference) => calculateQuestionSimilarity(candidate, reference) >= QUESTION_SIMILARITY_THRESHOLD);
+
+const formatReferenceQuestions = (items: Array<{ content: string; difficulty?: string | null }>) => {
+  if (!items.length) {
+    return 'Nenhuma referencia previa disponivel.';
+  }
+
+  return items
+    .slice(0, 12)
+    .map((item, index) => `${index + 1}. [${normalizeDifficulty(item.difficulty || 'medium')}] ${item.content}`)
+    .join('\n');
+};
+
 const getSupabase = async () => {
   if (!supabaseUrl || !supabaseServiceKey) return null;
   if (!supabaseClientPromise) {
@@ -67,6 +175,7 @@ const buildQuestionsPrompt = ({
   difficulty,
   rawContent,
   alternativesCount,
+  existingQuestions,
 }: {
   area: string;
   topic: string;
@@ -74,6 +183,7 @@ const buildQuestionsPrompt = ({
   difficulty: string;
   rawContent: string;
   alternativesCount: number;
+  existingQuestions: Array<{ content: string; difficulty?: string | null }>;
 }) => `
 ESPECIALISTA EM CONCURSOS DE SAUDE EM ANGOLA
 AREA: ${area}
@@ -82,12 +192,18 @@ QUANTIDADE: ${count} questoes
 DIFICULDADE: ${difficulty}
 ALTERNATIVAS: ${alternativesCount}
 CONTEXTO ADICIONAL: ${rawContent || 'Nenhum'}
+GUIA DE DIFICULDADE: ${getDifficultyInstruction(difficulty)}
+
+QUESTOES JA EXISTENTES NESTE TOPICO. NAO REPITA, NAO REESCREVA E NAO CRIE VARIACOES MUITO PARECIDAS:
+${formatReferenceQuestions(existingQuestions)}
 
 REGRAS IMPORTANTES:
 - Use portugues de Angola correto
 - Crie perguntas realistas para concursos publicos de saude
+- A dificuldade precisa refletir claramente o nivel pedido
 - Apenas uma alternativa deve estar correta
 - Inclua explicacoes claras para cada pergunta
+- Evite enunciados que reaproveitem o mesmo caso clinico, a mesma regra ou a mesma formulacao das referencias acima
 - Retorne JSON puro, sem markdown
 
 RETORNE APENAS:
@@ -117,7 +233,7 @@ const normalizeQuestions = (rawQuestions: IncomingQuestion[] = []): NormalizedQu
     isCorrect: typeof alt.isCorrect === 'boolean' ? alt.isCorrect : Boolean(alt.is_correct),
   })),
   explanation: String(q.explanation || '').trim(),
-  difficulty: String(q.difficulty || 'medium').trim() || 'medium',
+  difficulty: normalizeDifficulty(q.difficulty),
   is_contest_highlight: Boolean(q.is_contest_highlight),
 }));
 
@@ -129,6 +245,7 @@ const validateQuestions = (questions: NormalizedQuestion[], expectedAlternatives
   }
 
   const seenQuestions = new Set<string>();
+  const seenQuestionContents: string[] = [];
   questions.forEach((question, index) => {
     if (!question.question || question.question.length < 10) {
       errors.push(`Q${index + 1}: enunciado vazio/curto`);
@@ -155,14 +272,96 @@ const validateQuestions = (questions: NormalizedQuestion[], expectedAlternatives
       });
     }
 
-    const questionKey = question.question.toLowerCase();
+    const questionKey = normalizeQuestionIdentity(question.question);
     if (seenQuestions.has(questionKey)) {
       errors.push(`Q${index + 1}: enunciado duplicado`);
     }
+    if (isNearDuplicateQuestion(question.question, seenQuestionContents)) {
+      errors.push(`Q${index + 1}: enunciado demasiado parecido com outra questao do mesmo lote`);
+    }
     seenQuestions.add(questionKey);
+    seenQuestionContents.push(question.question);
   });
 
   return errors;
+};
+
+const fetchExistingTopicQuestionsWithPg = async (client: PgClient, topicId: string) => {
+  const result = await client.query(
+    'select content, difficulty from public.questions where topic_id = $1 order by created_at desc limit $2',
+    [topicId, MAX_REFERENCE_QUESTIONS]
+  );
+  return result.rows as Array<{ content: string; difficulty?: string | null }>;
+};
+
+const fetchExistingTopicQuestionsWithSupabase = async (topicId: string) => {
+  const supabase = await getSupabase();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('questions')
+    .select('content,difficulty')
+    .eq('topic_id', topicId)
+    .order('created_at', { ascending: false })
+    .limit(MAX_REFERENCE_QUESTIONS);
+
+  if (error) throw error;
+  return (data || []) as Array<{ content: string; difficulty?: string | null }>;
+};
+
+const fetchExistingTopicQuestions = async (
+  areaId: string,
+  topicId?: string | null,
+  customTopicName?: string | null
+) => {
+  const pool = await getPgPool();
+
+  if (pool) {
+    const client = await pool.connect();
+    try {
+      let resolvedTopicId = topicId || null;
+
+      if (!resolvedTopicId) {
+        const topicName = String(customTopicName || '').trim();
+        if (!topicName) return [];
+
+        const existingTopic = await client.query(
+          'select id from public.topics where area_id = $1 and lower(name) = lower($2) limit 1',
+          [areaId, topicName]
+        );
+        resolvedTopicId = (existingTopic.rows[0]?.id as string | undefined) || null;
+      }
+
+      if (!resolvedTopicId) return [];
+      return await fetchExistingTopicQuestionsWithPg(client, resolvedTopicId);
+    } finally {
+      client.release();
+    }
+  }
+
+  const supabase = await getSupabase();
+  if (!supabase) return [];
+
+  let resolvedTopicId = topicId || null;
+
+  if (!resolvedTopicId) {
+    const topicName = String(customTopicName || '').trim();
+    if (!topicName) return [];
+
+    const existing = await supabase
+      .from('topics')
+      .select('id')
+      .eq('area_id', areaId)
+      .ilike('name', topicName)
+      .limit(1)
+      .maybeSingle();
+
+    if (existing.error) throw existing.error;
+    resolvedTopicId = existing.data?.id || null;
+  }
+
+  if (!resolvedTopicId) return [];
+  return fetchExistingTopicQuestionsWithSupabase(resolvedTopicId);
 };
 
 const getErrorMessage = (error: unknown) => {
@@ -226,13 +425,13 @@ const persistWithPostgres = async (input: PersistInput): Promise<PersistResult> 
 
     await client.query('BEGIN');
     const { topicId, topicCreated } = await resolveTopicWithPg(client, input.area_id, input.topic_id, input.custom_topic_name);
+    const knownQuestions = (await fetchExistingTopicQuestionsWithPg(client, topicId)).map((item) => item.content);
 
     let savedCount = 0;
     let skippedCount = 0;
 
     for (const question of normalized) {
-      const duplicate = await client.query('select id from public.questions where topic_id = $1 and lower(content) = lower($2) limit 1', [topicId, question.question]);
-      if (duplicate.rows[0]?.id) {
+      if (isNearDuplicateQuestion(question.question, knownQuestions)) {
         skippedCount += 1;
         continue;
       }
@@ -252,6 +451,7 @@ const persistWithPostgres = async (input: PersistInput): Promise<PersistResult> 
       }
 
       savedCount += 1;
+      knownQuestions.push(question.question);
     }
 
     await client.query('COMMIT');
@@ -291,12 +491,13 @@ const persistWithSupabase = async (input: PersistInput): Promise<PersistResult> 
     }
   }
 
+  const knownQuestions = (await fetchExistingTopicQuestionsWithSupabase(finalTopicId as string)).map((item) => item.content);
+
   let savedCount = 0;
   let skippedCount = 0;
 
   for (const question of normalized) {
-    const duplicate = await supabase.from('questions').select('id').eq('topic_id', finalTopicId).ilike('content', question.question).limit(1).maybeSingle();
-    if (duplicate.data?.id) {
+    if (isNearDuplicateQuestion(question.question, knownQuestions)) {
       skippedCount += 1;
       continue;
     }
@@ -322,6 +523,7 @@ const persistWithSupabase = async (input: PersistInput): Promise<PersistResult> 
     }
 
     savedCount += 1;
+    knownQuestions.push(question.question);
   }
 
   return { topicId: finalTopicId as string, topicCreated, savedCount, skippedCount };
@@ -365,6 +567,9 @@ export default async function handler(req: any, res: any) {
 
       const alternativesCount = is_contest_highlight ? 5 : 4;
       const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+      const existingQuestions = hasSupabase || databaseUrl
+        ? await fetchExistingTopicQuestions(area_id, topic_id, custom_topic_name)
+        : [];
       let parsed: any = null;
       let normalized: NormalizedQuestion[] = [];
       let validationErrors: string[] = [];
@@ -378,9 +583,10 @@ export default async function handler(req: any, res: any) {
             area: resolvedAreaName,
             topic: resolvedTopicName,
             count: Number(count) || 5,
-            difficulty,
+            difficulty: normalizeDifficulty(difficulty),
             rawContent: context || '',
             alternativesCount,
+            existingQuestions,
           }),
           config: {
             responseMimeType: 'application/json',
@@ -466,7 +672,7 @@ export default async function handler(req: any, res: any) {
         topic_name,
         custom_topic_name,
         count,
-        difficulty,
+        difficulty: normalizeDifficulty(difficulty),
         is_contest_highlight,
         model_used: modelUsed,
         questions: normalized,
