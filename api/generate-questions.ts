@@ -1,6 +1,5 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
-import { Pool, type PoolClient } from 'pg';
 import { buildQuestionsPrompt, defaultGeminiModel } from '../src/lib/gemini-config';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -13,10 +12,16 @@ if (supabaseUrl && supabaseServiceKey) {
   supabase = createClient(supabaseUrl, supabaseServiceKey);
 }
 
-let pgPool: Pool | null = null;
-const getPgPool = () => {
+type PgClient = {
+  query: (sql: string, params?: any[]) => Promise<{ rows: any[] }>;
+  release: () => void;
+};
+
+let pgPool: any = null;
+const getPgPool = async () => {
   if (!databaseUrl) return null;
   if (!pgPool) {
+    const { Pool } = await import('pg');
     pgPool = new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized: false }, max: 3 });
   }
   return pgPool;
@@ -143,7 +148,7 @@ const parseGeneratedPayload = (rawText: string) => {
   return JSON.parse(cleaned);
 };
 
-const resolveTopicWithPg = async (client: PoolClient, areaId: string, topicId?: string | null, customTopicName?: string | null) => {
+const resolveTopicWithPg = async (client: PgClient, areaId: string, topicId?: string | null, customTopicName?: string | null) => {
   if (topicId) return { topicId, topicCreated: false };
   const topicName = String(customTopicName || '').trim();
   if (!topicName) throw new Error('Area e topico sao obrigatorios.');
@@ -160,7 +165,7 @@ const resolveTopicWithPg = async (client: PoolClient, areaId: string, topicId?: 
 };
 
 const persistWithPostgres = async (input: PersistInput): Promise<PersistResult> => {
-  const pool = getPgPool();
+  const pool = await getPgPool();
   if (!pool) throw new Error('DATABASE_URL nao configurada.');
 
   const client = await pool.connect();
@@ -303,8 +308,8 @@ export default async function handler(req: any, res: any) {
         model_candidates: modelCandidates,
         mode: geminiApiKey ? 'server-api' : 'missing-gemini-key',
         can_generate: Boolean(geminiApiKey),
-        can_save: Boolean(getPgPool() || supabase),
-        save_mode: getPgPool() ? 'database-url' : supabase ? 'service-role' : 'missing-save-backend',
+        can_save: Boolean(databaseUrl || supabase),
+        save_mode: databaseUrl ? 'database-url' : supabase ? 'service-role' : 'missing-save-backend',
       });
     }
 
@@ -449,14 +454,14 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ error: 'Area e topico sao obrigatorios.' });
       }
 
-      const result = getPgPool() ? await persistWithPostgres(payload) : await persistWithSupabase(payload);
+      const result = databaseUrl ? await persistWithPostgres(payload) : await persistWithSupabase(payload);
       return res.status(200).json({
         success: true,
         topic_id: result.topicId,
         topic_created: result.topicCreated,
         saved_count: result.savedCount,
         skipped_count: result.skippedCount,
-        save_mode: getPgPool() ? 'database-url' : 'service-role',
+        save_mode: databaseUrl ? 'database-url' : 'service-role',
       });
     }
 

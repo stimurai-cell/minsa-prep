@@ -15,8 +15,8 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
-const CACHE_NAME = 'minsa-prep-v-1773795499081';
-const DATA_CACHE_NAME = 'minsa-prep-data-v-1773795499081';
+const CACHE_NAME = 'minsa-prep-v-1773797626677';
+const DATA_CACHE_NAME = 'minsa-prep-data-v-1773797626677';
 
 const ASSETS_TO_CACHE = [
   '/',
