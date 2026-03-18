@@ -1,31 +1,11 @@
-import { GoogleGenAI, Type } from '@google/genai';
-import { createClient } from '@supabase/supabase-js';
-import { buildQuestionsPrompt, defaultGeminiModel } from '../src/lib/gemini-config';
-
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const databaseUrl = process.env.DATABASE_URL || '';
 const geminiApiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+const defaultGeminiModel = 'gemini-2.5-flash';
 
-let supabase;
-if (supabaseUrl && supabaseServiceKey) {
-  supabase = createClient(supabaseUrl, supabaseServiceKey);
-}
-
-type PgClient = {
-  query: (sql: string, params?: any[]) => Promise<{ rows: any[] }>;
-  release: () => void;
-};
-
-let pgPool: any = null;
-const getPgPool = async () => {
-  if (!databaseUrl) return null;
-  if (!pgPool) {
-    const { Pool } = await import('pg');
-    pgPool = new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized: false }, max: 3 });
-  }
-  return pgPool;
-};
+let supabaseClientPromise: Promise<any> | null = null;
+let pgPoolPromise: Promise<any> | null = null;
 
 type IncomingQuestion = {
   question?: string;
@@ -59,6 +39,77 @@ type PersistResult = {
   skippedCount: number;
 };
 
+type PgClient = {
+  query: (sql: string, params?: any[]) => Promise<{ rows: any[] }>;
+  release: () => void;
+};
+
+const getSupabase = async () => {
+  if (!supabaseUrl || !supabaseServiceKey) return null;
+  if (!supabaseClientPromise) {
+    supabaseClientPromise = import('@supabase/supabase-js').then(({ createClient }) => createClient(supabaseUrl, supabaseServiceKey));
+  }
+  return supabaseClientPromise;
+};
+
+const getPgPool = async () => {
+  if (!databaseUrl) return null;
+  if (!pgPoolPromise) {
+    pgPoolPromise = import('pg').then(({ Pool }) => new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized: false }, max: 3 }));
+  }
+  return pgPoolPromise;
+};
+
+const buildQuestionsPrompt = ({
+  area,
+  topic,
+  count,
+  difficulty,
+  rawContent,
+  alternativesCount,
+}: {
+  area: string;
+  topic: string;
+  count: number;
+  difficulty: string;
+  rawContent: string;
+  alternativesCount: number;
+}) => `
+ESPECIALISTA EM CONCURSOS DE SAUDE EM ANGOLA
+AREA: ${area}
+TOPICO: ${topic}
+QUANTIDADE: ${count} questoes
+DIFICULDADE: ${difficulty}
+ALTERNATIVAS: ${alternativesCount}
+CONTEXTO ADICIONAL: ${rawContent || 'Nenhum'}
+
+REGRAS IMPORTANTES:
+- Use portugues de Angola correto
+- Crie perguntas realistas para concursos publicos de saude
+- Apenas uma alternativa deve estar correta
+- Inclua explicacoes claras para cada pergunta
+- Retorne JSON puro, sem markdown
+
+RETORNE APENAS:
+{
+  "questions": [
+    {
+      "question": "Texto da pergunta",
+      "alternatives": [
+        {"text": "Opcao A", "isCorrect": false},
+        {"text": "Opcao B", "isCorrect": false},
+        {"text": "Opcao C", "isCorrect": true},
+        {"text": "Opcao D", "isCorrect": false}${alternativesCount === 5 ? `,
+        {"text": "Opcao E", "isCorrect": false}` : ''}
+      ],
+      "explanation": "Explicacao detalhada",
+      "difficulty": "${difficulty}",
+      "is_contest_highlight": false
+    }
+  ]
+}
+`;
+
 const normalizeQuestions = (rawQuestions: IncomingQuestion[] = []): NormalizedQuestion[] => rawQuestions.map((q) => ({
   question: String(q.question || q.content || '').trim(),
   alternatives: (q.alternatives || []).map((alt) => ({
@@ -76,8 +127,8 @@ const validateQuestions = (questions: NormalizedQuestion[], expectedAlternatives
     errors.push('Nenhuma pergunta foi gerada');
     return errors;
   }
-  const seenQuestions = new Set<string>();
 
+  const seenQuestions = new Set<string>();
   questions.forEach((question, index) => {
     if (!question.question || question.question.length < 10) {
       errors.push(`Q${index + 1}: enunciado vazio/curto`);
@@ -121,7 +172,7 @@ const getErrorMessage = (error: unknown) => {
     return 'A chave do Gemini foi bloqueada por vazamento. Gere uma nova chave no Google AI Studio e atualize GEMINI_API_KEY/VITE_GEMINI_API_KEY.';
   }
   if (message.includes('RESOURCE_EXHAUSTED') || message.includes('"code":429')) return 'A quota do Gemini acabou. Tente novamente mais tarde.';
-  if (message.includes('NOT_FOUND') || message.toLowerCase().includes('model') && message.toLowerCase().includes('not found')) {
+  if (message.includes('NOT_FOUND') || (message.toLowerCase().includes('model') && message.toLowerCase().includes('not found'))) {
     return 'O modelo Gemini configurado nao esta disponivel para esta chave. Ajuste GEMINI_MODEL para um modelo suportado.';
   }
   if (message.toLowerCase().includes('apikey') || message.toLowerCase().includes('permission')) return 'A chave do Gemini parece invalida ou sem acesso ao modelo.';
@@ -156,11 +207,7 @@ const resolveTopicWithPg = async (client: PgClient, areaId: string, topicId?: st
   const existing = await client.query('select id from public.topics where area_id = $1 and lower(name) = lower($2) limit 1', [areaId, topicName]);
   if (existing.rows[0]?.id) return { topicId: existing.rows[0].id as string, topicCreated: false };
 
-  const inserted = await client.query(
-    'insert into public.topics (area_id, name, description) values ($1, $2, $3) returning id',
-    [areaId, topicName, `Topico gerado por IA: ${topicName}`],
-  );
-
+  const inserted = await client.query('insert into public.topics (area_id, name, description) values ($1, $2, $3) returning id', [areaId, topicName, `Topico gerado por IA: ${topicName}`]);
   return { topicId: inserted.rows[0].id as string, topicCreated: true };
 };
 
@@ -184,11 +231,7 @@ const persistWithPostgres = async (input: PersistInput): Promise<PersistResult> 
     let skippedCount = 0;
 
     for (const question of normalized) {
-      const duplicate = await client.query(
-        'select id from public.questions where topic_id = $1 and lower(content) = lower($2) limit 1',
-        [topicId, question.question],
-      );
-
+      const duplicate = await client.query('select id from public.questions where topic_id = $1 and lower(content) = lower($2) limit 1', [topicId, question.question]);
       if (duplicate.rows[0]?.id) {
         skippedCount += 1;
         continue;
@@ -200,7 +243,6 @@ const persistWithPostgres = async (input: PersistInput): Promise<PersistResult> 
       );
 
       const questionId = insertedQuestion.rows[0].id as string;
-
       for (const alternative of question.alternatives) {
         await client.query('insert into public.alternatives (question_id, content, is_correct) values ($1, $2, $3)', [questionId, alternative.text, alternative.isCorrect]);
       }
@@ -223,6 +265,7 @@ const persistWithPostgres = async (input: PersistInput): Promise<PersistResult> 
 };
 
 const persistWithSupabase = async (input: PersistInput): Promise<PersistResult> => {
+  const supabase = await getSupabase();
   if (!supabase) throw new Error('Supabase nao configurado.');
 
   const normalized = normalizeQuestions(input.questions);
@@ -241,11 +284,7 @@ const persistWithSupabase = async (input: PersistInput): Promise<PersistResult> 
     if (existing.data?.id) {
       finalTopicId = existing.data.id;
     } else {
-      const created = await supabase
-        .from('topics')
-        .insert({ area_id: input.area_id, name: topicName, description: `Topico gerado por IA: ${topicName}` })
-        .select('id')
-        .single();
+      const created = await supabase.from('topics').insert({ area_id: input.area_id, name: topicName, description: `Topico gerado por IA: ${topicName}` }).select('id').single();
       if (created.error) throw created.error;
       finalTopicId = created.data.id;
       topicCreated = true;
@@ -262,17 +301,13 @@ const persistWithSupabase = async (input: PersistInput): Promise<PersistResult> 
       continue;
     }
 
-    const insertedQuestion = await supabase
-      .from('questions')
-      .insert({
-        topic_id: finalTopicId,
-        area_id: input.area_id,
-        content: question.question,
-        difficulty: question.difficulty,
-        is_contest_highlight: input.is_contest_highlight || question.is_contest_highlight,
-      })
-      .select('id')
-      .single();
+    const insertedQuestion = await supabase.from('questions').insert({
+      topic_id: finalTopicId,
+      area_id: input.area_id,
+      content: question.question,
+      difficulty: question.difficulty,
+      is_contest_highlight: input.is_contest_highlight || question.is_contest_highlight,
+    }).select('id').single();
 
     if (insertedQuestion.error) throw insertedQuestion.error;
 
@@ -301,6 +336,7 @@ export default async function handler(req: any, res: any) {
     const { action } = req.body || {};
     const modelName = process.env.GEMINI_MODEL || process.env.VITE_GEMINI_MODEL || defaultGeminiModel;
     const modelCandidates = buildModelCandidates(modelName);
+    const hasSupabase = Boolean(supabaseUrl && supabaseServiceKey);
 
     if (action === 'status') {
       return res.status(200).json({
@@ -308,8 +344,8 @@ export default async function handler(req: any, res: any) {
         model_candidates: modelCandidates,
         mode: geminiApiKey ? 'server-api' : 'missing-gemini-key',
         can_generate: Boolean(geminiApiKey),
-        can_save: Boolean(databaseUrl || supabase),
-        save_mode: databaseUrl ? 'database-url' : supabase ? 'service-role' : 'missing-save-backend',
+        can_save: Boolean(databaseUrl || hasSupabase),
+        save_mode: databaseUrl ? 'database-url' : hasSupabase ? 'service-role' : 'missing-save-backend',
       });
     }
 
@@ -318,6 +354,7 @@ export default async function handler(req: any, res: any) {
         return res.status(500).json({ error: 'Nenhuma chave Gemini configurada no servidor.' });
       }
 
+      const { GoogleGenAI, Type } = await import('@google/genai');
       const { area_id, area_name, topic_id, topic_name, custom_topic_name, count = 5, difficulty = 'medium', context = '', is_contest_highlight = false } = req.body || {};
       const resolvedAreaName = String(area_name || '').trim();
       const resolvedTopicName = String(custom_topic_name || topic_name || '').trim();
