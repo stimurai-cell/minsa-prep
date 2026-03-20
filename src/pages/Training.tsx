@@ -18,6 +18,7 @@ import { useOfflineStore } from '../store/useOfflineStore';
 import { usePermissions } from '../lib/permissions';
 import {
   calculateTrainingXp,
+  filterPlayableQuestions,
   getAlternativeLabel,
   pickQuestionsForSession,
   prepareQuestionSet,
@@ -43,13 +44,15 @@ type SessionSummary = {
 };
 
 type DifficultyPreference = 'mixed' | 'easy' | 'medium' | 'hard';
+const TRAINING_TARGET_QUESTIONS = 10;
+const TRAINING_FETCH_BATCH_SIZE = 40;
 
 export default function Training() {
   const { profile, refreshProfile } = useAuthStore();
   const { areas, topics, fetchAreas, fetchTopics } = useAppStore();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { hasStatisticsPDF } = usePermissions();
+  const { hasGuidedTraining, hasOfflinePackage, hasStatisticsPDF } = usePermissions();
 
   const [selectedTopic, setSelectedTopic] = useState('');
   const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyPreference>('mixed');
@@ -94,6 +97,10 @@ export default function Training() {
   const focusHint = searchParams.get('focus') || '';
   const isReviewMode = searchParams.get('type') === 'review';
   const sessionDifficulty = (searchParams.get('difficulty') as DifficultyPreference) || 'mixed';
+  const guidedTrainingEnabled = hasGuidedTraining && searchParams.get('mode') !== 'manual';
+  const trainingBasePath = guidedTrainingEnabled ? '/training' : '/training?mode=manual';
+  const offlineQuestions = hasOfflinePackage ? downloadedQuestions : [];
+  const availableOfflineQuestionCount = hasOfflinePackage ? questionCount : 0;
   // Allow all difficulties for non-premium except 'hard' (difícil) which remains premium-only
   const effectiveDifficulty = hasPremiumAccess ? sessionDifficulty : (sessionDifficulty === 'hard' ? 'medium' : sessionDifficulty);
 
@@ -126,7 +133,7 @@ export default function Training() {
 
     try {
       const recentTopicIds = getRecentTopicIds();
-      const availableQuestionCounts = downloadedQuestions.reduce<Record<string, number>>((acc, question) => {
+      const availableQuestionCounts = offlineQuestions.reduce<Record<string, number>>((acc, question) => {
         acc[question.topic_id] = (acc[question.topic_id] || 0) + 1;
         return acc;
       }, {});
@@ -154,13 +161,13 @@ export default function Training() {
       const decision = chooseSystemTopic(
         topics.map((topic) => {
           const progress = progressMap.get(topic.id);
-          const hasOfflineCoverage = questionCount === 0 || availableQuestionCounts[topic.id] > 0;
+          const hasOfflineCoverage = availableOfflineQuestionCount === 0 || availableQuestionCounts[topic.id] > 0;
           const nameMatchesFocus = preferredKey && normalizeText(topic.name).includes(preferredKey);
 
           return {
             id: topic.id,
             name: topic.name,
-            questionCount: hasOfflineCoverage ? availableQuestionCounts[topic.id] || 12 : 0,
+            questionCount: hasOfflineCoverage ? availableQuestionCounts[topic.id] || 1 : 0,
             answeredCount: progress?.questions_answered,
             domainScore: progress?.domain_score,
             recentlySeen: recentTopicIds.includes(topic.id),
@@ -201,10 +208,10 @@ export default function Training() {
   }, [profile?.selected_area_id, fetchTopics]);
 
   useEffect(() => {
-    if (profile?.selected_area_id) {
+    if (profile?.selected_area_id && hasOfflinePackage) {
       void hydrateBundle(profile.selected_area_id);
     }
-  }, [hydrateBundle, profile?.selected_area_id]);
+  }, [hasOfflinePackage, hydrateBundle, profile?.selected_area_id]);
 
   useEffect(() => {
     if (sessionTopicId) {
@@ -212,12 +219,11 @@ export default function Training() {
     }
   }, [sessionTopicId]);
 
-  // Se não houver tópico selecionado explicitamente, pré-seleciona um tópico ALEATÓRIO
   useEffect(() => {
-    if (!sessionTopicId && !selectedTopic && topics.length > 0 && !assigningTopic) {
+    if (guidedTrainingEnabled && !sessionTopicId && !selectedTopic && topics.length > 0 && !assigningTopic) {
       void assignSystemTopic(focusHint);
     }
-  }, [assigningTopic, focusHint, selectedTopic, sessionTopicId, topics]);
+  }, [assigningTopic, focusHint, guidedTrainingEnabled, selectedTopic, sessionTopicId, topics]);
 
   useEffect(() => {
     setSelectedDifficulty(hasPremiumAccess ? sessionDifficulty : (sessionDifficulty === 'hard' ? 'medium' : sessionDifficulty));
@@ -235,16 +241,29 @@ export default function Training() {
     }
   }, [effectiveDifficulty, isReviewMode, loading, questions.length, selectedTopic, sessionActive, sessionTopicId]);
 
+  useEffect(() => {
+    if (!sessionActive || isReviewMode || sessionTopicId || selectedTopic || guidedTrainingEnabled) {
+      return;
+    }
+
+    navigate(trainingBasePath, { replace: true });
+  }, [guidedTrainingEnabled, isReviewMode, navigate, selectedTopic, sessionActive, sessionTopicId, trainingBasePath]);
+
   const selectedAreaName = useMemo(
     () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Área não definida',
     [areas, profile?.selected_area_id]
   );
+  const orderedTopics = useMemo(
+    () => [...topics].sort((left, right) => left.name.localeCompare(right.name)),
+    [topics]
+  );
 
   const selectedTopicName =
-    topics.find((topic) => topic.id === selectedTopic)?.name || 'Foco a ser definido';
+    topics.find((topic) => topic.id === selectedTopic)?.name || (guidedTrainingEnabled ? 'Foco a ser definido' : 'Selecione um topico');
 
   const currentQ = questions[currentQIndex];
   const currentExplanation =
+    currentQ?.explanation ||
     (Array.isArray(currentQ?.question_explanations) ? currentQ?.question_explanations?.[0]?.content : (currentQ?.question_explanations as any)?.content) ||
     'A resposta correta foi destacada para o seu estudo.';
   const correctAnswers = resultHistory.filter(Boolean).length;
@@ -302,8 +321,179 @@ export default function Training() {
     }
   };
 
-  const filterStandardQuestions = (qs: any[]) => (qs || []).filter(q => (q.alternatives || []).length === 4);
   const getQuestionHistoryScope = (topicId: string) => `${profile?.id || 'anon'}:${topicId}`;
+  const buildTrainingSession = (
+    topicId: string,
+    sessionQuestions: any[],
+    note?: string
+  ) => {
+    if (!sessionQuestions.length) return false;
+
+    const historyScope = getQuestionHistoryScope(topicId);
+    resetTrainingSession();
+    setSelectedTopic(topicId);
+    if (note) {
+      setTopicAssignmentNote(note);
+    }
+    setQuestions(prepareQuestionSet(sessionQuestions));
+    rememberQuestionIds(historyScope, sessionQuestions.map((question) => question.id));
+    rememberRecentTopic(topicId);
+    setSessionStartedAt(Date.now());
+    setShowIntro(true);
+    return true;
+  };
+  const logTrainingStart = async (topicId: string) => {
+    if (!profile?.id || !navigator.onLine) return;
+
+    try {
+      await supabase.from('activity_logs').insert({
+        user_id: profile.id,
+        activity_type: 'started_training',
+        activity_date: new Date().toISOString(),
+        activity_metadata: {
+          topic_name: topics.find((topic) => topic.id === topicId)?.name || 'N/A',
+        },
+      });
+    } catch (logErr) {
+      console.error('Erro ao registar inicio de treino:', logErr);
+    }
+  };
+  const loadSeenQuestionIds = async (candidateIds: string[], recentQuestionIds: string[]) => {
+    let seenIds = [...recentQuestionIds];
+
+    if (profile?.id && candidateIds.length > 0) {
+      const { data: seenRows, error: seenError } = await supabase
+        .from('user_question_srs')
+        .select('question_id')
+        .eq('user_id', profile.id)
+        .in('question_id', candidateIds);
+
+      if (seenError) {
+        console.warn('Nao foi possivel carregar o historico de questoes vistas:', seenError);
+      } else {
+        seenIds = [...new Set([...seenIds, ...(seenRows || []).map((row: any) => row.question_id)])];
+      }
+    }
+
+    return seenIds;
+  };
+  const fetchQuestionDetails = async (questionIds: string[]) => {
+    if (!questionIds.length) return [];
+
+    const { data, error } = await supabase
+      .from('questions')
+      .select(`
+        id, content, difficulty, topic_id,
+        alternatives (id, content, is_correct),
+        question_explanations (content)
+      `)
+      .in('id', questionIds);
+
+    if (error) throw error;
+
+    return questionIds
+      .map((id) => (data || []).find((question) => question.id === id))
+      .filter(Boolean);
+  };
+  const buildOfflineTopicSessionQuestions = (
+    topicId: string,
+    difficulty: DifficultyPreference,
+    recentQuestionIds: string[]
+  ) => {
+    const validTopicQuestions = filterPlayableQuestions(
+      offlineQuestions.filter((question) => question.topic_id === topicId)
+    );
+
+    if (!validTopicQuestions.length) {
+      return [];
+    }
+
+    const sessionPool = pickQuestionsForSession(
+      validTopicQuestions,
+      Math.min(validTopicQuestions.length, 24),
+      difficulty
+    );
+
+    return prioritizeUnseenQuestions(sessionPool, recentQuestionIds).slice(0, TRAINING_TARGET_QUESTIONS);
+  };
+  const buildOnlineTopicSessionQuestions = async (
+    topicId: string,
+    difficulty: DifficultyPreference,
+    recentQuestionIds: string[]
+  ) => {
+    const { data: idData, error: idError } = await supabase
+      .from('questions')
+      .select('id')
+      .eq('topic_id', topicId);
+
+    if (idError) throw idError;
+    if (!idData?.length) {
+      return [];
+    }
+
+    const allCandidateIds = idData.map((question) => question.id);
+    const seenIds = await loadSeenQuestionIds(allCandidateIds, recentQuestionIds);
+    const prioritizedIds = prioritizeUnseenQuestions(
+      allCandidateIds.map((id) => ({ id })),
+      seenIds
+    ).map((item) => item.id);
+    const desiredPoolSize = Math.min(prioritizedIds.length, 24);
+    const validQuestions = new Map<string, any>();
+
+    for (
+      let start = 0;
+      start < prioritizedIds.length && validQuestions.size < desiredPoolSize;
+      start += TRAINING_FETCH_BATCH_SIZE
+    ) {
+      const batchIds = prioritizedIds.slice(start, start + TRAINING_FETCH_BATCH_SIZE);
+      const batchQuestions = filterPlayableQuestions(await fetchQuestionDetails(batchIds));
+
+      batchQuestions.forEach((question) => {
+        if (!validQuestions.has(question.id)) {
+          validQuestions.set(question.id, question);
+        }
+      });
+    }
+
+    const orderedValidQuestions = prioritizedIds
+      .map((id) => validQuestions.get(id))
+      .filter(Boolean);
+
+    if (!orderedValidQuestions.length) {
+      return [];
+    }
+
+    const sessionPool = pickQuestionsForSession(
+      orderedValidQuestions,
+      Math.min(orderedValidQuestions.length, 24),
+      difficulty
+    );
+
+    return prioritizeUnseenQuestions(sessionPool, recentQuestionIds).slice(0, TRAINING_TARGET_QUESTIONS);
+  };
+  const findFallbackTopicSession = async (
+    excludedTopicId: string,
+    difficulty: DifficultyPreference
+  ) => {
+    const remainingTopics = topics.filter((topic) => topic.id !== excludedTopicId);
+
+    for (const fallbackTopic of remainingTopics) {
+      const recentQuestionIds = getRecentQuestionIds(getQuestionHistoryScope(fallbackTopic.id));
+      const fallbackQuestions = !navigator.onLine
+        ? buildOfflineTopicSessionQuestions(fallbackTopic.id, difficulty, recentQuestionIds)
+        : await buildOnlineTopicSessionQuestions(fallbackTopic.id, difficulty, recentQuestionIds);
+
+      if (fallbackQuestions.length > 0) {
+        return {
+          topicId: fallbackTopic.id,
+          questions: fallbackQuestions,
+          note: `O foco inicial nao tinha questoes validas; o sistema redirecionou a sessao para ${fallbackTopic.name}.`,
+        };
+      }
+    }
+
+    return null;
+  };
 
   const bootReviewSession = async () => {
     if (!profile?.id) return;
@@ -324,7 +514,7 @@ export default function Training() {
         .limit(20);
       if (srsError) throw srsError;
       if (srsQuestions && srsQuestions.length > 0) {
-        const formattedQuestions = filterStandardQuestions(
+        const formattedQuestions = filterPlayableQuestions(
           srsQuestions.map((srs: any) => srs.questions).filter(Boolean)
         );
         resetTrainingSession();
@@ -343,114 +533,55 @@ export default function Training() {
     }
   };
   const bootTrainingSession = async (topicId: string, difficulty: DifficultyPreference) => {
-    const shouldUseOfflineContent = !navigator.onLine && downloadedQuestions.length > 0;
+    const shouldUseOfflineContent = !navigator.onLine && offlineQuestions.length > 0;
     const historyScope = getQuestionHistoryScope(topicId);
     const recentQuestionIds = getRecentQuestionIds(historyScope);
-    if (shouldUseOfflineContent) {
-      const topicQuestions = downloadedQuestions.filter((question) => question.topic_id === topicId);
-      if (topicQuestions.length > 0) {
-        const sessionPool = pickQuestionsForSession(
-          filterStandardQuestions(topicQuestions),
-          Math.min(topicQuestions.length, 24),
-          difficulty
-        );
-        const selectedQuestions = prioritizeUnseenQuestions(sessionPool, recentQuestionIds).slice(0, 10);
-
-        resetTrainingSession();
-        setQuestions(
-          prepareQuestionSet(
-            selectedQuestions
-          )
-        );
-        rememberQuestionIds(historyScope, selectedQuestions.map((question) => question.id));
-        setSessionStartedAt(Date.now());
-        setShowIntro(true);
-        return;
-      }
-      if (!navigator.onLine) {
-        alert('O pacote local ainda nao tem questoes suficientes para este foco. Conecte-se para atualizar o conteudo offline.');
-        return;
-      }
-    }
     const safeDifficulty = !hasPremiumAccess && difficulty === 'hard' ? 'medium' : difficulty;
-    setLoading(true);
-    try {
-      let idsQuery = supabase
-        .from('questions')
-        .select('id')
-        .eq('topic_id', topicId);
-      if (safeDifficulty !== 'mixed') {
-        idsQuery = idsQuery.eq('difficulty', safeDifficulty);
-      }
-      const { data: idData, error: idError } = await idsQuery;
-      if (idError) throw idError;
-      if (!idData || idData.length === 0) {
-        alert('Nenhuma questao encontrada para este foco.');
-        navigate('/training', { replace: true });
+
+    if (shouldUseOfflineContent) {
+      const offlineSessionQuestions = buildOfflineTopicSessionQuestions(topicId, safeDifficulty, recentQuestionIds);
+
+      if (buildTrainingSession(topicId, offlineSessionQuestions)) {
         return;
       }
-      const allCandidateIds = idData.map((q) => q.id).sort(() => Math.random() - 0.5);
-      let seenIds = [...recentQuestionIds];
 
-      if (profile?.id && allCandidateIds.length > 0) {
-        const { data: seenRows, error: seenError } = await supabase
-          .from('user_question_srs')
-          .select('question_id')
-          .eq('user_id', profile.id)
-          .in('question_id', allCandidateIds);
-
-        if (seenError) {
-          console.warn('Nao foi possivel carregar o historico de questoes vistas:', seenError);
-        } else {
-          seenIds = [...new Set([...seenIds, ...(seenRows || []).map((row: any) => row.question_id)])];
+      if (guidedTrainingEnabled) {
+        const fallbackSession = await findFallbackTopicSession(topicId, safeDifficulty);
+        if (fallbackSession && buildTrainingSession(fallbackSession.topicId, fallbackSession.questions, fallbackSession.note)) {
+          return;
         }
       }
 
-      const shuffledIds = prioritizeUnseenQuestions(
-        allCandidateIds.map((id) => ({ id })),
-        seenIds
-      )
-        .map((item) => item.id)
-        .slice(0, 10);
+      alert('O pacote local ainda nao tem questoes suficientes para este foco. Conecte-se para atualizar o conteudo offline.');
+      navigate(trainingBasePath, { replace: true });
+      return;
+    }
 
-      const { data: qData, error: qError } = await supabase
-        .from('questions')
-        .select(`
-          id, content, difficulty,
-          alternatives (id, content, is_correct),
-          question_explanations (content)
-        `)
-        .in('id', shuffledIds);
-      if (qError) throw qError;
-      const filtered = filterStandardQuestions(qData);
-      if (filtered.length > 0) {
-        resetTrainingSession();
-        const orderedQuestions = shuffledIds
-          .map((id) => filtered.find((question) => question.id === id))
-          .filter(Boolean);
-        setQuestions(prepareQuestionSet(orderedQuestions));
-        rememberQuestionIds(historyScope, orderedQuestions.map((question: any) => question.id));
-        setSessionStartedAt(Date.now());
-        setShowIntro(true);
-        try {
-          await supabase.from('activity_logs').insert({
-            user_id: profile.id,
-            activity_type: 'started_training',
-            activity_date: new Date().toISOString(),
-            activity_metadata: {
-              topic_name: topics.find((topic) => topic.id === topicId)?.name || 'N/A',
-            },
-          });
-        } catch (logErr) {
-          console.error('Erro ao registar inicio de treino:', logErr);
-        }
-      } else {
-        alert('Erro ao carregar questoes.');
-        navigate('/training', { replace: true });
+    setLoading(true);
+
+    try {
+      const onlineSessionQuestions = await buildOnlineTopicSessionQuestions(topicId, safeDifficulty, recentQuestionIds);
+
+      if (buildTrainingSession(topicId, onlineSessionQuestions)) {
+        await logTrainingStart(topicId);
+        return;
       }
+
+      if (guidedTrainingEnabled) {
+        const fallbackSession = await findFallbackTopicSession(topicId, safeDifficulty);
+        if (fallbackSession && buildTrainingSession(fallbackSession.topicId, fallbackSession.questions, fallbackSession.note)) {
+          await logTrainingStart(fallbackSession.topicId);
+          return;
+        }
+      }
+
+      alert(guidedTrainingEnabled
+        ? 'Nao foi possivel montar o treino guiado com questoes validas nesta area.'
+        : 'Este topico ainda nao tem questoes validas para treino. Escolha outro topico.');
+      navigate(trainingBasePath, { replace: true });
     } catch (error) {
       console.error('Error starting training:', error);
-      navigate('/training', { replace: true });
+      navigate(trainingBasePath, { replace: true });
     } finally {
       setLoading(false);
     }
@@ -506,17 +637,24 @@ export default function Training() {
   };
 
   const startTraining = () => {
-    if (!selectedTopic) return;
-
-    const difficulty = hasPremiumAccess ? selectedDifficulty : (selectedDifficulty === 'hard' ? 'medium' : selectedDifficulty);
-    const actualTopic = selectedTopic;
-
-    if (!navigator.onLine && questionCount === 0) {
-      alert('Sem conteudo local disponivel. Conecte-se uma vez para guardar o pacote offline.');
+    if (!selectedTopic) {
+      alert(guidedTrainingEnabled ? 'O sistema ainda esta a definir o foco desta sessao.' : 'Escolha um topico para iniciar o treino.');
       return;
     }
 
-    rememberRecentTopic(actualTopic);
+    const difficulty = hasPremiumAccess ? selectedDifficulty : (selectedDifficulty === 'hard' ? 'medium' : selectedDifficulty);
+    const actualTopic = selectedTopic;
+    const sessionUrl = `${trainingBasePath}${trainingBasePath.includes('?') ? '&' : '?'}session=1&topic=${actualTopic}&difficulty=${difficulty}`;
+
+    if (!navigator.onLine && !hasOfflinePackage) {
+      alert('O treino offline esta disponivel apenas nos planos Premium e Elite. Conecte-se para continuar.');
+      return;
+    }
+
+    if (!navigator.onLine && availableOfflineQuestionCount === 0) {
+      alert('Sem conteudo local disponivel. Conecte-se uma vez para guardar o pacote offline.');
+      return;
+    }
 
     // Limite para utilizadores free: 30 questões por dia (Ignorado em Modo Offline com Pacote)
     if (!hasBasicAccess && profile?.id && navigator.onLine) {
@@ -537,22 +675,22 @@ export default function Training() {
             return;
           }
 
-          navigate(`/training?session=1&topic=${actualTopic}&difficulty=${difficulty}`);
+          navigate(sessionUrl);
         } catch (err) {
           console.error('Erro ao verificar limite diário:', err);
-          navigate(`/training?session=1&topic=${actualTopic}&difficulty=${difficulty}`);
+          navigate(sessionUrl);
         }
       })();
       return;
     }
 
-    navigate(`/training?session=1&topic=${actualTopic}&difficulty=${difficulty}`);
+    navigate(sessionUrl);
   };
 
   const leaveTrainingSession = () => {
     if (window.confirm('Deseja sair deste treino agora? O progresso desta sessão será perdido.')) {
       resetTrainingSession();
-      navigate('/training', { replace: true });
+      navigate(trainingBasePath, { replace: true });
     }
   };
 
@@ -661,15 +799,15 @@ export default function Training() {
           onPrimaryAction={() => {
             resetTrainingSession();
             setSessionSummary(null);
-            navigate('/training', { replace: true });
+            navigate(trainingBasePath, { replace: true });
           }}
           secondaryActionLabel="Gerar novo treino"
           onSecondaryAction={() => {
             resetTrainingSession();
             setSelectedTopic('');
-            setTopicAssignmentNote('A aguardar a rota de estudo do sistema.');
+            setTopicAssignmentNote(guidedTrainingEnabled ? 'A aguardar a rota de estudo do sistema.' : 'Escolha o topico para montar o seu treino.');
             setSessionSummary(null);
-            navigate('/training', { replace: true });
+            navigate(trainingBasePath, { replace: true });
           }}
         />
         {showBadge && (
@@ -971,9 +1109,11 @@ export default function Training() {
             <div className="flex-1 text-center md:text-left">
               <h3 className="text-xl font-black text-orange-200">Você está offline</h3>
               <p className="mt-1 text-slate-300">
-                {questionCount > 0
+                {hasOfflinePackage && availableOfflineQuestionCount > 0
                   ? 'Existem questoes guardadas neste dispositivo, por isso o treino pode continuar normalmente.'
-                  : 'Algumas funcoes dependem de internet para carregar novas questoes.'}
+                  : hasOfflinePackage
+                    ? 'Algumas funcoes dependem de internet para carregar novas questoes.'
+                    : 'Sem pacote offline ativo. Conecte-se a internet para carregar novas questoes.'}
               </p>
             </div>
           </div>
@@ -982,9 +1122,13 @@ export default function Training() {
 
       <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.35)] md:p-6">
-          <h2 className="text-2xl font-black text-slate-900">Treino guiado pelo sistema</h2>
+          <h2 className="text-2xl font-black text-slate-900">
+            {guidedTrainingEnabled ? 'Treino guiado pelo sistema' : 'Monte o seu treino'}
+          </h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            O sistema define o foco automaticamente para cobrir toda a materia sem depender da escolha do estudante.
+            {guidedTrainingEnabled
+              ? 'O sistema define o foco automaticamente para cobrir toda a materia sem depender da escolha do estudante.'
+              : 'Escolha o topico e o nivel manualmente. O foco automatico fica reservado ao plano Elite.'}
           </p>
 
           <div className="mt-6 space-y-5">
@@ -993,20 +1137,41 @@ export default function Training() {
               <p className="mt-1 text-lg font-black text-slate-900">{selectedAreaName}</p>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,#f8fffb_0%,#ffffff_100%)] px-4 py-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-500">Foco definido pelo sistema</p>
-                  <p className="mt-1 text-lg font-black text-slate-900">
-                    {assigningTopic ? 'A organizar o proximo foco...' : selectedTopicName}
-                  </p>
+            {guidedTrainingEnabled ? (
+              <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,#f8fffb_0%,#ffffff_100%)] px-4 py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-500">Foco definido pelo sistema</p>
+                    <p className="mt-1 text-lg font-black text-slate-900">
+                      {assigningTopic ? 'A organizar o proximo foco...' : selectedTopicName}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
+                    Auto
+                  </span>
                 </div>
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
-                  Auto
-                </span>
+                <p className="mt-3 text-sm leading-6 text-slate-600">{topicAssignmentNote}</p>
               </div>
-              <p className="mt-3 text-sm leading-6 text-slate-600">{topicAssignmentNote}</p>
-            </div>
+            ) : (
+              <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,#f8fffb_0%,#ffffff_100%)] px-4 py-4">
+                <label className="mb-2 block text-sm font-semibold text-slate-700">Topico</label>
+                <select
+                  value={selectedTopic}
+                  onChange={(event) => setSelectedTopic(event.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400"
+                >
+                  <option value="">Selecione um topico</option>
+                  {orderedTopics.map((topic) => (
+                    <option key={topic.id} value={topic.id}>
+                      {topic.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-3 text-sm leading-6 text-slate-600">
+                  Escolha o foco desta sessao manualmente. O treino guiado com foco automatico fica no plano Elite.
+                </p>
+              </div>
+            )}
 
             <div>
               <label className="mb-2 block text-sm font-semibold text-slate-700">Nível</label>
@@ -1057,49 +1222,62 @@ export default function Training() {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => handleExportTopic('pdf')}
-                disabled={!selectedTopic || exportingTopic !== null}
-                className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
-                  hasStatisticsPDF
-                    ? 'border border-slate-200 bg-white text-slate-800 hover:border-emerald-400'
-                    : 'border border-amber-200 bg-amber-50 text-amber-800'
-                } disabled:opacity-50`}
-              >
-                {exportingTopic === 'pdf' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                PDF
-                {!hasStatisticsPDF && <span className="text-[10px] font-black uppercase ml-2">Elite</span>}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleExportTopic('docx')}
-                disabled={!selectedTopic || exportingTopic !== null}
-                className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
-                  hasStatisticsPDF
-                    ? 'border border-slate-200 bg-white text-slate-800 hover:border-emerald-400'
-                    : 'border border-amber-200 bg-amber-50 text-amber-800'
-                } disabled:opacity-50`}
-              >
-                {exportingTopic === 'docx' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                DOCX
-                {!hasStatisticsPDF && <span className="text-[10px] font-black uppercase ml-2">Elite</span>}
-              </button>
-            </div>
-            {!hasStatisticsPDF && (
-              <p className="text-xs text-amber-800">
-                Exports ficam disponiveis no plano Elite para o foco automatico definido nesta sessao.
-              </p>
+            {guidedTrainingEnabled ? (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleExportTopic('pdf')}
+                    disabled={!selectedTopic || exportingTopic !== null}
+                    className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                      hasStatisticsPDF
+                        ? 'border border-slate-200 bg-white text-slate-800 hover:border-emerald-400'
+                        : 'border border-amber-200 bg-amber-50 text-amber-800'
+                    } disabled:opacity-50`}
+                  >
+                    {exportingTopic === 'pdf' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    PDF
+                    {!hasStatisticsPDF && <span className="ml-2 text-[10px] font-black uppercase">Elite</span>}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleExportTopic('docx')}
+                    disabled={!selectedTopic || exportingTopic !== null}
+                    className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                      hasStatisticsPDF
+                        ? 'border border-slate-200 bg-white text-slate-800 hover:border-emerald-400'
+                        : 'border border-amber-200 bg-amber-50 text-amber-800'
+                    } disabled:opacity-50`}
+                  >
+                    {exportingTopic === 'docx' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    DOCX
+                    {!hasStatisticsPDF && <span className="ml-2 text-[10px] font-black uppercase">Elite</span>}
+                  </button>
+                </div>
+                {!hasStatisticsPDF && (
+                  <p className="text-xs text-amber-800">
+                    Exports ficam disponiveis no plano Elite para o foco automatico definido nesta sessao.
+                  </p>
+                )}
+              </>
+            ) : (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs leading-5 text-emerald-900">
+                O foco automatico, o treino guiado e os exports desta pagina ficam reservados ao plano Elite.
+                <Link to="/premium" className="ml-1 font-black underline">
+                  Ver Elite
+                </Link>
+              </div>
             )}
 
             <button
               type="button"
               onClick={startTraining}
-              disabled={!selectedTopic || assigningTopic}
+              disabled={!selectedTopic || (guidedTrainingEnabled && assigningTopic)}
               className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {assigningTopic ? 'A definir foco...' : 'Iniciar treino'}
+              {guidedTrainingEnabled
+                ? (assigningTopic ? 'A definir foco...' : 'Iniciar treino guiado')
+                : 'Iniciar treino'}
             </button>
           </div>
         </div>

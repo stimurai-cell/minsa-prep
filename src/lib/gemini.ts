@@ -108,7 +108,7 @@ const generateQuestionsLocally = async (payload: GenerateQuestionsPayload) => {
     return errors;
   };
   
-  const validationErrors = validateQuestions(parsed, payload.alternativesCount);
+  const validationErrors = validateQuestions(parsed, 4);
   if (validationErrors.length > 0) {
     console.error('Local validation errors:', validationErrors);
     throw new Error(`A IA gerou questoes com problemas: ${validationErrors.join(', ')}`);
@@ -128,8 +128,7 @@ export const generateQuestions = async (
   topic: string,
   count: number,
   difficulty: string,
-  rawContent: string,
-  isContestHighlight = false
+  rawContent: string
 ) => {
   const payload: GenerateQuestionsPayload = {
     area,
@@ -137,7 +136,6 @@ export const generateQuestions = async (
     count,
     difficulty,
     rawContent,
-    alternativesCount: isContestHighlight ? 5 : 4,
   };
 
   try {
@@ -153,7 +151,6 @@ export const generateQuestions = async (
         count,
         difficulty,
         context: rawContent,
-        is_contest_highlight: isContestHighlight,
       }),
     });
 

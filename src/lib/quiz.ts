@@ -12,16 +12,54 @@ export const shuffleArray = <T,>(items: T[]) => {
 export const stripAlternativePrefix = (text: string) =>
   text.replace(/^\s*[a-e]\s*[\.\)\-:]\s*/i, '').trim();
 
+const normalizeAlternatives = (alternatives: any[] = []) =>
+  alternatives.filter((alternative) => {
+    const rawContent =
+      typeof alternative?.content === 'string'
+        ? alternative.content
+        : typeof alternative?.text === 'string'
+          ? alternative.text
+          : '';
+
+    return rawContent.trim().length > 0;
+  });
+
+export const isPlayableQuestion = (
+  question: any,
+  options?: { exactAlternativeCount?: number }
+) => {
+  const alternatives = normalizeAlternatives(question?.alternatives || []);
+  const correctCount = alternatives.filter(
+    (alternative) => alternative?.is_correct === true || alternative?.isCorrect === true
+  ).length;
+
+  if (correctCount !== 1) {
+    return false;
+  }
+
+  if (options?.exactAlternativeCount) {
+    return alternatives.length === options.exactAlternativeCount;
+  }
+
+  return alternatives.length === 4;
+};
+
+export const filterPlayableQuestions = (
+  questions: any[],
+  options?: { exactAlternativeCount?: number }
+) => (questions || []).filter((question) => isPlayableQuestion(question, options));
+
 export const prepareQuestionSet = (questions: any[]) =>
   shuffleArray(questions).map((question) => ({
     ...question,
-    alternatives: shuffleArray(question.alternatives || []).map((alternative: any) => ({
+    alternatives: shuffleArray(normalizeAlternatives(question.alternatives || [])).map((alternative: any) => ({
       ...alternative,
-      content: stripAlternativePrefix(alternative.content || ''),
+      content: stripAlternativePrefix(alternative.content || alternative.text || ''),
     })),
   }));
 
-export const getAlternativeLabel = (index: number) => ['a', 'b', 'c', 'd', 'e'][index] || '?';
+export const getAlternativeLabel = (index: number) =>
+  index >= 0 && index < 26 ? String.fromCharCode(97 + index) : `op${index + 1}`;
 
 type DifficultyPreference = 'mixed' | 'easy' | 'medium' | 'hard';
 

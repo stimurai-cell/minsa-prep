@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Swords, Trophy, Timer, Loader2, ArrowLeft, ArrowRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
-import { stripAlternativePrefix } from '../lib/quiz';
+import { filterPlayableQuestions, stripAlternativePrefix } from '../lib/quiz';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function BattleArena() {
@@ -79,7 +79,7 @@ export default function BattleArena() {
                 .limit(10);
 
             if (qs) {
-                const valid = qs.filter(q => (q.alternatives || []).length === 4);
+                const valid = filterPlayableQuestions(qs || []);
                 setQuestions(buildQuestionSet(valid, matchData.id));
             }
             setLoading(false);

@@ -38,7 +38,6 @@ const HelpCenter = lazy(() => import('./pages/HelpCenter'));
 const Feedback = lazy(() => import('./pages/Feedback'));
 const TermsOfUse = lazy(() => import('./pages/TermsOfUse'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
-const PublicExam = lazy(() => import('./pages/PublicExam'));
 const Leagues = lazy(() => import('./pages/Leagues'));
 const UserProfileView = lazy(() => import('./pages/UserProfileView'));
 const Welcome = lazy(() => import('./pages/Welcome'));
@@ -188,7 +187,7 @@ export default function App() {
               <Route path="feedback" element={<Feedback />} />
               <Route path="terms" element={<TermsOfUse />} />
               <Route path="privacy" element={<PrivacyPolicy />} />
-              <Route path="contest" element={<PublicExam />} />
+              <Route path="contest" element={<Navigate to="/simulation" replace />} />
               <Route path="leagues" element={<Leagues />} />
               <Route path="ranking" element={<Ranking />} />
               <Route path="premium" element={<Premium />} />

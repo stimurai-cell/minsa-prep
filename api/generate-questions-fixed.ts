@@ -18,21 +18,19 @@ const buildQuestionsPrompt = ({
   count,
   difficulty,
   rawContent,
-  alternativesCount,
 }: {
   area: string;
   topic: string;
   count: number;
   difficulty: string;
   rawContent: string;
-  alternativesCount: number;
 }) => `
 ESPECIALISTA EM CONCURSOS DE SAÚDE EM ANGOLA
 ÁREA: ${area}
 TÓPICO: ${topic}
 QUANTIDADE: ${count} questões
 DIFICULDADE: ${difficulty}
-ALTERNATIVAS: ${alternativesCount}
+ALTERNATIVAS: 4
 
 ${getContextualPrompt(area, topic)}
 
@@ -57,10 +55,7 @@ RETORNE APENAS O JSON ABAIXO:
         {"text": "Opção A", "isCorrect": false},
         {"text": "Opção B", "isCorrect": false},
         {"text": "Opção C", "isCorrect": true},
-        {"text": "Opção D", "isCorrect": false}${
-          alternativesCount === 5 ? `,
-        {"text": "Opção E", "isCorrect": false}` : ''
-        }
+        {"text": "Opção D", "isCorrect": false}
       ],
       "explanation": "Explicação detalhada",
       "difficulty": "${difficulty}"

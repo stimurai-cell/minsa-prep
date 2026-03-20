@@ -19,7 +19,7 @@ import {
     playBooSound,
     playCountdownSound
 } from '../lib/sounds';
-import { getAlternativeLabel, prepareQuestionSet } from '../lib/quiz';
+import { filterPlayableQuestions, getAlternativeLabel, prepareQuestionSet } from '../lib/quiz';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import { awardXp as unifiedAwardXp } from '../lib/xp';
@@ -48,6 +48,8 @@ export default function SpeedMode() {
     const [showLevelUp, setShowLevelUp] = useState<string | null>(null);
     const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('easy');
     const hasOfflineAccess = ['premium', 'elite', 'admin'].includes(profile?.role || '');
+    const offlineQuestions = hasOfflineAccess ? downloadedQuestions : [];
+    const availableOfflineQuestionCount = hasOfflineAccess ? questionCount : 0;
 
     const ttsRef = useRef<SpeechSynthesisUtterance | null>(null);
     const timerRef = useRef<number | null>(null);
@@ -57,10 +59,10 @@ export default function SpeedMode() {
     }, [fetchAreas]);
 
     useEffect(() => {
-        if (profile?.selected_area_id) {
+        if (profile?.selected_area_id && hasOfflineAccess) {
             void hydrateBundle(profile.selected_area_id);
         }
-    }, [hydrateBundle, profile?.selected_area_id]);
+    }, [hasOfflineAccess, hydrateBundle, profile?.selected_area_id]);
 
     useEffect(() => {
         if (hasOfflineAccess && navigator.onLine && profile?.selected_area_id) {
@@ -85,8 +87,6 @@ export default function SpeedMode() {
         window.speechSynthesis.speak(utterance);
     }, [stopTTS]);
 
-    const filterStandardQuestions = (qs: any[]) => (qs || []).filter(q => (q.alternatives || []).length === 4);
-
     const fetchQuestionBatch = async (ids: string[]) => {
         if (ids.length === 0) return [];
         const { data, error } = await supabase
@@ -98,13 +98,12 @@ export default function SpeedMode() {
             .in('id', ids);
 
         if (error) throw error;
-        // Keep the order of IDs we requested, filtrando somente alternativas A-D
-        return filterStandardQuestions(ids.map(id => data.find(q => q.id === id)).filter(Boolean));
+        return filterPlayableQuestions(ids.map(id => data.find(q => q.id === id)).filter(Boolean));
     };
 
     const getOfflinePool = () =>
-        filterStandardQuestions(
-            downloadedQuestions.filter((question) => question.area_id === profile?.selected_area_id)
+        filterPlayableQuestions(
+            offlineQuestions.filter((question) => question.area_id === profile?.selected_area_id)
         );
 
     const bootQuestions = async (reset = false) => {
@@ -147,11 +146,10 @@ export default function SpeedMode() {
 
                 if (!topics || topics.length === 0) throw new Error('Área sem tópicos cadastrados.');
 
-                const topicIds = topics.map(t => t.id);
                 const { data: allIds, error: idsError } = await supabase
                     .from('questions')
                     .select('id')
-                    .in('topic_id', topicIds);
+                    .eq('area_id', profile.selected_area_id);
 
                 if (idsError) throw idsError;
                 if (!allIds || allIds.length === 0) throw new Error('Não há questões para esta área.');
@@ -176,7 +174,12 @@ export default function SpeedMode() {
     };
 
     const startSession = () => {
-        if (!navigator.onLine && questionCount === 0) {
+        if (!navigator.onLine && !hasOfflineAccess) {
+            alert('O Modo Relampago offline esta disponivel apenas nos planos Premium e Elite. Conecte-se para continuar.');
+            return;
+        }
+
+        if (!navigator.onLine && availableOfflineQuestionCount === 0) {
             alert('Sem conteudo local para o Modo Relampago. Conecte-se uma vez para preparar o pacote offline.');
             return;
         }

@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ChangeEvent } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAppStore } from '../../store/useAppStore';
-import { FolderTree, Plus, Trash2, Sparkles, Loader2, Database, Zap } from 'lucide-react';
+import { FolderTree, Plus, Trash2, Sparkles, Loader2, Database, Zap, ShieldCheck } from 'lucide-react';
 import { getDifficultyLabel } from '../../lib/labels';
 
 type GeneratedQuestion = {
@@ -9,8 +9,29 @@ type GeneratedQuestion = {
     alternatives: { text: string; isCorrect: boolean }[];
     explanation?: string;
     difficulty?: string;
-    is_contest_highlight?: boolean;
 };
+
+type GenerationSourceMode = 'topic' | 'material_text' | 'material_file';
+
+const SOURCE_FILE_MAX_BYTES = 3.5 * 1024 * 1024;
+const ALLOWED_SOURCE_MIME_TYPES = [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+
+const getAlternativeBadge = (index: number) => String.fromCharCode(65 + index);
+
+const fileToBase64 = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = String(reader.result || '');
+            const [, base64 = ''] = result.split(',');
+            resolve(base64);
+        };
+        reader.onerror = () => reject(new Error('Falha ao ler o ficheiro selecionado.'));
+        reader.readAsDataURL(file);
+    });
 
 export default function AdminContent() {
     const { areas, fetchAreas, topics, fetchTopics } = useAppStore();
@@ -32,7 +53,12 @@ export default function AdminContent() {
     const [genContent, setGenContent] = useState('');
     const [genCount, setGenCount] = useState<number>(5);
     const [genDiff, setGenDiff] = useState<string>('easy');
-    const [genContestHighlight, setGenContestHighlight] = useState(false);
+    const [genSourceMode, setGenSourceMode] = useState<GenerationSourceMode>('topic');
+    const [genTheme, setGenTheme] = useState('');
+    const [genFileName, setGenFileName] = useState('');
+    const [genFileMimeType, setGenFileMimeType] = useState('');
+    const [genFileBase64, setGenFileBase64] = useState('');
+    const [readingSourceFile, setReadingSourceFile] = useState(false);
     const [generating, setGenerating] = useState(false);
     const [genResult, setGenResult] = useState<any>(null);
 
@@ -40,8 +66,9 @@ export default function AdminContent() {
     const [geminiMode, setGeminiMode] = useState<string>('Buscando...');
 
     useEffect(() => {
+        fetchAreas();
         fetchGeminiStatus();
-    }, []);
+    }, [fetchAreas]);
 
     useEffect(() => {
         if (managementArea) {
@@ -76,7 +103,6 @@ export default function AdminContent() {
             })),
             explanation: q.explanation || '',
             difficulty: q.difficulty || 'medium',
-            is_contest_highlight: Boolean(q.is_contest_highlight),
         }));
     };
 
@@ -104,7 +130,7 @@ export default function AdminContent() {
             .from('topics')
             .select(`
                 id, name, description,
-                questions(id, content, difficulty, is_contest_highlight, exam_year, alternatives(id, content, is_correct), question_explanations(content))
+                questions(id, content, difficulty, exam_year, alternatives(id, content, is_correct), question_explanations(content))
             `)
             .eq('area_id', areaId)
             .order('name');
@@ -180,9 +206,56 @@ export default function AdminContent() {
         setSavingContent(false);
     };
 
+    const clearSelectedSourceFile = () => {
+        setGenFileName('');
+        setGenFileMimeType('');
+        setGenFileBase64('');
+    };
+
+    const handleSourceFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) {
+            clearSelectedSourceFile();
+            return;
+        }
+
+        if (!ALLOWED_SOURCE_MIME_TYPES.includes(file.type)) {
+            event.target.value = '';
+            clearSelectedSourceFile();
+            alert('Use apenas ficheiros PDF ou DOCX.');
+            return;
+        }
+
+        if (file.size > SOURCE_FILE_MAX_BYTES) {
+            event.target.value = '';
+            clearSelectedSourceFile();
+            alert('O ficheiro excede o limite de 3.5 MB para processamento seguro.');
+            return;
+        }
+
+        setReadingSourceFile(true);
+        try {
+            const base64 = await fileToBase64(file);
+            setGenFileName(file.name);
+            setGenFileMimeType(file.type);
+            setGenFileBase64(base64);
+        } catch (error: any) {
+            clearSelectedSourceFile();
+            alert(error.message || 'Não foi possível carregar o ficheiro.');
+        } finally {
+            setReadingSourceFile(false);
+        }
+    };
+
     const handleGenerate = async () => {
         if (!genArea) return alert('Selecione uma área');
-        const targetTopic = isCustomTopic ? customTopic : genTopic;
+        const targetTopic = isCustomTopic ? customTopic.trim() : genTopic;
+        if (genSourceMode === 'material_text' && !genContent.trim()) {
+            return alert('Cole a materia completa para gerar questoes por texto.');
+        }
+        if (genSourceMode === 'material_file' && !genFileBase64) {
+            return alert('Selecione um ficheiro PDF ou DOCX antes de gerar.');
+        }
         if (!targetTopic) return alert('Defina um tópico (existente ou novo)');
 
         setGenerating(true);
@@ -191,6 +264,7 @@ export default function AdminContent() {
         try {
             const areaName = areas.find(a => a.id === genArea)?.name;
             const topicName = !isCustomTopic ? topics.find(t => t.id === targetTopic)?.name : null;
+            const resolvedTheme = genTheme.trim() || (isCustomTopic ? targetTopic : (topicName || ''));
 
             const res = await fetch('/api/generate-questions', {
                 method: 'POST',
@@ -204,8 +278,18 @@ export default function AdminContent() {
                     custom_topic_name: isCustomTopic ? targetTopic : null,
                     count: genCount,
                     difficulty: genDiff,
-                    context: genContent || null,
-                    is_contest_highlight: genContestHighlight
+                    context: genSourceMode === 'material_text' ? null : (genContent || null),
+                    source_mode: genSourceMode,
+                    source_theme: resolvedTheme || null,
+                    source_text: genSourceMode === 'material_text' ? genContent : null,
+                    source_file: genSourceMode === 'material_file'
+                        ? {
+                            name: genFileName,
+                            mime_type: genFileMimeType,
+                            data_base64: genFileBase64,
+                        }
+                        : null,
+                    validate_with_web: genSourceMode !== 'topic'
                 })
             });
 
@@ -220,7 +304,7 @@ export default function AdminContent() {
                 ...data,
                 area_id: data.area_id || genArea,
                 topic_id: data.topic_id ?? (isCustomTopic ? null : genTopic),
-                custom_topic_name: data.custom_topic_name ?? (isCustomTopic ? customTopic : null),
+                custom_topic_name: data.custom_topic_name ?? (isCustomTopic ? customTopic.trim() : null),
                 questions: normalized,
             });
             alert(`A IA gerou ${data.questions?.length || 0} perguntas com sucesso! Reveja e guarde.`);
@@ -244,7 +328,7 @@ export default function AdminContent() {
                         ...genResult,
                         area_id: genResult.area_id || genArea,
                         topic_id: genResult.topic_id ?? (isCustomTopic ? null : genTopic),
-                        custom_topic_name: genResult.custom_topic_name ?? (isCustomTopic ? customTopic : null),
+                        custom_topic_name: genResult.custom_topic_name ?? (isCustomTopic ? customTopic.trim() : null),
                     }
                 })
             });
@@ -255,6 +339,8 @@ export default function AdminContent() {
             alert(`✅ ${data.saved_count} perguntas guardadas com sucesso no banco de dados!`);
             setGenResult(null);
             setGenContent('');
+            setGenTheme('');
+            clearSelectedSourceFile();
             if (managementArea === genArea) fetchManagementContent(genArea);
         } catch (err: any) {
             alert(`Erro ao guardar: ${err.message}`);
@@ -487,7 +573,7 @@ export default function AdminContent() {
 
                                                                 {question.alternatives && question.alternatives.length > 0 && (
                                                                     <div className="mt-4 space-y-2 pl-4 border-l-2 border-slate-200">
-                                                                        {question.alternatives.map((alternative: any) => (
+                                                                        {question.alternatives.map((alternative: any, altIndex: number) => (
                                                                             <div
                                                                                 key={alternative.id}
                                                                                 className={`rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${alternative.is_correct
@@ -495,6 +581,9 @@ export default function AdminContent() {
                                                                                     : 'bg-white text-slate-600 border border-slate-100'
                                                                                     }`}
                                                                             >
+                                                                                <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[9px] font-black text-white">
+                                                                                    {getAlternativeBadge(altIndex)}
+                                                                                </span>
                                                                                 {alternative.content}
                                                                                 {alternative.is_correct && <span className="float-right font-black uppercase tracking-widest text-[9px] text-emerald-600 mt-0.5">Correcta</span>}
                                                                             </div>
@@ -514,24 +603,6 @@ export default function AdminContent() {
                                                             </div>
 
                                                             <div className="flex lg:flex-col gap-2 shrink-0">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={async () => {
-                                                                        const { error } = await supabase
-                                                                            .from('questions')
-                                                                            .update({ is_contest_highlight: !question.is_contest_highlight })
-                                                                            .eq('id', question.id);
-                                                                        if (error) alert(error.message);
-                                                                        else fetchManagementContent(managementArea);
-                                                                    }}
-                                                                    className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${question.is_contest_highlight
-                                                                        ? 'bg-amber-100 text-amber-700 shadow-sm shadow-amber-200/50'
-                                                                        : 'bg-white border-2 border-slate-200 text-slate-500 hover:bg-slate-50'
-                                                                        }`}
-                                                                >
-                                                                    <Sparkles className={`w-3.5 h-3.5 ${question.is_contest_highlight ? 'fill-amber-400 text-amber-500' : ''}`} />
-                                                                    Destaque
-                                                                </button>
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => handleDeleteQuestion(question.id)}
@@ -621,6 +692,50 @@ export default function AdminContent() {
                                 </div>
                             )}
 
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 ml-1">Tema Central</label>
+                                <input
+                                    type="text"
+                                    value={genTheme}
+                                    onChange={(e) => setGenTheme(e.target.value)}
+                                    placeholder="Opcional: se vazio, o sistema usa o nome do tÃ³pico"
+                                    className="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 font-bold text-slate-700 text-sm transition-all shadow-sm bg-white"
+                                />
+                            </div>
+
+                            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                                <div className="flex items-start gap-3">
+                                    <ShieldCheck className="w-5 h-5 text-emerald-600 mt-0.5 shrink-0" />
+                                    <div className="space-y-1 text-xs text-emerald-900">
+                                        <p className="font-black uppercase tracking-widest text-emerald-700">Regras Ativas</p>
+                                        <p>Apenas 4 alternativas por questÃ£o.</p>
+                                        <p>Texto e ficheiro passam por validaÃ§Ã£o web antes do retorno.</p>
+                                        <p>PDF e DOCX atÃ© 3.5 MB.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-3">
+                                {[
+                                    { id: 'topic', title: 'Por tÃ³pico', description: 'Usa o tÃ³pico e as instruÃ§Ãµes adicionais.' },
+                                    { id: 'material_text', title: 'Por texto colado', description: 'Usa a matÃ©ria colada e valida na web.' },
+                                    { id: 'material_file', title: 'Por ficheiro', description: 'Interpreta PDF ou DOCX com validaÃ§Ã£o adicional.' }
+                                ].map((mode) => (
+                                    <button
+                                        key={mode.id}
+                                        type="button"
+                                        onClick={() => setGenSourceMode(mode.id as GenerationSourceMode)}
+                                        className={`rounded-2xl border p-4 text-left transition-all ${genSourceMode === mode.id
+                                            ? 'border-blue-400 bg-blue-50 shadow-sm'
+                                            : 'border-slate-200 bg-white'
+                                            }`}
+                                    >
+                                        <p className="text-sm font-black text-slate-900">{mode.title}</p>
+                                        <p className="mt-2 text-xs font-medium leading-relaxed text-slate-500">{mode.description}</p>
+                                    </button>
+                                ))}
+                            </div>
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 ml-1">QTD Perguntas</label>
@@ -646,12 +761,12 @@ export default function AdminContent() {
                                 </div>
                             </div>
 
-                            <label className="flex items-start gap-4 p-4 rounded-2xl border-2 border-amber-200 bg-amber-50 cursor-pointer hover:bg-amber-100/50 transition-colors shadow-sm group">
+                            {false && <label className="flex items-start gap-4 p-4 rounded-2xl border-2 border-amber-200 bg-amber-50 cursor-pointer hover:bg-amber-100/50 transition-colors shadow-sm group">
                                 <div className="pt-1">
                                     <input
                                         type="checkbox"
-                                        checked={genContestHighlight}
-                                        onChange={(e) => setGenContestHighlight(e.target.checked)}
+                                        checked={false}
+                                        onChange={() => undefined}
                                         className="w-5 h-5 rounded-lg border-2 border-amber-300 text-amber-500 focus:ring-amber-200 transition-all cursor-pointer"
                                     />
                                 </div>
@@ -660,12 +775,37 @@ export default function AdminContent() {
                                     <span className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mt-2 leading-relaxed opacity-80">Marcar estas questões para o simulado restrito do edital MINSA. Apenas VIPs.</span>
                                 </div>
                                 <Sparkles className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" />
-                            </label>
+                            </label>}
+
+                            {genSourceMode === 'material_file' && (
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 ml-1">Ficheiro Fonte</label>
+                                    <input
+                                        type="file"
+                                        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                        onChange={handleSourceFileChange}
+                                        className="block w-full text-xs font-medium text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-xs file:font-black file:uppercase file:tracking-widest file:text-white"
+                                    />
+                                    <p className="mt-3 text-xs font-medium text-slate-500">
+                                        {readingSourceFile
+                                            ? 'A ler e preparar o ficheiro...'
+                                            : genFileName
+                                                ? `Ficheiro pronto: ${genFileName}`
+                                                : 'Nenhum ficheiro selecionado.'}
+                                    </p>
+                                </div>
+                            )}
 
                             <div>
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 ml-1">Contexto Opcional (Copiar & Colar de PDF)</label>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 ml-1">
+                                    {genSourceMode === 'material_text'
+                                        ? 'Matéria de estudo'
+                                        : genSourceMode === 'material_file'
+                                            ? 'Orientações extras para a IA'
+                                            : 'Contexto opcional'}
+                                </label>
                                 <textarea
-                                    rows={4}
+                                    rows={genSourceMode === 'material_text' ? 8 : 4}
                                     value={genContent}
                                     onChange={(e) => setGenContent(e.target.value)}
                                     placeholder="Ex: Regulamento X, Artigo Y. A IA usará isto como base para formular as perguntas..."
@@ -675,7 +815,7 @@ export default function AdminContent() {
 
                             <button
                                 onClick={handleGenerate}
-                                disabled={generating || !genArea || (!genTopic && !isCustomTopic) || (isCustomTopic && !customTopic)}
+                                disabled={generating || readingSourceFile || !genArea || (!genTopic && !isCustomTopic) || (isCustomTopic && !customTopic) || (genSourceMode === 'material_text' && !genContent.trim()) || (genSourceMode === 'material_file' && !genFileBase64)}
                                 className="w-full group flex justify-center items-center gap-3 py-4 px-6 rounded-2xl shadow-xl shadow-blue-500/20 text-xs font-black uppercase tracking-widest text-white bg-blue-600 hover:bg-blue-500 hover:shadow-blue-500/40 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 disabled:hover:bg-blue-600 disabled:shadow-none"
                             >
                                 {generating && !genResult ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-5 h-5 group-hover:scale-110 transition-transform" />}
@@ -708,6 +848,28 @@ export default function AdminContent() {
                                 </div>
                             ) : (
                                 <div className="space-y-6">
+                                    {(genResult.validation_summary || genResult.coverage_summary?.length) && (
+                                        <div className="rounded-[1.5rem] border border-blue-100 bg-blue-50 p-5">
+                                            {genResult.validation_summary && (
+                                                <div className="mb-4">
+                                                    <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-blue-700">Validacao</p>
+                                                    <p className="text-sm font-medium text-blue-900/80">{genResult.validation_summary}</p>
+                                                </div>
+                                            )}
+                                            {Array.isArray(genResult.coverage_summary) && genResult.coverage_summary.length > 0 && (
+                                                <div className="flex flex-wrap gap-2">
+                                                    {genResult.coverage_summary.map((item: string, index: number) => (
+                                                        <span
+                                                            key={`${item}-${index}`}
+                                                            className="rounded-full border border-blue-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-widest text-blue-700"
+                                                        >
+                                                            {item}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                     {genResult.questions.map((q: any, i: number) => (
                                         <div key={i} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden group hover:border-blue-200 transition-colors">
                                             <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
@@ -727,11 +889,6 @@ export default function AdminContent() {
                                                         }`}>
                                                             {getDifficultyLabel(q.difficulty)}
                                                         </span>
-                                                        {q.is_contest_highlight && (
-                                                            <span className="rounded-xl bg-blue-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-blue-700">
-                                                                Concurso
-                                                            </span>
-                                                        )}
                                                     </div>
                                                     <p className="font-black text-slate-900 mb-5 text-base leading-snug">{q.question}</p>
                                                     <div className="space-y-2.5">
@@ -745,7 +902,7 @@ export default function AdminContent() {
                                                             >
                                                                 <div className={`shrink-0 w-5 h-5 rounded-full mt-0.5 flex items-center justify-center text-[9px] font-black ${a.isCorrect ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'
                                                                     }`}>
-                                                                    {['A', 'B', 'C', 'D', 'E'][j]}
+                                                                    {getAlternativeBadge(j)}
                                                                 </div>
                                                                 <span className="text-sm font-bold leading-relaxed">{a.text}</span>
                                                             </div>

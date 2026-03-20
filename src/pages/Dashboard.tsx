@@ -63,6 +63,12 @@ export default function Dashboard() {
   const { deferredPrompt, setDeferredPrompt } = useAppStore();
   const [showEliteWelcome, setShowEliteWelcome] = useState(false);
   const [currentStrategy, setCurrentStrategy] = useState<any>(null);
+  const trainingPath = perms.hasGuidedTraining ? '/training' : '/training?mode=manual';
+  const trainingEyebrow = perms.hasGuidedTraining ? 'Foco automatico' : 'Treino livre';
+  const trainingTitle = perms.hasGuidedTraining ? 'Abrir treino guiado' : 'Escolher treino';
+  const trainingDescription = perms.hasGuidedTraining
+    ? 'Fluxo automatico reservado aos estudantes Elite.'
+    : 'Escolha o topico manualmente. O foco automatico fica no Elite.';
 
   const dailyTip = useMemo(() => {
     const day = new Date().getDay();
@@ -490,12 +496,13 @@ export default function Dashboard() {
             )}
 
             <Link
-              to="/training"
+              to={trainingPath}
               className="inline-flex w-full items-center justify-between rounded-[1.6rem] border border-emerald-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-emerald-400 hover:bg-emerald-50/40"
             >
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Foco automatico</p>
-                <p className="mt-1 text-lg font-black text-slate-900">Abrir treino guiado</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">{trainingEyebrow}</p>
+                <p className="mt-1 text-lg font-black text-slate-900">{trainingTitle}</p>
+                <p className="mt-1 text-sm text-slate-500">{trainingDescription}</p>
               </div>
               <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-sm">
                 <ArrowRight className="h-5 w-5" />
@@ -587,11 +594,11 @@ export default function Dashboard() {
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 mt-4">
             <Link
-              to="/training"
+              to={trainingPath}
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 text-sm font-semibold text-white transition hover:bg-emerald-700"
             >
               <PlayCircle className="h-5 w-5" />
-              Iniciar treino
+              {perms.hasGuidedTraining ? 'Abrir treino guiado' : 'Iniciar treino'}
             </Link>
             <Link
               to="/onboarding-quiz"
@@ -616,37 +623,6 @@ export default function Dashboard() {
             </Link>
           </div>
         </section>
-      )}
-
-      {/* Card Especial Concurso (Apenas para quem tem esse objetivo) */}
-      {(profile as any)?.goal === "Passar no concurso público" && (
-        <div
-          className="rounded-[2.5rem] border-2 border-slate-900 bg-[#0A1128] p-8 text-white shadow-2xl relative overflow-hidden group hover:scale-[1.01] transition-all cursor-pointer"
-          onClick={() => navigate('/contest')}
-        >
-          <div className="relative z-10">
-            <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400 mb-5 border border-emerald-500/20">
-              <Sparkles className="w-3.5 h-3.5" />
-              Destaque Exclusivo
-            </div>
-            <h3 className="text-3xl md:text-4xl font-black tracking-tight leading-tight">
-              Preparação para o <br />
-              <span className="text-emerald-400">Concurso MINSA</span>
-            </h3>
-            <p className="mt-4 text-slate-400 text-sm font-medium pr-20 leading-relaxed max-w-xl">
-              Acesse simulados focados 100% no edital de saúde: Legislação Nacional,
-              Ética Profissional e Deontologia. Tudo em um só lugar.
-            </p>
-            <div className="mt-8 flex items-center gap-3 text-emerald-400 font-black text-[10px] uppercase tracking-[0.25em] group-hover:gap-5 transition-all">
-              Abrir Módulo de Concurso
-              <ArrowRight className="w-4 h-4" />
-            </div>
-          </div>
-
-          {/* Efeito visual de fundo */}
-          <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl group-hover:bg-emerald-500/10 transition-colors"></div>
-          <AwardIcon className="absolute -right-6 -bottom-6 w-40 h-40 text-white/5 rotate-12 group-hover:scale-110 group-hover:rotate-0 transition-all duration-500" />
-        </div>
       )}
 
       {/* Domínio por tópico - apenas para Premium e acima */}

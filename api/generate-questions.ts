@@ -1,3 +1,7 @@
+import { promises as fs } from 'fs';
+import os from 'os';
+import path from 'path';
+
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const databaseUrl = process.env.DATABASE_URL || '';
@@ -13,7 +17,6 @@ type IncomingQuestion = {
   alternatives?: Array<{ text?: string; content?: string; isCorrect?: boolean; is_correct?: boolean }>;
   explanation?: string;
   difficulty?: string;
-  is_contest_highlight?: boolean;
 };
 
 type NormalizedQuestion = {
@@ -21,7 +24,6 @@ type NormalizedQuestion = {
   alternatives: Array<{ text: string; isCorrect: boolean }>;
   explanation: string;
   difficulty: string;
-  is_contest_highlight: boolean;
 };
 
 type PersistInput = {
@@ -29,7 +31,29 @@ type PersistInput = {
   topic_id?: string | null;
   custom_topic_name?: string | null;
   questions: IncomingQuestion[];
-  is_contest_highlight?: boolean;
+};
+
+type SourceMode = 'topic' | 'material_text' | 'material_file';
+
+type SourceFileInput = {
+  name?: string | null;
+  mime_type?: string | null;
+  data_base64?: string | null;
+};
+
+type GeneratedPayload = {
+  validation_summary?: string;
+  coverage_summary?: string[];
+  questions?: IncomingQuestion[];
+};
+
+type PreparedGenerationSource = {
+  sourceMode: SourceMode;
+  resolvedTheme: string;
+  rawContext: string;
+  validateWithWeb: boolean;
+  filePart?: { uri: string; mimeType: string; name: string } | null;
+  cleanup?: (() => Promise<void>) | null;
 };
 
 type PersistResult = {
@@ -46,6 +70,12 @@ type PgClient = {
 
 const MAX_REFERENCE_QUESTIONS = 30;
 const QUESTION_SIMILARITY_THRESHOLD = 0.82;
+const EXPECTED_ALTERNATIVES = 4;
+const MAX_SOURCE_FILE_BYTES = 3.5 * 1024 * 1024;
+const ALLOWED_SOURCE_MIME_TYPES = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]);
 const fillerWords = new Set([
   'a',
   'ao',
@@ -94,6 +124,25 @@ const getDifficultyInstruction = (difficulty: string) => {
       return 'MEDIO: exige compreensao pratica, mas sem depender de pegadinhas excessivas.';
   }
 };
+
+const normalizeSourceMode = (value?: string): SourceMode => {
+  if (value === 'material_text' || value === 'material_file') return value;
+  return 'topic';
+};
+
+const sanitizeFilename = (value?: string | null) =>
+  String(value || 'source')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    || 'source';
+
+const createCoverageSummary = (questions: NormalizedQuestion[]) =>
+  questions
+    .map((question) => question.question)
+    .slice(0, 12)
+    .map((question) => question.split(/[?.!]/)[0]?.trim())
+    .filter(Boolean);
 
 const normalizeQuestionIdentity = (value: string) =>
   value
@@ -174,7 +223,8 @@ const buildQuestionsPrompt = ({
   count,
   difficulty,
   rawContent,
-  alternativesCount,
+  sourceMode,
+  validateWithWeb,
   existingQuestions,
 }: {
   area: string;
@@ -182,16 +232,21 @@ const buildQuestionsPrompt = ({
   count: number;
   difficulty: string;
   rawContent: string;
-  alternativesCount: number;
+  sourceMode: SourceMode;
+  validateWithWeb: boolean;
   existingQuestions: Array<{ content: string; difficulty?: string | null }>;
 }) => `
 ESPECIALISTA EM CONCURSOS DE SAUDE EM ANGOLA
+DATA ATUAL: ${new Date().toISOString().slice(0, 10)}
 AREA: ${area}
 TOPICO: ${topic}
 QUANTIDADE: ${count} questoes
 DIFICULDADE: ${difficulty}
-ALTERNATIVAS: ${alternativesCount}
-CONTEXTO ADICIONAL: ${rawContent || 'Nenhum'}
+ALTERNATIVAS: ${EXPECTED_ALTERNATIVES}
+MODO DE FONTE: ${sourceMode}
+VALIDACAO WEB: ${validateWithWeb ? 'ATIVA' : 'DESATIVADA'}
+MATERIAL DE APOIO:
+${rawContent || 'Nenhum'}
 GUIA DE DIFICULDADE: ${getDifficultyInstruction(difficulty)}
 
 QUESTOES JA EXISTENTES NESTE TOPICO. NAO REPITA, NAO REESCREVA E NAO CRIE VARIACOES MUITO PARECIDAS:
@@ -200,14 +255,21 @@ ${formatReferenceQuestions(existingQuestions)}
 REGRAS IMPORTANTES:
 - Use portugues de Angola correto
 - Crie perguntas realistas para concursos publicos de saude
+- Esgote o tema ao longo do lote, cobrindo diferentes subtopicos sem repeticao
 - A dificuldade precisa refletir claramente o nivel pedido
+- Gere exatamente 4 alternativas por pergunta (A, B, C, D)
 - Apenas uma alternativa deve estar correta
 - Inclua explicacoes claras para cada pergunta
+- Nao invente leis, datas, protocolos, valores de referencia ou orientacoes clinicas
+- Se a validacao web estiver ativa, confirme fatos sensiveis e privilegie informacao atualizada
+- Se o material fornecido estiver desatualizado ou entrar em conflito com fonte confiavel atual, corrija antes de gerar
 - Evite enunciados que reaproveitem o mesmo caso clinico, a mesma regra ou a mesma formulacao das referencias acima
 - Retorne JSON puro, sem markdown
 
 RETORNE APENAS:
 {
+  "validation_summary": "Como o conteudo foi validado e saneado antes da geracao",
+  "coverage_summary": ["Subtema 1", "Subtema 2", "Subtema 3"],
   "questions": [
     {
       "question": "Texto da pergunta",
@@ -215,12 +277,10 @@ RETORNE APENAS:
         {"text": "Opcao A", "isCorrect": false},
         {"text": "Opcao B", "isCorrect": false},
         {"text": "Opcao C", "isCorrect": true},
-        {"text": "Opcao D", "isCorrect": false}${alternativesCount === 5 ? `,
-        {"text": "Opcao E", "isCorrect": false}` : ''}
+        {"text": "Opcao D", "isCorrect": false}
       ],
       "explanation": "Explicacao detalhada",
-      "difficulty": "${difficulty}",
-      "is_contest_highlight": false
+      "difficulty": "${difficulty}"
     }
   ]
 }
@@ -234,7 +294,6 @@ const normalizeQuestions = (rawQuestions: IncomingQuestion[] = []): NormalizedQu
   })),
   explanation: String(q.explanation || '').trim(),
   difficulty: normalizeDifficulty(q.difficulty),
-  is_contest_highlight: Boolean(q.is_contest_highlight),
 }));
 
 const validateQuestions = (questions: NormalizedQuestion[], expectedAlternatives: number) => {
@@ -398,6 +457,147 @@ const parseGeneratedPayload = (rawText: string) => {
   return JSON.parse(cleaned);
 };
 
+const decodeSourceFile = (input?: SourceFileInput | null) => {
+  const mimeType = String(input?.mime_type || '').trim();
+  if (!ALLOWED_SOURCE_MIME_TYPES.has(mimeType)) {
+    throw new Error('Use apenas ficheiros PDF ou DOCX.');
+  }
+
+  const base64 = String(input?.data_base64 || '').trim();
+  if (!base64) {
+    throw new Error('O ficheiro enviado nao contem dados.');
+  }
+
+  const buffer = Buffer.from(base64, 'base64');
+  if (!buffer.length) {
+    throw new Error('Nao foi possivel decodificar o ficheiro enviado.');
+  }
+
+  if (buffer.length > MAX_SOURCE_FILE_BYTES) {
+    throw new Error('O ficheiro excede o limite de 3.5 MB para processamento seguro.');
+  }
+
+  const originalName = sanitizeFilename(input?.name);
+  const fallbackExtension = mimeType === 'application/pdf' ? '.pdf' : '.docx';
+  const filename = originalName.includes('.') ? originalName : `${originalName}${fallbackExtension}`;
+
+  return { buffer, filename, mimeType };
+};
+
+const waitForUploadedFileActive = async (ai: any, fileName?: string) => {
+  if (!fileName) throw new Error('Falha ao preparar o ficheiro para a IA.');
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const current = await ai.files.get({ name: fileName });
+    if (current?.state === 'ACTIVE') return current;
+    if (current?.state === 'FAILED') {
+      const detail = current?.error?.message || 'O Gemini nao conseguiu processar o ficheiro.';
+      throw new Error(detail);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+
+  throw new Error('O ficheiro demorou demasiado para ficar disponivel no Gemini.');
+};
+
+const createResponseSchema = (Type: any) => ({
+  type: Type.OBJECT,
+  properties: {
+    validation_summary: { type: Type.STRING },
+    coverage_summary: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+    },
+    questions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          question: { type: Type.STRING },
+          alternatives: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                text: { type: Type.STRING },
+                isCorrect: { type: Type.BOOLEAN },
+              },
+              required: ['text', 'isCorrect'],
+            },
+          },
+          explanation: { type: Type.STRING },
+          difficulty: { type: Type.STRING },
+        },
+        required: ['question', 'alternatives', 'explanation', 'difficulty'],
+      },
+    },
+  },
+  required: ['validation_summary', 'coverage_summary', 'questions'],
+});
+
+const prepareGenerationSource = async (
+  body: any,
+  ai: any,
+): Promise<PreparedGenerationSource> => {
+  const sourceMode = normalizeSourceMode(body?.source_mode);
+  const resolvedTheme = String(body?.source_theme || body?.custom_topic_name || body?.topic_name || '').trim();
+  const validateWithWeb = Boolean(body?.validate_with_web) || sourceMode !== 'topic';
+  const baseContext = String(body?.context || '').trim();
+
+  if (sourceMode === 'material_text') {
+    const sourceText = String(body?.source_text || '').trim();
+    if (!sourceText) {
+      throw new Error('Cole a materia completa para gerar questoes por texto.');
+    }
+
+    return {
+      sourceMode,
+      resolvedTheme,
+      rawContext: sourceText,
+      validateWithWeb,
+      filePart: null,
+      cleanup: null,
+    };
+  }
+
+  if (sourceMode === 'material_file') {
+    const { buffer, filename, mimeType } = decodeSourceFile(body?.source_file);
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'minsa-source-'));
+    const tempFilePath = path.join(tempDir, filename);
+    await fs.writeFile(tempFilePath, buffer);
+
+    const uploaded = await ai.files.upload({
+      file: tempFilePath,
+      config: { mimeType },
+    });
+    const activeFile = await waitForUploadedFileActive(ai, uploaded?.name);
+
+    return {
+      sourceMode,
+      resolvedTheme,
+      rawContext: baseContext,
+      validateWithWeb,
+      filePart: {
+        uri: activeFile.uri || '',
+        mimeType: activeFile.mimeType || mimeType,
+        name: filename,
+      },
+      cleanup: async () => {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      },
+    };
+  }
+
+  return {
+    sourceMode,
+    resolvedTheme,
+    rawContext: baseContext,
+    validateWithWeb,
+    filePart: null,
+    cleanup: null,
+  };
+};
+
 const resolveTopicWithPg = async (client: PgClient, areaId: string, topicId?: string | null, customTopicName?: string | null) => {
   if (topicId) return { topicId, topicCreated: false };
   const topicName = String(customTopicName || '').trim();
@@ -417,8 +617,7 @@ const persistWithPostgres = async (input: PersistInput): Promise<PersistResult> 
   const client = await pool.connect();
   try {
     const normalized = normalizeQuestions(input.questions);
-    const expectedAlternatives = input.is_contest_highlight ? 5 : (normalized[0]?.alternatives.length || 4);
-    const validationErrors = validateQuestions(normalized, expectedAlternatives);
+    const validationErrors = validateQuestions(normalized, EXPECTED_ALTERNATIVES);
     if (validationErrors.length) {
       throw new Error(`Perguntas invalidas para guardar: ${validationErrors.join('; ')}`);
     }
@@ -437,8 +636,8 @@ const persistWithPostgres = async (input: PersistInput): Promise<PersistResult> 
       }
 
       const insertedQuestion = await client.query(
-        'insert into public.questions (topic_id, area_id, content, difficulty, is_contest_highlight) values ($1, $2, $3, $4, $5) returning id',
-        [topicId, input.area_id, question.question, question.difficulty, input.is_contest_highlight || question.is_contest_highlight],
+        'insert into public.questions (topic_id, area_id, content, difficulty) values ($1, $2, $3, $4) returning id',
+        [topicId, input.area_id, question.question, question.difficulty],
       );
 
       const questionId = insertedQuestion.rows[0].id as string;
@@ -469,8 +668,7 @@ const persistWithSupabase = async (input: PersistInput): Promise<PersistResult> 
   if (!supabase) throw new Error('Supabase nao configurado.');
 
   const normalized = normalizeQuestions(input.questions);
-  const expectedAlternatives = input.is_contest_highlight ? 5 : (normalized[0]?.alternatives.length || 4);
-  const validationErrors = validateQuestions(normalized, expectedAlternatives);
+  const validationErrors = validateQuestions(normalized, EXPECTED_ALTERNATIVES);
   if (validationErrors.length) {
     throw new Error(`Perguntas invalidas para guardar: ${validationErrors.join('; ')}`);
   }
@@ -507,7 +705,6 @@ const persistWithSupabase = async (input: PersistInput): Promise<PersistResult> 
       area_id: input.area_id,
       content: question.question,
       difficulty: question.difficulty,
-      is_contest_highlight: input.is_contest_highlight || question.is_contest_highlight,
     }).select('id').single();
 
     if (insertedQuestion.error) throw insertedQuestion.error;
@@ -556,127 +753,125 @@ export default async function handler(req: any, res: any) {
         return res.status(500).json({ error: 'Nenhuma chave Gemini configurada no servidor.' });
       }
 
-      const { GoogleGenAI, Type } = await import('@google/genai');
-      const { area_id, area_name, topic_id, topic_name, custom_topic_name, count = 5, difficulty = 'medium', context = '', is_contest_highlight = false } = req.body || {};
+      const { GoogleGenAI, Type, createPartFromText, createPartFromUri } = await import('@google/genai');
+      const { area_id, area_name, topic_id, topic_name, custom_topic_name, count = 5, difficulty = 'medium' } = req.body || {};
+      const resolvedAreaId = String(area_id || '').trim();
       const resolvedAreaName = String(area_name || '').trim();
-      const resolvedTopicName = String(custom_topic_name || topic_name || '').trim();
+      const requestedTopicName = String(custom_topic_name || topic_name || '').trim();
 
-      if (!resolvedAreaName || !resolvedTopicName) {
+      if (!resolvedAreaId || !resolvedAreaName || !requestedTopicName) {
         return res.status(400).json({ error: 'Area e topico sao obrigatorios.' });
       }
 
-      const alternativesCount = is_contest_highlight ? 5 : 4;
       const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+      const preparedSource = await prepareGenerationSource(req.body || {}, ai);
+      const resolvedTheme = preparedSource.resolvedTheme || requestedTopicName;
       const existingQuestions = hasSupabase || databaseUrl
-        ? await fetchExistingTopicQuestions(area_id, topic_id, custom_topic_name)
+        ? await fetchExistingTopicQuestions(resolvedAreaId, topic_id, custom_topic_name)
         : [];
-      let parsed: any = null;
+      let parsed: GeneratedPayload | null = null;
       let normalized: NormalizedQuestion[] = [];
       let validationErrors: string[] = [];
       let modelUsed = modelCandidates[0];
       let lastError: unknown = null;
 
-      for (const candidateModel of modelCandidates) {
-        const runGeneration = async () => ai.models.generateContent({
-          model: candidateModel,
-          contents: buildQuestionsPrompt({
+      try {
+        for (const candidateModel of modelCandidates) {
+          const prompt = buildQuestionsPrompt({
             area: resolvedAreaName,
-            topic: resolvedTopicName,
+            topic: resolvedTheme,
             count: Number(count) || 5,
             difficulty: normalizeDifficulty(difficulty),
-            rawContent: context || '',
-            alternativesCount,
+            rawContent: preparedSource.rawContext,
+            sourceMode: preparedSource.sourceMode,
+            validateWithWeb: preparedSource.validateWithWeb,
             existingQuestions,
-          }),
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                questions: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      question: { type: Type.STRING },
-                      alternatives: {
-                        type: Type.ARRAY,
-                        items: {
-                          type: Type.OBJECT,
-                          properties: {
-                            text: { type: Type.STRING },
-                            isCorrect: { type: Type.BOOLEAN },
-                          },
-                          required: ['text', 'isCorrect'],
-                        },
-                      },
-                      explanation: { type: Type.STRING },
-                      difficulty: { type: Type.STRING },
-                      is_contest_highlight: { type: Type.BOOLEAN },
-                    },
-                    required: ['question', 'alternatives', 'explanation', 'difficulty'],
-                  },
-                },
-              },
-              required: ['questions'],
-            },
-          },
-        });
+          });
 
-        try {
-          for (let attempt = 1; attempt <= 2; attempt += 1) {
-            const response = await runGeneration();
-            const rawText = extractResponseText(response);
-            parsed = rawText ? parseGeneratedPayload(rawText) : null;
-            normalized = normalizeQuestions(parsed?.questions || []);
-            validationErrors = validateQuestions(normalized, alternativesCount);
+          const contents = preparedSource.filePart
+            ? [{
+              role: 'user',
+              parts: [
+                createPartFromText(prompt),
+                createPartFromUri(preparedSource.filePart.uri, preparedSource.filePart.mimeType),
+              ],
+            }]
+            : prompt;
+
+          const runGeneration = async () => ai.models.generateContent({
+            model: candidateModel,
+            contents,
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: createResponseSchema(Type),
+              tools: preparedSource.validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
+            },
+          });
+
+          try {
+            for (let attempt = 1; attempt <= 2; attempt += 1) {
+              const response = await runGeneration();
+              const rawText = extractResponseText(response);
+              parsed = rawText ? parseGeneratedPayload(rawText) : null;
+              normalized = normalizeQuestions(parsed?.questions || []);
+              validationErrors = validateQuestions(normalized, EXPECTED_ALTERNATIVES);
+              if (!validationErrors.length) {
+                modelUsed = candidateModel;
+                break;
+              }
+              console.warn('[generate-questions] validation failed attempt', attempt, candidateModel, validationErrors);
+            }
+
             if (!validationErrors.length) {
-              modelUsed = candidateModel;
               break;
             }
-            console.warn('[generate-questions] validation failed attempt', attempt, candidateModel, validationErrors);
+          } catch (error) {
+            lastError = error;
+            console.warn('[generate-questions] model failed', candidateModel, getErrorMessage(error));
+            continue;
           }
+        }
 
-          if (!validationErrors.length) {
-            break;
-          }
-        } catch (error) {
-          lastError = error;
-          console.warn('[generate-questions] model failed', candidateModel, getErrorMessage(error));
-          continue;
+        if (validationErrors.length && lastError) {
+          throw lastError;
+        }
+
+        if (!normalized.length && lastError) {
+          throw lastError;
+        }
+
+        if (validationErrors.length) {
+          return res.status(422).json({ error: 'A IA devolveu perguntas invalidas apos 2 tentativas.', validation_errors: validationErrors });
+        }
+
+        return res.status(200).json({
+          area_id: resolvedAreaId,
+          area_name: resolvedAreaName,
+          topic_id,
+          topic_name,
+          custom_topic_name,
+          count,
+          difficulty: normalizeDifficulty(difficulty),
+          model_used: modelUsed,
+          source_mode: preparedSource.sourceMode,
+          source_theme: resolvedTheme,
+          validate_with_web: preparedSource.validateWithWeb,
+          validation_summary: String(
+            parsed?.validation_summary
+            || (preparedSource.validateWithWeb
+              ? 'Conteudo consolidado com validacao web antes da montagem final das questoes.'
+              : 'Conteudo estruturado diretamente a partir do topico e das instrucoes fornecidas.'),
+          ),
+          coverage_summary: Array.isArray(parsed?.coverage_summary) && parsed?.coverage_summary.length
+            ? parsed?.coverage_summary
+            : createCoverageSummary(normalized),
+          questions: normalized,
+        });
+      } finally {
+        if (preparedSource.cleanup) {
+          await preparedSource.cleanup();
         }
       }
-
-      if (validationErrors.length && lastError) {
-        throw lastError;
-      }
-
-      if (!normalized.length && lastError) {
-        throw lastError;
-      }
-
-      if (validationErrors.length) {
-        return res.status(422).json({ error: 'A IA devolveu perguntas invalidas apos 2 tentativas.', validation_errors: validationErrors });
-      }
-
-      if (is_contest_highlight) {
-        normalized.forEach((question) => {
-          question.is_contest_highlight = true;
-        });
-      }
-
-      return res.status(200).json({
-        area_id,
-        area_name: resolvedAreaName,
-        topic_id,
-        topic_name,
-        custom_topic_name,
-        count,
-        difficulty: normalizeDifficulty(difficulty),
-        is_contest_highlight,
-        model_used: modelUsed,
-        questions: normalized,
-      });
     }
 
     if (action === 'save') {
@@ -690,7 +885,6 @@ export default async function handler(req: any, res: any) {
         topic_id: generated_data.topic_id,
         custom_topic_name: generated_data.custom_topic_name,
         questions: generated_data.questions,
-        is_contest_highlight: Boolean(generated_data.is_contest_highlight),
       };
 
       if (!payload.area_id || (!payload.topic_id && !payload.custom_topic_name)) {

@@ -15,6 +15,7 @@ import { supabase } from '../lib/supabase';
 import { playSuccessSound, playErrorSound } from '../lib/sounds';
 import {
   calculateSimulationXp,
+  filterPlayableQuestions,
   getAlternativeLabel,
   pickQuestionsForSession,
   prepareQuestionSet,
@@ -190,12 +191,7 @@ export default function Simulation() {
   };
 
   const bootSimulationSession = async (difficulty: DifficultyPreference) => {
-    const sessionType = searchParams.get('type');
-
-    if (!profile?.selected_area_id && !sessionType) return;
-    if (sessionType && !hasPremiumAccess) {
-      alert('Este simulado especial do edital MINSA é exclusivo para VIP (premium/elite). Faça upgrade para aceder.');
-    }
+    if (!profile?.selected_area_id) return;
 
     setLoading(true);
 
@@ -203,106 +199,50 @@ export default function Simulation() {
       let qData: any[] = [];
       const count = 100;
 
-      if (sessionType && ['legis_geral', 'etica_deon', 'simulado_geral'].includes(sessionType)) {
-        // 1. Fetch IDs for specific contest type
-        let idsQuery = supabase
-          .from('questions')
-          .select(`id, topics!inner (name)`)
-          .eq('is_contest_highlight', true);
+      const { data: topics } = await supabase
+        .from('topics')
+        .select('id')
+        .eq('area_id', profile?.selected_area_id);
 
-        if (sessionType === 'legis_geral') {
-          idsQuery = idsQuery.eq('topics.name', 'Legislação Geral');
-        } else if (sessionType === 'etica_deon') {
-          idsQuery = idsQuery.eq('topics.name', 'Ética e Deontologia');
-        }
+      if (!topics || topics.length === 0) {
+        alert('Ainda não existem tópicos cadastrados para a sua área.');
+        navigate('/simulation', { replace: true });
+        return;
+      }
 
-        const { data: idData, error: idError } = await idsQuery;
-        if (idError) throw idError;
+      const { data: idData, error: idError } = await supabase
+        .from('questions')
+        .select('id')
+        .eq('area_id', profile?.selected_area_id);
 
-        if (!idData || idData.length === 0) {
-          alert('Nenhuma questão de concurso encontrada.');
-          navigate('/simulation', { replace: true });
-          return;
-        }
+      if (idError) throw idError;
 
-        const shuffledIds = idData.map(q => q.id).sort(() => Math.random() - 0.5).slice(0, count);
+      if (!idData || idData.length === 0) {
+        alert('Não há questões suficientes para esta área.');
+      }
 
-        // 2. Fetch full data
-        const { data, error } = await supabase
-          .from('questions')
-          .select(`
-            id, content, difficulty, topic_id, is_contest_highlight,
-            alternatives (id, content, is_correct),
-            question_explanations (content),
-            topics (area_id, name)
-          `)
-          .in('id', shuffledIds);
+      const shuffledIds = idData.map(q => q.id).sort(() => Math.random() - 0.5).slice(0, count);
 
-        if (error) throw error;
-        qData = shuffledIds
-          .map(id => data.find(q => q.id === id))
-          .filter((q): q is any => Boolean(q))
-          // For contest highlight / edital MINSA VIP, exigimos exatamente 5 alternativas válidas
-          .filter(q => q.alternatives?.length === 5);
+      const { data, error } = await supabase
+        .from('questions')
+        .select(`
+          id, content, difficulty, topic_id,
+          alternatives (id, content, is_correct),
+          question_explanations (content),
+          topics (area_id, name)
+        `)
+        .in('id', shuffledIds);
 
-        if (qData.length === 0) {
-          alert('As questões de destaque especial precisam ter 5 alternativas (A-E). Cadastre novas questões no admin e tente novamente.');
-          navigate('/simulation', { replace: true });
-          return;
-        }
-      } else {
-        // Fluxo Normal por Área
-        const { data: topics } = await supabase
-          .from('topics')
-          .select('id')
-          .eq('area_id', profile?.selected_area_id);
+      if (error) throw error;
+      qData = shuffledIds
+        .map(id => data.find(q => q.id === id))
+        .filter((q): q is any => Boolean(q))
+        .filter((question) => filterPlayableQuestions([question]).length > 0);
 
-        if (!topics || topics.length === 0) {
-          alert('Ainda não existem tópicos cadastrados para a sua área.');
-          navigate('/simulation', { replace: true });
-          return;
-        }
-
-        const topicIds = topics.map((topic) => topic.id);
-
-        // 1. Fetch IDs (sem filtro de dificuldade - mistura automática)
-        let idsQuery = supabase
-          .from('questions')
-          .select('id')
-          .in('topic_id', topicIds);
-
-        const { data: idData, error: idError } = await idsQuery;
-        if (idError) throw idError;
-
-        if (!idData || idData.length === 0) {
-          alert('Não há questões suficientes para esta área.');
-        }
-
-        const shuffledIds = idData.map(q => q.id).sort(() => Math.random() - 0.5).slice(0, count);
-
-        // 2. Fetch full data
-        const { data, error } = await supabase
-          .from('questions')
-          .select(`
-            id, content, difficulty, topic_id,
-            alternatives (id, content, is_correct),
-            question_explanations (content),
-            topics (name)
-          `)
-          .in('id', shuffledIds);
-
-        if (error) throw error;
-        qData = shuffledIds
-          .map(id => data.find(q => q.id === id))
-          .filter((q): q is any => Boolean(q))
-          // Modo normal: aceitar apenas questões no formato padrão (4 alternativas A-D)
-          .filter(q => q.alternatives?.length === 4);
-
-        if (qData.length === 0) {
-          alert('Ainda não há questões com 4 alternativas (A-D) suficientes para montar o simulado. Cadastre mais itens no admin.');
-          navigate('/simulation', { replace: true });
-          return;
-        }
+      if (qData.length === 0) {
+        alert('Ainda não há questões com 4 alternativas (A-D) suficientes para montar o simulado. Cadastre mais itens no admin.');
+        navigate('/simulation', { replace: true });
+        return;
       }
 
       if (qData && qData.length > 0) {
@@ -333,9 +273,9 @@ export default function Simulation() {
             activity_type: 'started_simulation',
             activity_date: new Date().toISOString(),
             activity_metadata: {
-              area_name: sessionType ? 'Especial Concurso' : (profile?.selected_area_id ? areas.find(a => a.id === profile.selected_area_id)?.name : 'N/A'),
+              area_name: profile?.selected_area_id ? areas.find(a => a.id === profile.selected_area_id)?.name : 'N/A',
               is_live: true,
-              type: sessionType || 'standard'
+              type: 'standard'
             }
           });
         } catch (logErr) {
