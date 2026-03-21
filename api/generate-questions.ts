@@ -29,6 +29,7 @@ type NormalizedQuestion = {
 type PersistInput = {
   area_id: string;
   topic_id?: string | null;
+  topic_name?: string | null;
   custom_topic_name?: string | null;
   questions: IncomingQuestion[];
 };
@@ -402,9 +403,78 @@ const fetchExistingTopicQuestionsWithSupabase = async (topicId: string) => {
   return (data || []) as Array<{ content: string; difficulty?: string | null }>;
 };
 
+const getRequestedTopicName = (topicName?: string | null, customTopicName?: string | null) =>
+  String(customTopicName || topicName || '').trim();
+
+const findTopicIdWithPg = async (
+  client: PgClient,
+  areaId: string,
+  topicId?: string | null,
+  topicName?: string | null,
+  customTopicName?: string | null
+) => {
+  if (topicId) {
+    const existingById = await client.query(
+      'select id from public.topics where id = $1 and area_id = $2 limit 1',
+      [topicId, areaId]
+    );
+    if (existingById.rows[0]?.id) {
+      return existingById.rows[0].id as string;
+    }
+  }
+
+  const requestedTopicName = getRequestedTopicName(topicName, customTopicName);
+  if (!requestedTopicName) return null;
+
+  const existingByName = await client.query(
+    'select id from public.topics where area_id = $1 and lower(name) = lower($2) limit 1',
+    [areaId, requestedTopicName]
+  );
+
+  return (existingByName.rows[0]?.id as string | undefined) || null;
+};
+
+const findTopicIdWithSupabase = async (
+  supabase: any,
+  areaId: string,
+  topicId?: string | null,
+  topicName?: string | null,
+  customTopicName?: string | null
+) => {
+  if (topicId) {
+    const existingById = await supabase
+      .from('topics')
+      .select('id')
+      .eq('id', topicId)
+      .eq('area_id', areaId)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingById.error) throw existingById.error;
+    if (existingById.data?.id) {
+      return existingById.data.id as string;
+    }
+  }
+
+  const requestedTopicName = getRequestedTopicName(topicName, customTopicName);
+  if (!requestedTopicName) return null;
+
+  const existingByName = await supabase
+    .from('topics')
+    .select('id')
+    .eq('area_id', areaId)
+    .ilike('name', requestedTopicName)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingByName.error) throw existingByName.error;
+  return existingByName.data?.id || null;
+};
+
 const fetchExistingTopicQuestions = async (
   areaId: string,
   topicId?: string | null,
+  topicName?: string | null,
   customTopicName?: string | null
 ) => {
   const pool = await getPgPool();
@@ -412,19 +482,7 @@ const fetchExistingTopicQuestions = async (
   if (pool) {
     const client = await pool.connect();
     try {
-      let resolvedTopicId = topicId || null;
-
-      if (!resolvedTopicId) {
-        const topicName = String(customTopicName || '').trim();
-        if (!topicName) return [];
-
-        const existingTopic = await client.query(
-          'select id from public.topics where area_id = $1 and lower(name) = lower($2) limit 1',
-          [areaId, topicName]
-        );
-        resolvedTopicId = (existingTopic.rows[0]?.id as string | undefined) || null;
-      }
-
+      const resolvedTopicId = await findTopicIdWithPg(client, areaId, topicId, topicName, customTopicName);
       if (!resolvedTopicId) return [];
       return await fetchExistingTopicQuestionsWithPg(client, resolvedTopicId);
     } finally {
@@ -435,24 +493,7 @@ const fetchExistingTopicQuestions = async (
   const supabase = await getSupabase();
   if (!supabase) return [];
 
-  let resolvedTopicId = topicId || null;
-
-  if (!resolvedTopicId) {
-    const topicName = String(customTopicName || '').trim();
-    if (!topicName) return [];
-
-    const existing = await supabase
-      .from('topics')
-      .select('id')
-      .eq('area_id', areaId)
-      .ilike('name', topicName)
-      .limit(1)
-      .maybeSingle();
-
-    if (existing.error) throw existing.error;
-    resolvedTopicId = existing.data?.id || null;
-  }
-
+  const resolvedTopicId = await findTopicIdWithSupabase(supabase, areaId, topicId, topicName, customTopicName);
   if (!resolvedTopicId) return [];
   return fetchExistingTopicQuestionsWithSupabase(resolvedTopicId);
 };
@@ -748,15 +789,23 @@ const insertQuestionWithSupabase = async (
   return insertedQuestion;
 };
 
-const resolveTopicWithPg = async (client: PgClient, areaId: string, topicId?: string | null, customTopicName?: string | null) => {
-  if (topicId) return { topicId, topicCreated: false };
-  const topicName = String(customTopicName || '').trim();
-  if (!topicName) throw new Error('Area e topico sao obrigatorios.');
+const resolveTopicWithPg = async (
+  client: PgClient,
+  areaId: string,
+  topicId?: string | null,
+  topicName?: string | null,
+  customTopicName?: string | null
+) => {
+  const resolvedTopicId = await findTopicIdWithPg(client, areaId, topicId, topicName, customTopicName);
+  if (resolvedTopicId) return { topicId: resolvedTopicId, topicCreated: false };
 
-  const existing = await client.query('select id from public.topics where area_id = $1 and lower(name) = lower($2) limit 1', [areaId, topicName]);
-  if (existing.rows[0]?.id) return { topicId: existing.rows[0].id as string, topicCreated: false };
+  const requestedTopicName = getRequestedTopicName(topicName, customTopicName);
+  if (!requestedTopicName) throw new Error('Area e topico sao obrigatorios.');
 
-  const inserted = await client.query('insert into public.topics (area_id, name, description) values ($1, $2, $3) returning id', [areaId, topicName, `Topico gerado por IA: ${topicName}`]);
+  const inserted = await client.query(
+    'insert into public.topics (area_id, name, description) values ($1, $2, $3) returning id',
+    [areaId, requestedTopicName, `Topico gerado por IA: ${requestedTopicName}`]
+  );
   return { topicId: inserted.rows[0].id as string, topicCreated: true };
 };
 
@@ -773,7 +822,13 @@ const persistWithPostgres = async (input: PersistInput): Promise<PersistResult> 
     }
 
     await client.query('BEGIN');
-    const { topicId, topicCreated } = await resolveTopicWithPg(client, input.area_id, input.topic_id, input.custom_topic_name);
+    const { topicId, topicCreated } = await resolveTopicWithPg(
+      client,
+      input.area_id,
+      input.topic_id,
+      input.topic_name,
+      input.custom_topic_name
+    );
     const knownQuestions = (await fetchExistingTopicQuestionsWithPg(client, topicId)).map((item) => item.content);
 
     let savedCount = 0;
@@ -820,20 +875,32 @@ const persistWithSupabase = async (input: PersistInput): Promise<PersistResult> 
     throw new Error(`Perguntas invalidas para guardar: ${validationErrors.join('; ')}`);
   }
 
-  let finalTopicId = input.topic_id || null;
+  let finalTopicId = await findTopicIdWithSupabase(
+    supabase,
+    input.area_id,
+    input.topic_id,
+    input.topic_name,
+    input.custom_topic_name
+  );
   let topicCreated = false;
 
   if (!finalTopicId) {
-    const topicName = String(input.custom_topic_name || '').trim();
-    const existing = await supabase.from('topics').select('id').eq('area_id', input.area_id).ilike('name', topicName).limit(1).maybeSingle();
-    if (existing.data?.id) {
-      finalTopicId = existing.data.id;
-    } else {
-      const created = await supabase.from('topics').insert({ area_id: input.area_id, name: topicName, description: `Topico gerado por IA: ${topicName}` }).select('id').single();
-      if (created.error) throw created.error;
-      finalTopicId = created.data.id;
-      topicCreated = true;
-    }
+    const requestedTopicName = getRequestedTopicName(input.topic_name, input.custom_topic_name);
+    if (!requestedTopicName) throw new Error('Area e topico sao obrigatorios.');
+
+    const created = await supabase
+      .from('topics')
+      .insert({
+        area_id: input.area_id,
+        name: requestedTopicName,
+        description: `Topico gerado por IA: ${requestedTopicName}`,
+      })
+      .select('id')
+      .single();
+
+    if (created.error) throw created.error;
+    finalTopicId = created.data.id;
+    topicCreated = true;
   }
 
   const knownQuestions = (await fetchExistingTopicQuestionsWithSupabase(finalTopicId as string)).map((item) => item.content);
@@ -908,7 +975,7 @@ export default async function handler(req: any, res: any) {
       const preparedSource = await prepareGenerationSource(req.body || {}, ai);
       const resolvedTheme = preparedSource.resolvedTheme || requestedTopicName;
       const existingQuestions = hasSupabase || databaseUrl
-        ? await fetchExistingTopicQuestions(resolvedAreaId, topic_id, custom_topic_name)
+        ? await fetchExistingTopicQuestions(resolvedAreaId, topic_id, topic_name, custom_topic_name)
         : [];
       let normalized: NormalizedQuestion[] = [];
       let validationErrors: string[] = [];
@@ -1081,11 +1148,12 @@ export default async function handler(req: any, res: any) {
       const payload: PersistInput = {
         area_id: generated_data.area_id,
         topic_id: generated_data.topic_id,
+        topic_name: generated_data.topic_name,
         custom_topic_name: generated_data.custom_topic_name,
         questions: generated_data.questions,
       };
 
-      if (!payload.area_id || (!payload.topic_id && !payload.custom_topic_name)) {
+      if (!payload.area_id || (!payload.topic_id && !payload.topic_name && !payload.custom_topic_name)) {
         return res.status(400).json({ error: 'Area e topico sao obrigatorios.' });
       }
 

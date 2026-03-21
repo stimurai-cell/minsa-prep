@@ -87,6 +87,13 @@ export default function AdminContent() {
         }
     }, [genArea, fetchTopics]);
 
+    useEffect(() => {
+        if (!genArea || isCustomTopic || !genTopic) return;
+        if (!topics.some((topic) => topic.id === genTopic)) {
+            setGenTopic('');
+        }
+    }, [genArea, genTopic, isCustomTopic, topics]);
+
     const safeJson = async (res: Response) => {
         const text = await res.text();
         try {
@@ -187,6 +194,7 @@ export default function AdminContent() {
             setNewTopicName('');
             setNewTopicDescription('');
             fetchManagementContent(managementArea);
+            if (genArea === managementArea) fetchTopics(managementArea);
         }
         setSavingContent(false);
     };
@@ -196,7 +204,10 @@ export default function AdminContent() {
         setSavingContent(true);
         const { error } = await supabase.from('topics').delete().eq('id', topicId);
         if (error) alert(error.message);
-        else fetchManagementContent(managementArea);
+        else {
+            fetchManagementContent(managementArea);
+            if (genArea === managementArea) fetchTopics(managementArea);
+        }
         setSavingContent(false);
     };
 
@@ -345,6 +356,7 @@ export default function AdminContent() {
             setGenContent('');
             setGenTheme('');
             clearSelectedSourceFile();
+            if (genResult.area_id || genArea) fetchTopics(genResult.area_id || genArea);
             if (managementArea === genArea) fetchManagementContent(genArea);
         } catch (err: any) {
             alert(`Erro ao guardar: ${err.message}`);
