@@ -27,7 +27,14 @@ export default function OnboardingQuiz() {
   }, [profile?.selected_area_id, fetchTopics]);
 
   const startQuickQuiz = () => {
-    navigate('/training?session=1');
+    const firstTopicId = topics[0]?.id;
+
+    if (firstTopicId) {
+      navigate(`/training?mode=manual&session=1&topic=${firstTopicId}`);
+      return;
+    }
+
+    navigate('/training?mode=manual');
   };
 
   return (

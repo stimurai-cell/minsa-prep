@@ -19,6 +19,7 @@
 export type UserRole = 'free' | 'basic' | 'premium' | 'elite' | 'admin';
 
 export interface UserPermissions {
+  hasGuidedTraining: boolean;
   canAccessHardDifficulty: boolean;
   dailyQuestionLimit: number | null;
   canAccessFullQuestionBank: boolean;
@@ -50,6 +51,7 @@ export function getPermissions(
   const hasPackage = (id: string) => activePackages.includes(id);
 
   return {
+    hasGuidedTraining: isElite,
     canAccessHardDifficulty: isPremium,
     dailyQuestionLimit: isBasic ? null : 30,
     canAccessFullQuestionBank: isPremium,
