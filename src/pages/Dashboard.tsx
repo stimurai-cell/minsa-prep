@@ -31,6 +31,7 @@ import AIMentor from '../components/AIMentor';
 import NotificationCenter from '../components/NotificationCenter';
 import { usePermissions } from '../lib/permissions';
 import { EliteStrategyManager } from '../lib/eliteStrategy';
+import { fetchStreakSnapshot } from '../lib/streak';
 
 const DAILY_TIPS = [
   "Treinar 15 minutos todos os dias gera mais resultado do que estudar 3 horas só no domingo!",
@@ -46,6 +47,8 @@ export default function Dashboard() {
   const { areas, fetchAreas } = useAppStore();
   const perms = usePermissions();
   const isPaidUser = perms.canAccessSimulation;
+  const isFreeUser = profile?.role === 'free';
+  const trainingUsesAutomaticTopic = perms.hasGuidedTraining || isFreeUser;
   const [stats, setStats] = useState({
     totalQuestions: 0,
     avgScore: 0,
@@ -60,20 +63,27 @@ export default function Dashboard() {
   const [lastTaskCount, setLastTaskCount] = useState<number | null>(null);
   const [streakWeek, setStreakWeek] = useState<{ label: string; completed: boolean; date: string }[]>([]);
   const [streakLoading, setStreakLoading] = useState(false);
+  const [displayStreakCount, setDisplayStreakCount] = useState(profile?.streak_count || 0);
   const { deferredPrompt, setDeferredPrompt } = useAppStore();
   const [showEliteWelcome, setShowEliteWelcome] = useState(false);
   const [currentStrategy, setCurrentStrategy] = useState<any>(null);
-  const trainingPath = perms.hasGuidedTraining ? '/training' : '/training?mode=manual';
-  const trainingEyebrow = perms.hasGuidedTraining ? 'Foco automatico' : 'Treino livre';
-  const trainingTitle = perms.hasGuidedTraining ? 'Abrir treino guiado' : 'Escolher treino';
+  const trainingPath = trainingUsesAutomaticTopic ? '/training' : '/training?mode=manual';
+  const trainingEyebrow = perms.hasGuidedTraining ? 'Foco adaptativo' : isFreeUser ? 'Topico do dia' : 'Treino livre';
+  const trainingTitle = perms.hasGuidedTraining ? 'Abrir treino guiado' : isFreeUser ? 'Abrir treino diario' : 'Escolher treino';
   const trainingDescription = perms.hasGuidedTraining
-    ? 'Fluxo automatico reservado aos estudantes Elite.'
-    : 'Escolha o topico manualmente. O foco automatico fica no Elite.';
+    ? 'O sistema define o proximo foco automaticamente.'
+    : isFreeUser
+      ? 'Receba um topico predefinido que roda entre os temas a cada nova entrada.'
+      : 'Escolha o topico manualmente. O fluxo automatico fica no Elite.';
 
   const dailyTip = useMemo(() => {
     const day = new Date().getDay();
     return DAILY_TIPS[day % DAILY_TIPS.length];
   }, []);
+
+  useEffect(() => {
+    setDisplayStreakCount(profile?.streak_count || 0);
+  }, [profile?.streak_count]);
 
   useEffect(() => {
     fetchAreas();
@@ -249,38 +259,9 @@ export default function Dashboard() {
     const fetchStreakWeek = async () => {
       setStreakLoading(true);
       try {
-        const nowLuanda = new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Luanda' }));
-        const start = new Date(nowLuanda);
-        start.setDate(start.getDate() - 6);
-
-        const startIso = new Date(Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())).toISOString();
-
-        const { data, error } = await supabase
-          .from('activity_logs')
-          .select('created_at')
-          .eq('user_id', profile.id)
-          .eq('activity_type', 'xp_earned')
-          .gte('created_at', startIso);
-
-        if (error) throw error;
-
-        const dayLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
-        const doneSet = new Set(
-          (data || []).map((d: any) => new Date(d.created_at).toISOString().slice(0, 10))
-        );
-
-        const week = Array.from({ length: 7 }).map((_, idx) => {
-          const d = new Date(start);
-          d.setDate(start.getDate() + idx);
-          const iso = d.toISOString().slice(0, 10);
-          return {
-            label: dayLabels[d.getDay()],
-            completed: doneSet.has(iso),
-            date: iso,
-          };
-        });
-
-        setStreakWeek(week);
+        const snapshot = await fetchStreakSnapshot(profile.id);
+        setStreakWeek(snapshot.week);
+        setDisplayStreakCount(Math.max(profile?.streak_count || 0, snapshot.currentStreak));
       } catch (err) {
         console.error('Erro ao buscar ofensiva semanal:', err);
         setStreakLoading(false);
@@ -290,7 +271,7 @@ export default function Dashboard() {
     };
 
     fetchStreakWeek();
-  }, [profile?.id]);
+  }, [profile?.id, profile?.streak_count]);
 
   // Daily Tasks Completion check
   useEffect(() => {
@@ -495,21 +476,19 @@ export default function Dashboard() {
               </div>
             )}
 
-            {profile?.role !== 'free' && (
-              <Link
-                to={trainingPath}
-                className="inline-flex w-full items-center justify-between rounded-[1.6rem] border border-emerald-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-emerald-400 hover:bg-emerald-50/40"
-              >
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">{trainingEyebrow}</p>
-                  <p className="mt-1 text-lg font-black text-slate-900">{trainingTitle}</p>
-                  <p className="mt-1 text-sm text-slate-500">{trainingDescription}</p>
-                </div>
-                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-sm">
-                  <ArrowRight className="h-5 w-5" />
-                </span>
-              </Link>
-            )}
+            <Link
+              to={trainingPath}
+              className="inline-flex w-full items-center justify-between rounded-[1.6rem] border border-emerald-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-emerald-400 hover:bg-emerald-50/40"
+            >
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">{trainingEyebrow}</p>
+                <p className="mt-1 text-lg font-black text-slate-900">{trainingTitle}</p>
+                <p className="mt-1 text-sm text-slate-500">{trainingDescription}</p>
+              </div>
+              <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-sm">
+                <ArrowRight className="h-5 w-5" />
+              </span>
+            </Link>
 
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-[1.6rem] border-2 border-orange-100 bg-orange-50 shadow-[0_6px_0_0_#ffedd5] p-4 md:p-5 flex flex-col gap-3 transition-transform hover:-translate-y-1 relative group">
@@ -517,7 +496,7 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between gap-3">
                   <p className="flex items-center gap-2 text-3xl font-black text-orange-600 leading-none">
                     <Flame className="h-7 w-7 fill-current" />
-                    {(profile?.streak_count || 0)} dias
+                    {displayStreakCount} dias
                   </p>
                   {profile?.streak_freeze_active ? (
                     <div className="bg-blue-500 text-white p-1 rounded-full animate-pulse" title="Protegido">

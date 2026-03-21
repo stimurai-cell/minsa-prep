@@ -34,6 +34,7 @@ import { checkForBadges, type Badge } from '../lib/badges';
 import BadgeNotification from '../components/BadgeNotification';
 import { exportQuestions } from '../lib/exportQuestions';
 import { getRecentQuestionIds, prioritizeUnseenQuestions, rememberQuestionIds } from '../lib/questionHistory';
+import { registerDailyStreak } from '../lib/streak';
 
 type SessionSummary = {
   correctAnswers: number;
@@ -45,8 +46,8 @@ type SessionSummary = {
 type DifficultyPreference = 'mixed' | 'easy' | 'medium' | 'hard';
 const TRAINING_TARGET_QUESTIONS = 10;
 const TRAINING_FETCH_BATCH_SIZE = 40;
-const AUTO_TOPIC_ROTATION_STORAGE_KEY = 'minsa-prep-guided-topic-rotation';
-const GUIDED_TOPIC_LOADING_NOTE = 'O sistema esta a preparar o proximo topico diario em ordem crescente.';
+const AUTO_TOPIC_ROTATION_STORAGE_KEY = 'minsa-prep-auto-topic-rotation';
+const AUTO_TOPIC_LOADING_NOTE = 'O sistema esta a preparar o proximo topico sugerido desta area.';
 
 export default function Training() {
   const { profile, refreshProfile } = useAuthStore();
@@ -70,6 +71,7 @@ export default function Training() {
   const [resultHistory, setResultHistory] = useState<boolean[]>([]);
   const [earnedBadges, setEarnedBadges] = useState<Badge[]>([]);
   const [showBadge, setShowBadge] = useState<Badge | null>(null);
+  const [dailyLessonRegistered, setDailyLessonRegistered] = useState(false);
   const {
     downloadedQuestions,
     hydrateBundle,
@@ -77,7 +79,7 @@ export default function Training() {
   } = useOfflineStore();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [exportingTopic, setExportingTopic] = useState<null | 'pdf' | 'docx'>(null);
-  const [topicAssignmentNote, setTopicAssignmentNote] = useState(GUIDED_TOPIC_LOADING_NOTE);
+  const [topicAssignmentNote, setTopicAssignmentNote] = useState(AUTO_TOPIC_LOADING_NOTE);
   const [assigningTopic, setAssigningTopic] = useState(false);
 
   const hasPremiumAccess = ['premium', 'elite', 'admin'].includes(profile?.role || '');
@@ -98,8 +100,11 @@ export default function Training() {
   const sessionTopicId = searchParams.get('topic') || '';
   const isReviewMode = searchParams.get('type') === 'review';
   const sessionDifficulty = (searchParams.get('difficulty') as DifficultyPreference) || 'mixed';
-  const guidedTrainingEnabled = hasGuidedTraining && searchParams.get('mode') !== 'manual';
-  const trainingBasePath = guidedTrainingEnabled ? '/training' : '/training?mode=manual';
+  const freeAutoTopicEnabled = profile?.role === 'free';
+  const manualModeRequested = searchParams.get('mode') === 'manual' && !freeAutoTopicEnabled;
+  const guidedTrainingEnabled = hasGuidedTraining && !manualModeRequested;
+  const autoTopicEnabled = guidedTrainingEnabled || freeAutoTopicEnabled;
+  const trainingBasePath = autoTopicEnabled ? '/training' : '/training?mode=manual';
   const offlineQuestions = hasOfflinePackage ? downloadedQuestions : [];
   const availableOfflineQuestionCount = hasOfflinePackage ? questionCount : 0;
   // Allow all difficulties for non-premium except 'hard' (difícil) which remains premium-only
@@ -125,7 +130,7 @@ export default function Training() {
     [topics]
   );
 
-  const getGuidedRotationStorageKey = () =>
+  const getAutoRotationStorageKey = () =>
     `${AUTO_TOPIC_ROTATION_STORAGE_KEY}:${profile?.id || 'anon'}:${profile?.selected_area_id || 'no-area'}`;
 
   const assignSystemTopic = async () => {
@@ -134,7 +139,7 @@ export default function Training() {
     setAssigningTopic(true);
 
     try {
-      const storageKey = getGuidedRotationStorageKey();
+      const storageKey = getAutoRotationStorageKey();
       const lastTopicId = localStorage.getItem(storageKey) || '';
       const lastTopicIndex = orderedTopics.findIndex((topic) => topic.id === lastTopicId);
       const nextTopicIndex = lastTopicIndex >= 0 ? (lastTopicIndex + 1) % orderedTopics.length : 0;
@@ -144,14 +149,20 @@ export default function Training() {
 
       setSelectedTopic(nextTopic.id);
       setTopicAssignmentNote(
-        `Topico diario ${nextTopicIndex + 1} de ${orderedTopics.length}. O sistema avanca em ordem crescente sempre que voce entra aqui.`
+        guidedTrainingEnabled
+          ? `Topico guiado ${nextTopicIndex + 1} de ${orderedTopics.length}. O sistema avanca em ordem crescente sempre que voce entra nesta pagina.`
+          : `Topico predefinido ${nextTopicIndex + 1} de ${orderedTopics.length}. No plano gratuito o foco roda automaticamente sempre que voce entra e sai do Treino Diario.`
       );
       localStorage.setItem(storageKey, nextTopic.id);
     } catch (error) {
       console.error('Erro ao atribuir topico automaticamente:', error);
       if (orderedTopics[0]) {
         setSelectedTopic(orderedTopics[0].id);
-        setTopicAssignmentNote('Topico diario definido automaticamente para manter a sequencia da area.');
+        setTopicAssignmentNote(
+          guidedTrainingEnabled
+            ? 'Topico guiado definido automaticamente para manter a sequencia da area.'
+            : 'Topico predefinido automaticamente para garantir a rotacao entre os temas.'
+        );
       }
     } finally {
       setAssigningTopic(false);
@@ -181,20 +192,20 @@ export default function Training() {
   }, [sessionTopicId]);
 
   useEffect(() => {
-    if (!guidedTrainingEnabled || sessionActive || sessionTopicId || orderedTopics.length === 0) {
+    if (!autoTopicEnabled || sessionActive || sessionTopicId || orderedTopics.length === 0) {
       return;
     }
 
     void assignSystemTopic();
-  }, [guidedTrainingEnabled, orderedTopics, sessionActive, sessionTopicId, location.key]);
+  }, [autoTopicEnabled, orderedTopics, sessionActive, sessionTopicId, location.key]);
 
   useEffect(() => {
-    if (!guidedTrainingEnabled || !sessionActive || sessionTopicId || selectedTopic || orderedTopics.length === 0 || assigningTopic) {
+    if (!autoTopicEnabled || !sessionActive || sessionTopicId || selectedTopic || orderedTopics.length === 0 || assigningTopic) {
       return;
     }
 
     void assignSystemTopic();
-  }, [assigningTopic, guidedTrainingEnabled, orderedTopics, selectedTopic, sessionActive, sessionTopicId, location.key]);
+  }, [assigningTopic, autoTopicEnabled, orderedTopics, selectedTopic, sessionActive, sessionTopicId, location.key]);
 
   useEffect(() => {
     setSelectedDifficulty(hasPremiumAccess ? sessionDifficulty : (sessionDifficulty === 'hard' ? 'medium' : sessionDifficulty));
@@ -213,12 +224,16 @@ export default function Training() {
   }, [effectiveDifficulty, isReviewMode, loading, questions.length, selectedTopic, sessionActive, sessionTopicId]);
 
   useEffect(() => {
-    if (!sessionActive || isReviewMode || sessionTopicId || selectedTopic || guidedTrainingEnabled) {
+    if (!sessionActive || isReviewMode || sessionTopicId || selectedTopic || autoTopicEnabled) {
       return;
     }
 
     navigate(trainingBasePath, { replace: true });
-  }, [guidedTrainingEnabled, isReviewMode, navigate, selectedTopic, sessionActive, sessionTopicId, trainingBasePath]);
+  }, [autoTopicEnabled, isReviewMode, navigate, selectedTopic, sessionActive, sessionTopicId, trainingBasePath]);
+
+  useEffect(() => {
+    setTopicAssignmentNote(autoTopicEnabled ? AUTO_TOPIC_LOADING_NOTE : 'Escolha o topico para montar o seu treino.');
+  }, [autoTopicEnabled, profile?.selected_area_id]);
 
   const selectedAreaName = useMemo(
     () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Área não definida',
@@ -226,7 +241,7 @@ export default function Training() {
   );
 
   const selectedTopicName =
-    topics.find((topic) => topic.id === selectedTopic)?.name || (guidedTrainingEnabled ? orderedTopics[0]?.name || 'Foco a ser definido' : 'Selecione um topico');
+    topics.find((topic) => topic.id === selectedTopic)?.name || (autoTopicEnabled ? orderedTopics[0]?.name || 'Foco a ser definido' : 'Selecione um topico');
 
   const currentQ = questions[currentQIndex];
   const currentExplanation =
@@ -247,6 +262,7 @@ export default function Training() {
     setShowIntro(true);
     setSessionStartedAt(null);
     setResultHistory([]);
+    setDailyLessonRegistered(false);
 
     if (!preserveSummary) {
       setSessionSummary(null);
@@ -285,6 +301,19 @@ export default function Training() {
       }
     } else {
       await savePendingXp(xpEarned);
+    }
+  };
+
+  const ensureDailyLessonCheckIn = async () => {
+    if (!profile?.id || !navigator.onLine || dailyLessonRegistered) return;
+
+    const streakResult = await registerDailyStreak(profile.id);
+    if (!streakResult) return;
+
+    setDailyLessonRegistered(true);
+
+    if (!streakResult.alreadyMarked) {
+      await refreshProfile(profile.id);
     }
   };
 
@@ -534,7 +563,7 @@ export default function Training() {
         return;
       }
 
-      if (guidedTrainingEnabled) {
+      if (autoTopicEnabled) {
         const fallbackSession = await findFallbackTopicSession(topicId, safeDifficulty);
         if (fallbackSession && buildTrainingSession(fallbackSession.topicId, fallbackSession.questions, fallbackSession.note)) {
           await logTrainingStart(fallbackSession.topicId);
@@ -542,8 +571,8 @@ export default function Training() {
         }
       }
 
-      alert(guidedTrainingEnabled
-        ? 'Nao foi possivel montar o treino guiado com questoes validas nesta area.'
+      alert(autoTopicEnabled
+        ? 'Nao foi possivel montar o treino automatico com questoes validas nesta area.'
         : 'Este topico ainda nao tem questoes validas para treino. Escolha outro topico.');
       navigate(trainingBasePath, { replace: true });
     } catch (error) {
@@ -605,7 +634,7 @@ export default function Training() {
 
   const startTraining = () => {
     if (!selectedTopic) {
-      alert(guidedTrainingEnabled ? 'O sistema ainda esta a definir o foco desta sessao.' : 'Escolha um topico para iniciar o treino.');
+      alert(autoTopicEnabled ? 'O sistema ainda esta a definir o foco desta sessao.' : 'Escolha um topico para iniciar o treino.');
       return;
     }
 
@@ -676,6 +705,7 @@ export default function Training() {
     setSelectedAlt(pendingAlt);
     setIsAnswered(true);
     setResultHistory((prev) => [...prev, isCorrect]);
+    await ensureDailyLessonCheckIn();
 
     if (profile?.id && selectedTopic && navigator.onLine) {
       try {
@@ -772,7 +802,7 @@ export default function Training() {
           onSecondaryAction={() => {
             resetTrainingSession();
             setSelectedTopic('');
-            setTopicAssignmentNote(guidedTrainingEnabled ? GUIDED_TOPIC_LOADING_NOTE : 'Escolha o topico para montar o seu treino.');
+            setTopicAssignmentNote(autoTopicEnabled ? AUTO_TOPIC_LOADING_NOTE : 'Escolha o topico para montar o seu treino.');
             setSessionSummary(null);
             navigate(trainingBasePath, { replace: true });
           }}
@@ -1090,12 +1120,18 @@ export default function Training() {
       <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.35)] md:p-6">
           <h2 className="text-2xl font-black text-slate-900">
-            {guidedTrainingEnabled ? 'Treino guiado pelo sistema' : 'Monte o seu treino'}
+            {guidedTrainingEnabled
+              ? 'Treino guiado pelo sistema'
+              : freeAutoTopicEnabled
+                ? 'Treino diario com topico automatico'
+                : 'Monte o seu treino'}
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             {guidedTrainingEnabled
               ? 'O sistema define o foco automaticamente para cobrir toda a materia sem depender da escolha do estudante.'
-              : 'Escolha o topico e o nivel manualmente. O foco automatico fica reservado ao plano Elite.'}
+              : freeAutoTopicEnabled
+                ? 'No plano gratuito o app entra com um topico predefinido e vai variando entre os temas a cada nova entrada nesta pagina.'
+                : 'Escolha o topico e o nivel manualmente. O foco automatico do treino guiado fica reservado ao plano Elite.'}
           </p>
 
           <div className="mt-6 space-y-5">
@@ -1104,17 +1140,19 @@ export default function Training() {
               <p className="mt-1 text-lg font-black text-slate-900">{selectedAreaName}</p>
             </div>
 
-            {guidedTrainingEnabled ? (
+            {autoTopicEnabled ? (
               <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,#f8fffb_0%,#ffffff_100%)] px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-500">Foco definido pelo sistema</p>
+                    <p className="text-sm font-semibold text-slate-500">
+                      {guidedTrainingEnabled ? 'Foco definido pelo sistema' : 'Topico predefinido do treino'}
+                    </p>
                     <p className="mt-1 text-lg font-black text-slate-900">
                       {assigningTopic ? 'A organizar o proximo foco...' : selectedTopicName}
                     </p>
                   </div>
                   <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
-                    Auto
+                    {guidedTrainingEnabled ? 'Auto' : 'Free'}
                   </span>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-slate-600">{topicAssignmentNote}</p>
@@ -1229,7 +1267,9 @@ export default function Training() {
               </>
             ) : (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs leading-5 text-emerald-900">
-                O foco automatico, o treino guiado e os exports desta pagina ficam reservados ao plano Elite.
+                {freeAutoTopicEnabled
+                  ? 'No plano gratuito o topico desta pagina ja entra predefinido. O foco adaptativo avancado e os exports continuam reservados ao plano Elite.'
+                  : 'O foco automatico, o treino guiado e os exports desta pagina ficam reservados ao plano Elite.'}
                 <Link to="/premium" className="ml-1 font-black underline">
                   Ver Elite
                 </Link>
@@ -1239,12 +1279,14 @@ export default function Training() {
             <button
               type="button"
               onClick={startTraining}
-              disabled={!selectedTopic || (guidedTrainingEnabled && assigningTopic)}
+              disabled={!selectedTopic || (autoTopicEnabled && assigningTopic)}
               className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {guidedTrainingEnabled
                 ? (assigningTopic ? 'A definir foco...' : 'Iniciar treino guiado')
-                : 'Iniciar treino'}
+                : freeAutoTopicEnabled
+                  ? (assigningTopic ? 'A definir topico...' : 'Iniciar treino diario')
+                  : 'Iniciar treino'}
             </button>
           </div>
         </div>

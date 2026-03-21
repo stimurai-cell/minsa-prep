@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { sendPushNotification } from './pushNotifications';
+import { registerDailyStreak } from './streak';
 
 export interface XpAwardResult {
     success: boolean;
@@ -137,16 +138,12 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
             }
         }
 
-        // --- 5. GAMIFICATION: Ofensiva diária via RPC dedicada (sem depender de horário/local) ---
+        // --- 5. GAMIFICATION: Ofensiva diária baseada no primeiro estudo do dia ---
         let currentStreak: number | undefined = undefined;
         try {
-            const { data: streakResult, error: streakError } = await supabase.rpc('register_daily_streak', {
-                p_user_id: userId
-            });
-            if (streakError) {
-                console.error('[XP] Erro ao registar ofensiva diária:', streakError);
-            } else if (streakResult) {
-                currentStreak = (streakResult as any).streak_count ?? undefined;
+            const streakResult = await registerDailyStreak(userId);
+            if (streakResult) {
+                currentStreak = streakResult.streakCount;
             }
         } catch (streakErr) {
             console.error('[XP] Falha inesperada ao registar ofensiva diária:', streakErr);

@@ -26,6 +26,7 @@ import { awardXp as unifiedAwardXp } from '../lib/xp';
 import { sendPushNotification } from '../lib/pushNotifications';
 import { useOfflineStore } from '../store/useOfflineStore';
 import { savePendingLog, savePendingXp } from '../lib/offlineStore';
+import { registerDailyStreak } from '../lib/streak';
 
 const TIMER_SECONDS = 45;
 
@@ -47,6 +48,7 @@ export default function SpeedMode() {
     const [bestStreak, setBestStreak] = useState(0);
     const [showLevelUp, setShowLevelUp] = useState<string | null>(null);
     const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('easy');
+    const [dailyLessonRegistered, setDailyLessonRegistered] = useState(false);
     const hasOfflineAccess = ['premium', 'elite', 'admin'].includes(profile?.role || '');
     const offlineQuestions = hasOfflineAccess ? downloadedQuestions : [];
     const availableOfflineQuestionCount = hasOfflineAccess ? questionCount : 0;
@@ -191,8 +193,22 @@ export default function SpeedMode() {
         setTimeLeft(TIMER_SECONDS);
         setDifficulty('easy');
         setRemainingIds([]);
+        setDailyLessonRegistered(false);
         void bootQuestions(true);
     };
+
+    const ensureDailyLessonCheckIn = useCallback(async () => {
+        if (!profile?.id || !navigator.onLine || dailyLessonRegistered) return;
+
+        const streakResult = await registerDailyStreak(profile.id);
+        if (!streakResult) return;
+
+        setDailyLessonRegistered(true);
+
+        if (!streakResult.alreadyMarked) {
+            await refreshProfile(profile.id);
+        }
+    }, [dailyLessonRegistered, profile?.id, refreshProfile]);
 
     const handleEliteMerit = async () => {
         if (!profile?.id || !navigator.onLine) return;
@@ -263,6 +279,8 @@ export default function SpeedMode() {
 
         const currentQ = questions[currentQIndex];
         if (!currentQ) return;
+
+        await ensureDailyLessonCheckIn();
 
         const selectedAlt = currentQ.alternatives.find((a: any) => a.id === alternativeId);
 

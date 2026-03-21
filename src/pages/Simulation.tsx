@@ -30,6 +30,7 @@ import { calculateNextReview } from '../lib/srs';
 import { checkForBadges, type Badge } from '../lib/badges';
 import { savePendingXp, savePendingLog } from '../lib/offlineStore';
 import BadgeNotification from '../components/BadgeNotification';
+import { registerDailyStreak } from '../lib/streak';
 
 type SessionSummary = {
   correctAnswers: number;
@@ -62,6 +63,7 @@ export default function Simulation() {
   const [currentAttemptId, setCurrentAttemptId] = useState<string | null>(null);
   const [earnedBadges, setEarnedBadges] = useState<Badge[]>([]);
   const [showBadge, setShowBadge] = useState<Badge | null>(null);
+  const [dailyLessonRegistered, setDailyLessonRegistered] = useState(false);
   const hasPremiumAccess = ['premium', 'elite', 'admin'].includes(profile?.role || '');
   const hasBasicAccess = ['basic', 'premium', 'elite', 'admin'].includes(profile?.role || '');
 
@@ -129,6 +131,7 @@ export default function Simulation() {
       setSessionSummary(null);
     }
     setCurrentAttemptId(null);
+    setDailyLessonRegistered(false);
   };
 
   const awardXp = async (xpEarned: number) => {
@@ -141,6 +144,19 @@ export default function Simulation() {
       }
     } else {
       await savePendingXp(xpEarned);
+    }
+  };
+
+  const ensureDailyLessonCheckIn = async () => {
+    if (!profile?.id || !navigator.onLine || dailyLessonRegistered) return;
+
+    const streakResult = await registerDailyStreak(profile.id);
+    if (!streakResult) return;
+
+    setDailyLessonRegistered(true);
+
+    if (!streakResult.alreadyMarked) {
+      await refreshProfile(profile.id);
     }
   };
 
@@ -469,6 +485,7 @@ export default function Simulation() {
     setSelectedAlt(pendingAlt);
     setIsAnswered(true);
     setResultHistory((prev) => [...prev, isCorrect]);
+    await ensureDailyLessonCheckIn();
 
     // Spaced Repetition (SRS) Update
     if (profile?.id) {
