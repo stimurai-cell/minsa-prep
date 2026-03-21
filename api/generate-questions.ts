@@ -208,6 +208,62 @@ const calculateQuestionSimilarity = (left: string, right: string) => {
 const isNearDuplicateQuestion = (candidate: string, references: string[]) =>
   references.some((reference) => calculateQuestionSimilarity(candidate, reference) >= QUESTION_SIMILARITY_THRESHOLD);
 
+const filterUniqueQuestions = (
+  questions: NormalizedQuestion[],
+  options: {
+    referenceQuestions?: string[];
+  } = {},
+) => {
+  const { referenceQuestions = [] } = options;
+  const uniqueQuestions: NormalizedQuestion[] = [];
+  const skippedQuestions: string[] = [];
+  const referenceQuestionKeys = new Set(
+    referenceQuestions
+      .map((question) => normalizeQuestionIdentity(question))
+      .filter(Boolean),
+  );
+  const acceptedQuestionKeys = new Set<string>();
+  const acceptedQuestionContents: string[] = [];
+
+  questions.forEach((question, index) => {
+    const questionKey = normalizeQuestionIdentity(question.question);
+
+    if (questionKey && referenceQuestionKeys.has(questionKey)) {
+      skippedQuestions.push(`Q${index + 1}: enunciado duplicado de pergunta ja existente`);
+      return;
+    }
+
+    if (questionKey && acceptedQuestionKeys.has(questionKey)) {
+      skippedQuestions.push(`Q${index + 1}: enunciado duplicado dentro do mesmo lote`);
+      return;
+    }
+
+    if (question.question && isNearDuplicateQuestion(question.question, referenceQuestions)) {
+      skippedQuestions.push(`Q${index + 1}: enunciado demasiado parecido com pergunta ja existente`);
+      return;
+    }
+
+    if (question.question && isNearDuplicateQuestion(question.question, acceptedQuestionContents)) {
+      skippedQuestions.push(`Q${index + 1}: enunciado demasiado parecido com outra questao do mesmo lote`);
+      return;
+    }
+
+    if (questionKey) {
+      acceptedQuestionKeys.add(questionKey);
+    }
+    if (question.question) {
+      acceptedQuestionContents.push(question.question);
+    }
+
+    uniqueQuestions.push(question);
+  });
+
+  return {
+    uniqueQuestions,
+    skippedQuestions,
+  };
+};
+
 const formatReferenceQuestions = (items: Array<{ content: string; difficulty?: string | null }>) => {
   if (!items.length) {
     return 'Nenhuma referencia previa disponivel.';
@@ -1041,17 +1097,30 @@ export default async function handler(req: any, res: any) {
                 const rawText = extractResponseText(response);
                 const parsedBatch = rawText ? parseGeneratedPayload(rawText) : null;
                 const normalizedBatch = normalizeQuestions(parsedBatch?.questions || []);
-                candidateValidationErrors = validateQuestions(normalizedBatch, EXPECTED_ALTERNATIVES, {
-                  expectedCount: batchCount,
+                const filteredBatch = filterUniqueQuestions(normalizedBatch, {
                   referenceQuestions,
                 });
+                const uniqueBatch = filteredBatch.uniqueQuestions;
+
+                candidateValidationErrors = uniqueBatch.length
+                  ? validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES)
+                  : [
+                    filteredBatch.skippedQuestions.length
+                      ? 'A IA devolveu apenas perguntas repetidas nesta tentativa.'
+                      : 'Nenhuma pergunta valida foi gerada nesta tentativa.',
+                  ];
 
                 if (!candidateValidationErrors.length) {
-                  candidateQuestions.push(...normalizedBatch);
+                  candidateQuestions.push(...uniqueBatch);
                   candidateCoverageSummary = mergeCoverageSummary(candidateCoverageSummary, parsedBatch?.coverage_summary);
                   const validationSummary = String(parsedBatch?.validation_summary || '').trim();
                   if (validationSummary) {
                     candidateValidationSummaryParts.push(validationSummary);
+                  }
+                  if (filteredBatch.skippedQuestions.length) {
+                    candidateValidationSummaryParts.push(
+                      `${filteredBatch.skippedQuestions.length} perguntas repetidas foram descartadas automaticamente nesta rodada.`
+                    );
                   }
                   break;
                 }
@@ -1062,6 +1131,7 @@ export default async function handler(req: any, res: any) {
                   candidateModel,
                   `batch=${batchCount}`,
                   candidateValidationErrors,
+                  filteredBatch.skippedQuestions,
                 );
               }
 
