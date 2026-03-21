@@ -1,14 +1,15 @@
 import { initializeApp } from "firebase/app";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
+import { normalizeRuntimeEnv } from "./env";
 
 const firebaseConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID,
-    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+    apiKey: normalizeRuntimeEnv(import.meta.env.VITE_FIREBASE_API_KEY),
+    authDomain: normalizeRuntimeEnv(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN),
+    projectId: normalizeRuntimeEnv(import.meta.env.VITE_FIREBASE_PROJECT_ID),
+    storageBucket: normalizeRuntimeEnv(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET),
+    messagingSenderId: normalizeRuntimeEnv(import.meta.env.VITE_FIREBASE_SENDER_ID),
+    appId: normalizeRuntimeEnv(import.meta.env.VITE_FIREBASE_APP_ID),
+    measurementId: normalizeRuntimeEnv(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID)
 };
 
 const requiredKeys = Object.entries(firebaseConfig)
@@ -19,7 +20,7 @@ if (requiredKeys.length) {
     throw new Error(`[Firebase] Variáveis ausentes: ${requiredKeys.join(', ')}. Configure-as em .env (VITE_FIREBASE_...).`);
 }
 
-const DEFAULT_VAPID_KEY = 'BCZoJ_IJDIngAEx4jVxNExarkIekybf1W4bgx6z1M1oe2WHiULJ1U-8w_ysXOscrdTVHX8i2bg5IX2AUt54WToes';
+const DEFAULT_VAPID_KEY = 'BGQ5wyLfdc49MZNRC_yp7C0PRiH4X9RStURZKZRUA8YZg2BbTz0aal-2TfQjhWV_OCVp9dLHBfIkreUIIv0COrM';
 
 const app = initializeApp(firebaseConfig as any);
 
@@ -50,8 +51,8 @@ export const requestFirebaseNotificationPermission = async () => {
 
             console.log('[Firebase] A obter token FCM...');
 
-            const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY || DEFAULT_VAPID_KEY;
-            if (!import.meta.env.VITE_FIREBASE_VAPID_KEY) {
+            const vapidKey = normalizeRuntimeEnv(import.meta.env.VITE_FIREBASE_VAPID_KEY) || DEFAULT_VAPID_KEY;
+            if (!normalizeRuntimeEnv(import.meta.env.VITE_FIREBASE_VAPID_KEY)) {
                 console.warn('[Firebase] VAPID key ausente em env; usando fallback embedado.');
             }
             const token = await getToken(messaging, {

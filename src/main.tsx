@@ -15,7 +15,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 // Registrar o Service Worker principal (necessário para push funcionar em 2º plano)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch((err) => {
       console.error('[SW] Falha ao registar sw.js:', err);
     });
 

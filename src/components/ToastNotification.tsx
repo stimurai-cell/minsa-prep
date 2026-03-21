@@ -42,11 +42,13 @@ export default function ToastNotification() {
             .on('postgres_changes', {
                 event: 'INSERT',
                 schema: 'public',
-                table: 'user_notifications',
-                filter: `user_id=eq.${profile.id}`
+                table: 'user_notifications'
             }, (payload) => {
                 const newNotif = payload.new as Notification;
-                showToast(newNotif);
+                const targetUserId = (payload.new as { user_id?: string | null })?.user_id ?? null;
+                if (targetUserId === null || targetUserId === profile.id) {
+                    showToast(newNotif);
+                }
             })
             .subscribe();
 

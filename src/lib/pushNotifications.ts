@@ -1,48 +1,98 @@
 import { supabase } from './supabase';
-import { requestFirebaseNotificationPermission } from './firebase';
+import { normalizeRuntimeEnv } from './env';
+
+const DEFAULT_VAPID_PUBLIC_KEY = 'BGQ5wyLfdc49MZNRC_yp7C0PRiH4X9RStURZKZRUA8YZg2BbTz0aal-2TfQjhWV_OCVp9dLHBfIkreUIIv0COrM';
+
+function resolveVapidPublicKey() {
+    return (
+        normalizeRuntimeEnv(import.meta.env.VITE_VAPID_PUBLIC_KEY) ||
+        normalizeRuntimeEnv(import.meta.env.VITE_FIREBASE_VAPID_KEY) ||
+        DEFAULT_VAPID_PUBLIC_KEY
+    );
+}
+
+function urlBase64ToUint8Array(base64String: string) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+
+    return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+}
+
+function getFriendlyPushError(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error || '');
+    const normalized = message.toLowerCase();
+
+    if (normalized.includes('permission')) {
+        return 'As notificações estão bloqueadas neste aparelho. Ative-as nas definições do navegador e tente de novo.';
+    }
+
+    if (normalized.includes('pushmanager') || normalized.includes('applicationserverkey')) {
+        return 'Não foi possível preparar as notificações neste aparelho. Atualize a página e tente novamente.';
+    }
+
+    if (normalized.includes('service worker')) {
+        return 'O aplicativo ainda está a terminar a preparação. Aguarde alguns segundos e tente novamente.';
+    }
+
+    return 'Não foi possível ativar as notificações agora. Tente novamente em instantes.';
+}
+
+async function getPushSubscription(registration: ServiceWorkerRegistration) {
+    const existingSubscription = await registration.pushManager.getSubscription();
+    if (existingSubscription) {
+        return existingSubscription;
+    }
+
+    const vapidPublicKey = resolveVapidPublicKey();
+    return registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+    });
+}
 
 /**
- * Regista o token FCM para push notifications.
- * Guarda a subscription na tabela push_subscriptions.
+ * Regista uma subscription Web Push padrão e guarda-a no Supabase.
  */
 export async function subscribeToPush(userId: string): Promise<boolean> {
     try {
         console.log(`[Push] Iniciando subscrição para usuário: ${userId}`);
-        
-        if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-            throw new Error('Notificações não são suportadas neste navegador.');
+
+        if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+            throw new Error('PushManager não suportado');
         }
 
-        console.log('[Push] A solicitar token FCM para utilizador:', userId);
-
-        // Verificar permissão
-        console.log('[Push] Verificando permissão atual:', Notification.permission);
-        if (Notification.permission === 'denied') {
-            throw new Error('Bloqueado: Precisas de permitir as notificações nas definições do teu navegador/telemóvel.');
+        let permission = Notification.permission;
+        if (permission === 'default') {
+            permission = await Notification.requestPermission();
         }
 
-        console.log('[Push] Chamando requestFirebaseNotificationPermission...');
-        const token = await requestFirebaseNotificationPermission();
-
-        // O requestFirebaseNotificationPermission já lança erros detalhados se falhar
-        if (!token) {
-            console.error('[Push] Token não obtido - requestFirebaseNotificationPermission retornou null/undefined');
-            return false;
+        if (permission !== 'granted') {
+            throw new Error('Notification permission denied');
         }
 
-        console.log('[Push] Token FCM obtido:', token ? `${token.substring(0, 20)}...` : 'NULL');
-        console.log('[Push] Token obtido, a guardar no Supabase...');
-        const subscriptionJson = { endpoint: token, fcm: true };
+        const registration = await navigator.serviceWorker.ready;
+        if (!registration) {
+            throw new Error('Service worker not ready');
+        }
 
-        console.log('[Push] Dados a serem salvos:', { userId, subscriptionJson });
-        
+        const subscription = await getPushSubscription(registration);
+        const subscriptionJson = subscription.toJSON();
+
+        if (!subscription.endpoint || !subscriptionJson.keys?.p256dh || !subscriptionJson.keys?.auth) {
+            throw new Error('Invalid push subscription');
+        }
+
         const { error, data } = await supabase
             .from('push_subscriptions')
             .upsert(
                 {
                     user_id: userId,
-                    subscription: subscriptionJson,
-                    endpoint: token,
+                    endpoint: subscription.endpoint,
+                    subscription: {
+                        ...subscriptionJson,
+                        provider: 'webpush',
+                    },
                     updated_at: new Date().toISOString(),
                 },
                 { onConflict: 'user_id,endpoint' }
@@ -52,22 +102,30 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
 
         if (error) {
             console.error('[Push] Erro Supabase:', error);
-            throw new Error(`Falha ao guardar na base de dados: ${error.message}`);
+            throw new Error(`Supabase: ${error.message}`);
         }
 
-        console.log('[Push] Sucesso: Ligação ativa ✅');
-        console.log('[Push] Dados salvos no Supabase:', data);
+        const { error: cleanupError } = await supabase
+            .from('push_subscriptions')
+            .delete()
+            .eq('user_id', userId)
+            .neq('endpoint', subscription.endpoint)
+            .not('endpoint', 'ilike', 'http%');
+
+        if (cleanupError) {
+            console.warn('[Push] Falha ao limpar tokens antigos:', cleanupError);
+        }
+
+        console.log('[Push] Subscrição Web Push ativa ✅', data);
         return true;
-    } catch (err: any) {
-        console.error('[Push] Erro na subscrição:', err);
-        console.error('[Push] Stack trace:', err.stack);
-        // Relançamos o erro para ser capturado pelo alert no Profile.tsx
-        throw err;
+    } catch (error) {
+        console.error('[Push] Erro na subscrição:', error);
+        throw new Error(getFriendlyPushError(error));
     }
 }
 
 /**
- * Pede permissão de notificações e subscreve para push se aceite.
+ * Pede permissão e ativa o push, se possível.
  */
 export async function requestNotificationPermission(userId: string): Promise<NotificationPermission> {
     if (!('Notification' in window)) return 'denied';
@@ -79,7 +137,11 @@ export async function requestNotificationPermission(userId: string): Promise<Not
     }
 
     if (permission === 'granted') {
-        await subscribeToPush(userId);
+        try {
+            await subscribeToPush(userId);
+        } catch (error) {
+            console.error('[Push] Falha ao ativar notificações:', error);
+        }
     }
 
     return permission;

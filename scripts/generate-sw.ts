@@ -6,6 +6,20 @@ import { config } from 'dotenv';
 config({ path: path.join(process.cwd(), '.env.local'), override: true });
 config();
 
+const normalizeEnv = (value?: string) => {
+  if (!value) return '';
+  const trimmed = value.trim().replace(/[\r\n]+/g, '');
+
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+
+  return trimmed;
+};
+
 const requiredEnv = [
   'VITE_FIREBASE_API_KEY',
   'VITE_FIREBASE_AUTH_DOMAIN',
@@ -23,13 +37,13 @@ if (missing.length) {
 }
 
 const cfg = {
-  apiKey: process.env.VITE_FIREBASE_API_KEY,
-  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.VITE_FIREBASE_SENDER_ID,
-  appId: process.env.VITE_FIREBASE_APP_ID,
-  measurementId: process.env.VITE_FIREBASE_MEASUREMENT_ID,
+  apiKey: normalizeEnv(process.env.VITE_FIREBASE_API_KEY),
+  authDomain: normalizeEnv(process.env.VITE_FIREBASE_AUTH_DOMAIN),
+  projectId: normalizeEnv(process.env.VITE_FIREBASE_PROJECT_ID),
+  storageBucket: normalizeEnv(process.env.VITE_FIREBASE_STORAGE_BUCKET),
+  messagingSenderId: normalizeEnv(process.env.VITE_FIREBASE_SENDER_ID),
+  appId: normalizeEnv(process.env.VITE_FIREBASE_APP_ID),
+  measurementId: normalizeEnv(process.env.VITE_FIREBASE_MEASUREMENT_ID),
 };
 
 // Version string para cache bust. Usa package.json version se existir; senão timestamp.

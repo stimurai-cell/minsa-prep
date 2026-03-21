@@ -18,6 +18,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 type Notification = {
     id: string;
+    user_id: string | null;
     title: string;
     body: string;
     type: 'marketing' | 'personal' | 'system';
@@ -39,11 +40,41 @@ export default function Notifications() {
         }
     }, [profile?.id, filter]);
 
+    const markOwnNotificationsAsRead = async (items: Notification[]) => {
+        if (!profile?.id) return items;
+
+        const unreadOwnIds = items
+            .filter((notification) => !notification.is_read && notification.user_id === profile.id)
+            .map((notification) => notification.id);
+
+        if (!unreadOwnIds.length) {
+            return items;
+        }
+
+        const updatedItems = items.map((notification) => ({ ...notification, is_read: true }));
+        setNotifications(updatedItems);
+
+        const { error } = await supabase
+            .from('user_notifications')
+            .update({ is_read: true })
+            .in('id', unreadOwnIds);
+
+        if (error) {
+            console.error(error);
+            return items;
+        }
+
+        return updatedItems;
+    };
+
     const fetchNotifications = async () => {
+        if (!profile?.id) return;
+
         setLoading(true);
         let query = supabase
             .from('user_notifications')
-            .select('*')
+            .select('id, user_id, title, body, type, link, is_read, created_at')
+            .or(`user_id.eq.${profile.id},user_id.is.null`)
             .order('created_at', { ascending: false });
 
         if (filter === 'unread') {
@@ -53,7 +84,11 @@ export default function Notifications() {
         const { data, error } = await query;
 
         if (error) console.error(error);
-        else setNotifications(data || []);
+        else {
+            const items = (data || []) as Notification[];
+            const hydratedItems = filter === 'all' ? await markOwnNotificationsAsRead(items) : items;
+            setNotifications(hydratedItems);
+        }
         setLoading(false);
     };
 
@@ -77,7 +112,7 @@ export default function Notifications() {
         await supabase
             .from('user_notifications')
             .update({ is_read: true })
-            .or(`user_id.eq.${profile.id},user_id.is.null`)
+            .eq('user_id', profile.id)
             .eq('is_read', false);
         fetchNotifications();
     };

@@ -227,20 +227,20 @@ export default function Profile() {
 
                 <hr className="border-slate-200 my-4" />
 
-                {/* Notification Diagnostic Section */}
+                {/* Phone notifications */}
                 <div className="bg-white border-2 border-slate-200 rounded-[1.8rem] p-6 shadow-sm">
                     <div className="flex items-center gap-4 mb-4">
                         <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
                             <Bell className="w-6 h-6" />
                         </div>
                         <div>
-                            <h3 className="text-lg font-black text-slate-900 leading-tight">Sistema de Alertas</h3>
-                            <p className="text-xs text-slate-500 font-bold uppercase tracking-tight">Diagnóstico de Notificações</p>
+                            <h3 className="text-lg font-black text-slate-900 leading-tight">Notificacoes no telefone</h3>
+                            <p className="text-xs text-slate-500 font-bold uppercase tracking-tight">Receba avisos mesmo com a app fechada</p>
                         </div>
                     </div>
 
                     <p className="text-sm text-slate-600 mb-6 leading-relaxed">
-                        Se não recebes as notificações do Admin ou avisos de novos simulados, usa o botão abaixo para testar e restabelecer a tua ligação.
+                        Toque no botão abaixo para ativar ou renovar as notificações deste aparelho.
                     </p>
 
                     <button
@@ -252,8 +252,8 @@ export default function Profile() {
                                 if (success) {
                                     await sendPushNotification({
                                         userId: profile.id,
-                                        title: 'Teste de Ligação ✅',
-                                        body: 'Se estás a ler isto, as tuas notificações estão 100% funcionais!',
+                                        title: 'Notificações ativadas',
+                                        body: 'Este aparelho já pode receber avisos do MINSA Prep.',
                                         url: '/profile'
                                     });
                                     setPushStatus('success');
@@ -263,7 +263,7 @@ export default function Profile() {
                                 }
                             } catch (err: any) {
                                 console.error('Error testing push:', err);
-                                alert(`⚠️ Erro Técnico: ${err.message || 'Falha desconhecida'}`);
+                                alert(err.message || 'Não foi possível ativar as notificações agora.');
                                 setPushStatus('error');
                             }
                         }}
@@ -275,13 +275,13 @@ export default function Profile() {
                             }`}
                     >
                         {pushStatus === 'testing' ? (
-                            <><RefreshCw className="w-4 h-4 animate-spin" /> Verificando...</>
+                            <><RefreshCw className="w-4 h-4 animate-spin" /> Ativando...</>
                         ) : pushStatus === 'success' ? (
-                            <><CheckCircle2 className="w-4 h-4" /> Notificação Enviada!</>
+                            <><CheckCircle2 className="w-4 h-4" /> Notificações ativadas!</>
                         ) : pushStatus === 'error' ? (
-                            '❌ Erro ao Ligar. Tenta de novo.'
+                            'Não foi possível ativar. Tente de novo.'
                         ) : (
-                            'Testar e Ligar Notificações Push'
+                            'Ativar notificações'
                         )}
                     </button>
                 </div>

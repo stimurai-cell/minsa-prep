@@ -10,6 +10,27 @@ export interface XpAwardResult {
     newStreak?: number;
 }
 
+async function milestoneFeedAlreadyExists(userId: string, milestone: number) {
+    const { data, error } = await supabase
+        .from('feed_items')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('type', 'achievement')
+        .contains('content', {
+            title: 'Novo Marco Alcançado! 🎉',
+            score: milestone,
+        })
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        console.error('[Gamification] Failed to check existing milestone feed item:', error);
+        return false;
+    }
+
+    return Boolean(data?.id);
+}
+
 /**
  * Awards XP to a user, updates their profile, and logs the activity.
  * The log ensures the weekly league stats can aggregate this XP.
@@ -22,7 +43,6 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
     try {
         const newTotal = (currentTotalXp || 0) + xpAmount;
 
-        // 1. Update Profile Total XP atomically
         const { error: profileError } = await supabase.rpc('increment_total_xp', {
             p_user_id: userId,
             p_xp: xpAmount
@@ -30,8 +50,7 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
 
         if (profileError) throw profileError;
 
-        // 2. Log Activity for League Sync
-        const { error: logError } = await supabase
+        await supabase
             .from('activity_logs')
             .insert({
                 user_id: userId,
@@ -43,15 +62,13 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
                 }
             });
 
-        // 3. Sync with weekly_league_stats via RPC for atomic increment
-        // Calcular o início da semana (Segunda-feira) de forma robusta e independente de UTC shift
         const now = new Date();
         const day = now.getDay();
         const diff = now.getDate() - day + (day === 0 ? -6 : 1);
         const mondayDate = new Date(now.getFullYear(), now.getMonth(), diff);
         const monday = `${mondayDate.getFullYear()}-${String(mondayDate.getMonth() + 1).padStart(2, '0')}-${String(mondayDate.getDate()).padStart(2, '0')}`;
 
-        console.log(`[XP] Sincronizando liga para usuário ${userId}. Semana: ${monday}, XP: ${xpAmount}`);
+        console.log(`[XP] Syncing league for user ${userId}. Week: ${monday}, XP: ${xpAmount}`);
 
         const { data: profileData } = await supabase
             .from('profiles')
@@ -61,7 +78,6 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
 
         const leagueName = profileData?.current_league || 'Bronze';
 
-        // Usa a função RPC increment_weekly_xp definida no banco de dados para evitar sobrescrita e race conditions
         const { error: leagueError } = await supabase.rpc('increment_weekly_xp', {
             p_user_id: userId,
             p_league_name: leagueName,
@@ -70,30 +86,32 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
         });
 
         if (leagueError) {
-            console.error('[XP] Erro ao sincronizar liga via RPC:', leagueError);
+            console.error('[XP] Error syncing league via RPC:', leagueError);
         }
 
-        // --- 4. GAMIFICATION: Verificação de Marcos Simbólicos (Milestones) ---
         const milestones = [50, 100, 250, 500, 750, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
-        const crossedMilestone = milestones.find(m => currentTotalXp < m && newTotal >= m);
+        const crossedMilestone = milestones.find((milestone) => currentTotalXp < milestone && newTotal >= milestone);
 
         if (crossedMilestone) {
-            console.log(`[Gamification] Usuário ${userId} alcançou o marco de ${crossedMilestone} XP!`);
+            console.log(`[Gamification] User ${userId} reached milestone ${crossedMilestone} XP`);
 
-            // a) Gerar Publicação Automática no Feed
-            const { error: feedError } = await supabase.from('feed_items').insert({
-                user_id: userId,
-                type: 'achievement',
-                content: {
-                    title: 'Novo Marco Alcançado! 🎉',
-                    body: `Alcançou incríveis ${crossedMilestone.toLocaleString()} XP acumulados. Continue assim, o limite é o céu!`,
-                    score: crossedMilestone
+            const alreadyPosted = await milestoneFeedAlreadyExists(userId, crossedMilestone);
+            if (!alreadyPosted) {
+                const { error: feedError } = await supabase.from('feed_items').insert({
+                    user_id: userId,
+                    type: 'achievement',
+                    content: {
+                        title: 'Novo Marco Alcançado! 🎉',
+                        body: `Alcançou incríveis ${crossedMilestone.toLocaleString()} XP acumulados. Continue assim, o limite é o céu!`,
+                        score: crossedMilestone
+                    }
+                });
+
+                if (feedError && feedError.code !== '23505') {
+                    console.error('[Gamification] Error posting milestone to feed:', feedError);
                 }
-            });
+            }
 
-            if (feedError) console.error('[Gamification] Erro ao postar no feed:', feedError);
-
-            // b) Disparar Push Notification Persuasiva e Motivadora
             await sendPushNotification({
                 userId,
                 title: 'Parabéns, Campeão! 👑',
@@ -101,7 +119,6 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
                 url: '/news'
             });
 
-            // c) In-app real-time Notification Toast
             await supabase.from('user_notifications').insert({
                 user_id: userId,
                 title: 'Novo Marco Alcançado! 👑',
@@ -109,26 +126,26 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
                 type: 'achievement'
             });
 
-            // d) Fan-out: notificar seguidores (feed + push + inbox)
             const { data: followers } = await supabase
                 .from('user_follows')
                 .select('follower_id')
                 .eq('following_id', userId);
 
             if (followers && followers.length > 0) {
-                const followerNotifications = followers.map((f) => ({
-                    user_id: f.follower_id,
+                const followerNotifications = followers.map((follower) => ({
+                    user_id: follower.follower_id,
                     title: 'Teu amigo atingiu um marco! 🏅',
                     body: `Atingiu ${crossedMilestone.toLocaleString()} XP. Vai lá parabenizar!`,
                     type: 'friend_activity',
                     link: `/profile/${userId}`
                 }));
+
                 await supabase.from('user_notifications').insert(followerNotifications);
 
                 await Promise.all(
-                    followers.slice(0, 30).map((f) =>
+                    followers.slice(0, 30).map((follower) =>
                         sendPushNotification({
-                            userId: f.follower_id,
+                            userId: follower.follower_id,
                             title: 'Teu amigo brilhou! 🎉',
                             body: `Alcançou ${crossedMilestone.toLocaleString()} XP.`,
                             url: `/profile/${userId}`
@@ -138,22 +155,21 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
             }
         }
 
-        // --- 5. GAMIFICATION: Ofensiva diária baseada no primeiro estudo do dia ---
-        let currentStreak: number | undefined = undefined;
+        let currentStreak: number | undefined;
         try {
             const streakResult = await registerDailyStreak(userId);
             if (streakResult) {
                 currentStreak = streakResult.streakCount;
             }
         } catch (streakErr) {
-            console.error('[XP] Falha inesperada ao registar ofensiva diária:', streakErr);
+            console.error('[XP] Unexpected failure while registering daily streak:', streakErr);
         }
 
         return {
             success: true,
             newTotalXp: newTotal,
             xpEarned: xpAmount,
-            crossedMilestone: crossedMilestone,
+            crossedMilestone,
             newStreak: currentStreak
         };
     } catch (err) {

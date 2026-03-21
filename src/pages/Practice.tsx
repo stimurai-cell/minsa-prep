@@ -14,10 +14,10 @@ export default function Practice() {
             id: 'training',
             title: hasGuidedTraining ? 'Treino Guiado' : isFreeUser ? 'Treino Diario' : 'Treino Livre',
             description: hasGuidedTraining
-                ? 'Abra o foco automatico reservado ao plano Elite.'
+                ? 'Seu proximo treino ja esta preparado.'
                 : isFreeUser
-                    ? 'Receba um topico predefinido que vai rodando entre os temas.'
-                    : 'Escolha o topico manualmente e comece o treino.',
+                    ? 'Entre e comece a praticar.'
+                    : 'Escolha o topico e comece o treino.',
             icon: BookOpen,
             color: 'emerald',
             path: trainingUsesAutomaticTopic ? '/training' : '/training?mode=manual',
