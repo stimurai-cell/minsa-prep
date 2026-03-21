@@ -71,6 +71,10 @@ type PgClient = {
 const MAX_REFERENCE_QUESTIONS = 30;
 const QUESTION_SIMILARITY_THRESHOLD = 0.82;
 const EXPECTED_ALTERNATIVES = 4;
+const DEFAULT_GENERATION_COUNT = 5;
+const MAX_GENERATION_BATCH_SIZE = 10;
+const MAX_TOTAL_GENERATION_COUNT = 100;
+const MAX_GENERATION_ATTEMPTS = 3;
 const MAX_SOURCE_FILE_BYTES = 3.5 * 1024 * 1024;
 const ALLOWED_SOURCE_MIME_TYPES = new Set([
   'application/pdf',
@@ -111,6 +115,13 @@ const normalizeDifficulty = (value?: string) => {
   if (['medium', 'medio', 'médio', 'normal'].includes(normalized)) return 'medium';
   if (['hard', 'dificil', 'difícil'].includes(normalized)) return 'hard';
 
+  const normalizedWithoutAccents = normalized
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (['easy', 'facil'].includes(normalizedWithoutAccents)) return 'easy';
+  if (['medium', 'medio', 'normal'].includes(normalizedWithoutAccents)) return 'medium';
+  if (['hard', 'dificil'].includes(normalizedWithoutAccents)) return 'hard';
+
   return 'medium';
 };
 
@@ -136,6 +147,12 @@ const sanitizeFilename = (value?: string | null) =>
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
     || 'source';
+
+const normalizeRequestedCount = (value?: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_GENERATION_COUNT;
+  return Math.max(1, Math.min(MAX_TOTAL_GENERATION_COUNT, Math.round(parsed)));
+};
 
 const createCoverageSummary = (questions: NormalizedQuestion[]) =>
   questions
@@ -196,7 +213,7 @@ const formatReferenceQuestions = (items: Array<{ content: string; difficulty?: s
   }
 
   return items
-    .slice(0, 12)
+    .slice(0, MAX_REFERENCE_QUESTIONS)
     .map((item, index) => `${index + 1}. [${normalizeDifficulty(item.difficulty || 'medium')}] ${item.content}`)
     .join('\n');
 };
@@ -256,6 +273,7 @@ REGRAS IMPORTANTES:
 - Use portugues de Angola correto
 - Crie perguntas realistas para concursos publicos de saude
 - Esgote o tema ao longo do lote, cobrindo diferentes subtopicos sem repeticao
+- Gere exatamente ${count} perguntas neste lote, nem mais nem menos
 - A dificuldade precisa refletir claramente o nivel pedido
 - Gere exatamente 4 alternativas por pergunta (A, B, C, D)
 - Apenas uma alternativa deve estar correta
@@ -296,11 +314,24 @@ const normalizeQuestions = (rawQuestions: IncomingQuestion[] = []): NormalizedQu
   difficulty: normalizeDifficulty(q.difficulty),
 }));
 
-const validateQuestions = (questions: NormalizedQuestion[], expectedAlternatives: number) => {
+const validateQuestions = (
+  questions: NormalizedQuestion[],
+  expectedAlternatives: number,
+  options: {
+    expectedCount?: number;
+    referenceQuestions?: string[];
+  } = {},
+) => {
   const errors: string[] = [];
+  const { expectedCount, referenceQuestions = [] } = options;
+
   if (!questions.length) {
     errors.push('Nenhuma pergunta foi gerada');
     return errors;
+  }
+
+  if (typeof expectedCount === 'number' && questions.length !== expectedCount) {
+    errors.push(`O lote deveria conter ${expectedCount} perguntas, mas a IA devolveu ${questions.length}`);
   }
 
   const seenQuestions = new Set<string>();
@@ -334,6 +365,9 @@ const validateQuestions = (questions: NormalizedQuestion[], expectedAlternatives
     const questionKey = normalizeQuestionIdentity(question.question);
     if (seenQuestions.has(questionKey)) {
       errors.push(`Q${index + 1}: enunciado duplicado`);
+    }
+    if (isNearDuplicateQuestion(question.question, referenceQuestions)) {
+      errors.push(`Q${index + 1}: enunciado demasiado parecido com pergunta já existente`);
     }
     if (isNearDuplicateQuestion(question.question, seenQuestionContents)) {
       errors.push(`Q${index + 1}: enunciado demasiado parecido com outra questao do mesmo lote`);
@@ -500,7 +534,7 @@ const waitForUploadedFileActive = async (ai: any, fileName?: string) => {
   throw new Error('O ficheiro demorou demasiado para ficar disponivel no Gemini.');
 };
 
-const createResponseSchema = (Type: any) => ({
+const createResponseSchema = (Type: any, expectedCount: number) => ({
   type: Type.OBJECT,
   properties: {
     validation_summary: { type: Type.STRING },
@@ -510,12 +544,16 @@ const createResponseSchema = (Type: any) => ({
     },
     questions: {
       type: Type.ARRAY,
+      minItems: expectedCount,
+      maxItems: expectedCount,
       items: {
         type: Type.OBJECT,
         properties: {
           question: { type: Type.STRING },
           alternatives: {
             type: Type.ARRAY,
+            minItems: EXPECTED_ALTERNATIVES,
+            maxItems: EXPECTED_ALTERNATIVES,
             items: {
               type: Type.OBJECT,
               properties: {
@@ -534,6 +572,18 @@ const createResponseSchema = (Type: any) => ({
   },
   required: ['validation_summary', 'coverage_summary', 'questions'],
 });
+
+const mergeCoverageSummary = (current: string[], incoming: unknown) => {
+  if (!Array.isArray(incoming)) return current;
+
+  const merged = new Set(current);
+  incoming
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .forEach((item) => merged.add(item));
+
+  return Array.from(merged).slice(0, 24);
+};
 
 const prepareGenerationSource = async (
   body: any,
@@ -754,10 +804,11 @@ export default async function handler(req: any, res: any) {
       }
 
       const { GoogleGenAI, Type, createPartFromText, createPartFromUri } = await import('@google/genai');
-      const { area_id, area_name, topic_id, topic_name, custom_topic_name, count = 5, difficulty = 'medium' } = req.body || {};
+      const { area_id, area_name, topic_id, topic_name, custom_topic_name, count = DEFAULT_GENERATION_COUNT, difficulty = 'medium' } = req.body || {};
       const resolvedAreaId = String(area_id || '').trim();
       const resolvedAreaName = String(area_name || '').trim();
       const requestedTopicName = String(custom_topic_name || topic_name || '').trim();
+      const requestedCount = normalizeRequestedCount(count);
 
       if (!resolvedAreaId || !resolvedAreaName || !requestedTopicName) {
         return res.status(400).json({ error: 'Area e topico sao obrigatorios.' });
@@ -769,60 +820,105 @@ export default async function handler(req: any, res: any) {
       const existingQuestions = hasSupabase || databaseUrl
         ? await fetchExistingTopicQuestions(resolvedAreaId, topic_id, custom_topic_name)
         : [];
-      let parsed: GeneratedPayload | null = null;
       let normalized: NormalizedQuestion[] = [];
       let validationErrors: string[] = [];
       let modelUsed = modelCandidates[0];
+      let coverageSummary: string[] = [];
+      let validationSummaryParts: string[] = [];
       let lastError: unknown = null;
 
       try {
         for (const candidateModel of modelCandidates) {
-          const prompt = buildQuestionsPrompt({
-            area: resolvedAreaName,
-            topic: resolvedTheme,
-            count: Number(count) || 5,
-            difficulty: normalizeDifficulty(difficulty),
-            rawContent: preparedSource.rawContext,
-            sourceMode: preparedSource.sourceMode,
-            validateWithWeb: preparedSource.validateWithWeb,
-            existingQuestions,
-          });
-
-          const contents = preparedSource.filePart
-            ? [{
-              role: 'user',
-              parts: [
-                createPartFromText(prompt),
-                createPartFromUri(preparedSource.filePart.uri, preparedSource.filePart.mimeType),
-              ],
-            }]
-            : prompt;
-
-          const runGeneration = async () => ai.models.generateContent({
-            model: candidateModel,
-            contents,
-            config: {
-              responseMimeType: 'application/json',
-              responseSchema: createResponseSchema(Type),
-              tools: preparedSource.validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
-            },
-          });
-
+          let candidateValidationErrors: string[] = [];
           try {
-            for (let attempt = 1; attempt <= 2; attempt += 1) {
-              const response = await runGeneration();
-              const rawText = extractResponseText(response);
-              parsed = rawText ? parseGeneratedPayload(rawText) : null;
-              normalized = normalizeQuestions(parsed?.questions || []);
-              validationErrors = validateQuestions(normalized, EXPECTED_ALTERNATIVES);
-              if (!validationErrors.length) {
-                modelUsed = candidateModel;
+            const candidateQuestions: NormalizedQuestion[] = [];
+            let candidateCoverageSummary: string[] = [];
+            const candidateValidationSummaryParts: string[] = [];
+
+            while (candidateQuestions.length < requestedCount) {
+              const remainingCount = requestedCount - candidateQuestions.length;
+              const batchCount = Math.min(MAX_GENERATION_BATCH_SIZE, remainingCount);
+              const referenceQuestions = [
+                ...existingQuestions.map((item) => item.content),
+                ...candidateQuestions.map((question) => question.question),
+              ];
+              const prompt = buildQuestionsPrompt({
+                area: resolvedAreaName,
+                topic: resolvedTheme,
+                count: batchCount,
+                difficulty: normalizeDifficulty(difficulty),
+                rawContent: preparedSource.rawContext,
+                sourceMode: preparedSource.sourceMode,
+                validateWithWeb: preparedSource.validateWithWeb,
+                existingQuestions: [
+                  ...candidateQuestions.map((question) => ({
+                    content: question.question,
+                    difficulty: question.difficulty,
+                  })),
+                  ...existingQuestions,
+                ].slice(0, MAX_REFERENCE_QUESTIONS),
+              });
+
+              const contents = preparedSource.filePart
+                ? [{
+                  role: 'user',
+                  parts: [
+                    createPartFromText(prompt),
+                    createPartFromUri(preparedSource.filePart.uri, preparedSource.filePart.mimeType),
+                  ],
+                }]
+                : prompt;
+
+              candidateValidationErrors = [];
+
+              for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt += 1) {
+                const response = await ai.models.generateContent({
+                  model: candidateModel,
+                  contents,
+                  config: {
+                    responseMimeType: 'application/json',
+                    responseSchema: createResponseSchema(Type, batchCount),
+                    tools: preparedSource.validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
+                  },
+                });
+                const rawText = extractResponseText(response);
+                const parsedBatch = rawText ? parseGeneratedPayload(rawText) : null;
+                const normalizedBatch = normalizeQuestions(parsedBatch?.questions || []);
+                candidateValidationErrors = validateQuestions(normalizedBatch, EXPECTED_ALTERNATIVES, {
+                  expectedCount: batchCount,
+                  referenceQuestions,
+                });
+
+                if (!candidateValidationErrors.length) {
+                  candidateQuestions.push(...normalizedBatch);
+                  candidateCoverageSummary = mergeCoverageSummary(candidateCoverageSummary, parsedBatch?.coverage_summary);
+                  const validationSummary = String(parsedBatch?.validation_summary || '').trim();
+                  if (validationSummary) {
+                    candidateValidationSummaryParts.push(validationSummary);
+                  }
+                  break;
+                }
+
+                console.warn(
+                  '[generate-questions] validation failed attempt',
+                  attempt,
+                  candidateModel,
+                  `batch=${batchCount}`,
+                  candidateValidationErrors,
+                );
+              }
+
+              if (candidateValidationErrors.length) {
                 break;
               }
-              console.warn('[generate-questions] validation failed attempt', attempt, candidateModel, validationErrors);
             }
 
-            if (!validationErrors.length) {
+            if (!candidateValidationErrors.length && candidateQuestions.length === requestedCount) {
+              normalized = candidateQuestions;
+              coverageSummary = candidateCoverageSummary;
+              validationSummaryParts = candidateValidationSummaryParts;
+              validationErrors = [];
+              modelUsed = candidateModel;
               break;
             }
           } catch (error) {
@@ -830,18 +926,34 @@ export default async function handler(req: any, res: any) {
             console.warn('[generate-questions] model failed', candidateModel, getErrorMessage(error));
             continue;
           }
+
+          if (!normalized.length) {
+            validationErrors = candidateValidationErrors.length
+              ? candidateValidationErrors
+              : [`Nao foi possivel completar o lote de ${requestedCount} perguntas com o modelo ${candidateModel}.`];
+          }
+
+          if (normalized.length === requestedCount) {
+            break;
+          }
         }
 
-        if (validationErrors.length && lastError) {
+        if (!normalized.length && !validationErrors.length && lastError) {
           throw lastError;
         }
 
-        if (!normalized.length && lastError) {
-          throw lastError;
+        if (!normalized.length) {
+          return res.status(422).json({
+            error: `A IA nao conseguiu fechar ${requestedCount} perguntas validas apos varias tentativas.`,
+            validation_errors: validationErrors,
+          });
         }
 
-        if (validationErrors.length) {
-          return res.status(422).json({ error: 'A IA devolveu perguntas invalidas apos 2 tentativas.', validation_errors: validationErrors });
+        if (validationErrors.length || normalized.length !== requestedCount) {
+          return res.status(422).json({
+            error: `A IA nao conseguiu entregar exatamente ${requestedCount} perguntas validas.`,
+            validation_errors: validationErrors,
+          });
         }
 
         return res.status(200).json({
@@ -850,21 +962,17 @@ export default async function handler(req: any, res: any) {
           topic_id,
           topic_name,
           custom_topic_name,
-          count,
+          count: requestedCount,
           difficulty: normalizeDifficulty(difficulty),
           model_used: modelUsed,
           source_mode: preparedSource.sourceMode,
           source_theme: resolvedTheme,
           validate_with_web: preparedSource.validateWithWeb,
-          validation_summary: String(
-            parsed?.validation_summary
+          validation_summary: Array.from(new Set(validationSummaryParts.filter(Boolean))).join(' ')
             || (preparedSource.validateWithWeb
               ? 'Conteudo consolidado com validacao web antes da montagem final das questoes.'
               : 'Conteudo estruturado diretamente a partir do topico e das instrucoes fornecidas.'),
-          ),
-          coverage_summary: Array.isArray(parsed?.coverage_summary) && parsed?.coverage_summary.length
-            ? parsed?.coverage_summary
-            : createCoverageSummary(normalized),
+          coverage_summary: coverageSummary.length ? coverageSummary : createCoverageSummary(normalized),
           questions: normalized,
         });
       } finally {
