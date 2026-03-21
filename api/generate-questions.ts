@@ -457,9 +457,38 @@ const fetchExistingTopicQuestions = async (
   return fetchExistingTopicQuestionsWithSupabase(resolvedTopicId);
 };
 
+const extractErrorInfo = (error: unknown) => {
+  if (error instanceof Error) {
+    const record = error as Error & { details?: string; hint?: string; code?: string };
+    return {
+      message: record.message || '',
+      details: String(record.details || '').trim(),
+      hint: String(record.hint || '').trim(),
+      code: String(record.code || '').trim(),
+    };
+  }
+
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>;
+    return {
+      message: String(record.message || record.error || '').trim(),
+      details: String(record.details || '').trim(),
+      hint: String(record.hint || '').trim(),
+      code: String(record.code || '').trim(),
+    };
+  }
+
+  return {
+    message: '',
+    details: '',
+    hint: '',
+    code: '',
+  };
+};
+
 const getErrorMessage = (error: unknown) => {
-  if (!(error instanceof Error)) return 'Falha desconhecida ao comunicar com a IA.';
-  const message = error.message;
+  const { message, details, hint, code } = extractErrorInfo(error);
+  if (!message) return 'Falha desconhecida ao guardar ou comunicar com o servidor.';
   if (message.toLowerCase().includes('reported as leaked')) {
     return 'A chave do Gemini foi bloqueada por vazamento. Gere uma nova chave no Google AI Studio e atualize GEMINI_API_KEY/VITE_GEMINI_API_KEY.';
   }
@@ -468,7 +497,24 @@ const getErrorMessage = (error: unknown) => {
     return 'O modelo Gemini configurado nao esta disponivel para esta chave. Ajuste GEMINI_MODEL para um modelo suportado.';
   }
   if (message.toLowerCase().includes('apikey') || message.toLowerCase().includes('permission')) return 'A chave do Gemini parece invalida ou sem acesso ao modelo.';
-  return message;
+  const extraParts = [details, hint ? `Sugestao: ${hint}` : '', code ? `Codigo: ${code}` : ''].filter(Boolean);
+  return [message, ...extraParts].join(' | ');
+};
+
+const shouldRetryQuestionInsertWithoutArea = (error: unknown) => {
+  const { message, details, code } = extractErrorInfo(error);
+  const combined = `${message} ${details}`.toLowerCase();
+
+  return code === '42703'
+    || (
+      combined.includes('area_id')
+      && (
+        combined.includes('schema cache')
+        || combined.includes('column')
+        || combined.includes('not found')
+        || combined.includes('does not exist')
+      )
+    );
 };
 
 const buildModelCandidates = (primaryModel: string) => Array.from(new Set([primaryModel, defaultGeminiModel, 'gemini-2.5-flash'].filter(Boolean)));
@@ -648,6 +694,60 @@ const prepareGenerationSource = async (
   };
 };
 
+const insertQuestionWithPostgres = async (
+  client: PgClient,
+  input: PersistInput,
+  topicId: string,
+  question: NormalizedQuestion,
+) => {
+  try {
+    return await client.query(
+      'insert into public.questions (topic_id, area_id, content, difficulty) values ($1, $2, $3, $4) returning id',
+      [topicId, input.area_id, question.question, question.difficulty],
+    );
+  } catch (error) {
+    if (!shouldRetryQuestionInsertWithoutArea(error)) throw error;
+
+    return client.query(
+      'insert into public.questions (topic_id, content, difficulty) values ($1, $2, $3) returning id',
+      [topicId, question.question, question.difficulty],
+    );
+  }
+};
+
+const insertQuestionWithSupabase = async (
+  supabase: any,
+  input: PersistInput,
+  topicId: string,
+  question: NormalizedQuestion,
+) => {
+  const basePayload = {
+    topic_id: topicId,
+    content: question.question,
+    difficulty: question.difficulty,
+  };
+
+  let insertedQuestion = await supabase
+    .from('questions')
+    .insert({
+      ...basePayload,
+      area_id: input.area_id,
+    })
+    .select('id')
+    .single();
+
+  if (insertedQuestion.error && shouldRetryQuestionInsertWithoutArea(insertedQuestion.error)) {
+    insertedQuestion = await supabase
+      .from('questions')
+      .insert(basePayload)
+      .select('id')
+      .single();
+  }
+
+  if (insertedQuestion.error) throw insertedQuestion.error;
+  return insertedQuestion;
+};
+
 const resolveTopicWithPg = async (client: PgClient, areaId: string, topicId?: string | null, customTopicName?: string | null) => {
   if (topicId) return { topicId, topicCreated: false };
   const topicName = String(customTopicName || '').trim();
@@ -685,10 +785,7 @@ const persistWithPostgres = async (input: PersistInput): Promise<PersistResult> 
         continue;
       }
 
-      const insertedQuestion = await client.query(
-        'insert into public.questions (topic_id, area_id, content, difficulty) values ($1, $2, $3, $4) returning id',
-        [topicId, input.area_id, question.question, question.difficulty],
-      );
+      const insertedQuestion = await insertQuestionWithPostgres(client, input, topicId, question);
 
       const questionId = insertedQuestion.rows[0].id as string;
       for (const alternative of question.alternatives) {
@@ -750,14 +847,7 @@ const persistWithSupabase = async (input: PersistInput): Promise<PersistResult> 
       continue;
     }
 
-    const insertedQuestion = await supabase.from('questions').insert({
-      topic_id: finalTopicId,
-      area_id: input.area_id,
-      content: question.question,
-      difficulty: question.difficulty,
-    }).select('id').single();
-
-    if (insertedQuestion.error) throw insertedQuestion.error;
+    const insertedQuestion = await insertQuestionWithSupabase(supabase, input, finalTopicId as string, question);
 
     for (const alternative of question.alternatives) {
       const altInsert = await supabase.from('alternatives').insert({ question_id: insertedQuestion.data.id, content: alternative.text, is_correct: alternative.isCorrect });
