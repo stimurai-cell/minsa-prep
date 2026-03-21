@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowRight,
   BookOpen,
@@ -33,7 +33,6 @@ import { calculateNextReview } from '../lib/srs';
 import { checkForBadges, type Badge } from '../lib/badges';
 import BadgeNotification from '../components/BadgeNotification';
 import { exportQuestions } from '../lib/exportQuestions';
-import { chooseSystemTopic } from '../lib/systemTopics';
 import { getRecentQuestionIds, prioritizeUnseenQuestions, rememberQuestionIds } from '../lib/questionHistory';
 
 type SessionSummary = {
@@ -46,11 +45,14 @@ type SessionSummary = {
 type DifficultyPreference = 'mixed' | 'easy' | 'medium' | 'hard';
 const TRAINING_TARGET_QUESTIONS = 10;
 const TRAINING_FETCH_BATCH_SIZE = 40;
+const AUTO_TOPIC_ROTATION_STORAGE_KEY = 'minsa-prep-guided-topic-rotation';
+const GUIDED_TOPIC_LOADING_NOTE = 'O sistema esta a preparar o proximo topico diario em ordem crescente.';
 
 export default function Training() {
   const { profile, refreshProfile } = useAuthStore();
   const { areas, topics, fetchAreas, fetchTopics } = useAppStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const { hasGuidedTraining, hasOfflinePackage, hasStatisticsPDF } = usePermissions();
 
@@ -75,7 +77,7 @@ export default function Training() {
   } = useOfflineStore();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [exportingTopic, setExportingTopic] = useState<null | 'pdf' | 'docx'>(null);
-  const [topicAssignmentNote, setTopicAssignmentNote] = useState('A aguardar a rota de estudo do sistema.');
+  const [topicAssignmentNote, setTopicAssignmentNote] = useState(GUIDED_TOPIC_LOADING_NOTE);
   const [assigningTopic, setAssigningTopic] = useState(false);
 
   const hasPremiumAccess = ['premium', 'elite', 'admin'].includes(profile?.role || '');
@@ -94,7 +96,6 @@ export default function Training() {
 
   const sessionActive = searchParams.get('session') === '1';
   const sessionTopicId = searchParams.get('topic') || '';
-  const focusHint = searchParams.get('focus') || '';
   const isReviewMode = searchParams.get('type') === 'review';
   const sessionDifficulty = (searchParams.get('difficulty') as DifficultyPreference) || 'mixed';
   const guidedTrainingEnabled = hasGuidedTraining && searchParams.get('mode') !== 'manual';
@@ -103,13 +104,6 @@ export default function Training() {
   const availableOfflineQuestionCount = hasOfflinePackage ? questionCount : 0;
   // Allow all difficulties for non-premium except 'hard' (difícil) which remains premium-only
   const effectiveDifficulty = hasPremiumAccess ? sessionDifficulty : (sessionDifficulty === 'hard' ? 'medium' : sessionDifficulty);
-
-  const normalizeText = (value: string) =>
-    value
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .trim();
 
   const getRecentTopicIds = () => {
     try {
@@ -126,71 +120,38 @@ export default function Training() {
     localStorage.setItem('minsa-prep-recent-topics', JSON.stringify(next));
   };
 
-  const assignSystemTopic = async (preferredTopicName?: string) => {
-    if (!topics.length) return;
+  const orderedTopics = useMemo(
+    () => [...topics].sort((left, right) => left.name.localeCompare(right.name)),
+    [topics]
+  );
+
+  const getGuidedRotationStorageKey = () =>
+    `${AUTO_TOPIC_ROTATION_STORAGE_KEY}:${profile?.id || 'anon'}:${profile?.selected_area_id || 'no-area'}`;
+
+  const assignSystemTopic = async () => {
+    if (!orderedTopics.length) return;
 
     setAssigningTopic(true);
 
     try {
-      const recentTopicIds = getRecentTopicIds();
-      const availableQuestionCounts = offlineQuestions.reduce<Record<string, number>>((acc, question) => {
-        acc[question.topic_id] = (acc[question.topic_id] || 0) + 1;
-        return acc;
-      }, {});
+      const storageKey = getGuidedRotationStorageKey();
+      const lastTopicId = localStorage.getItem(storageKey) || '';
+      const lastTopicIndex = orderedTopics.findIndex((topic) => topic.id === lastTopicId);
+      const nextTopicIndex = lastTopicIndex >= 0 ? (lastTopicIndex + 1) % orderedTopics.length : 0;
+      const nextTopic = orderedTopics[nextTopicIndex] || orderedTopics[0];
 
-      let progressMap = new Map<string, { questions_answered?: number; domain_score?: number }>();
-      if (profile?.id && navigator.onLine) {
-        const { data: progressRows } = await supabase
-          .from('user_topic_progress')
-          .select('topic_id, questions_answered, domain_score')
-          .eq('user_id', profile.id)
-          .in('topic_id', topics.map((topic) => topic.id));
+      if (!nextTopic) return;
 
-        progressMap = new Map(
-          (progressRows || []).map((row: any) => [
-            row.topic_id,
-            {
-              questions_answered: row.questions_answered,
-              domain_score: row.domain_score,
-            },
-          ])
-        );
-      }
-
-      const preferredKey = preferredTopicName ? normalizeText(preferredTopicName) : '';
-      const decision = chooseSystemTopic(
-        topics.map((topic) => {
-          const progress = progressMap.get(topic.id);
-          const hasOfflineCoverage = availableOfflineQuestionCount === 0 || availableQuestionCounts[topic.id] > 0;
-          const nameMatchesFocus = preferredKey && normalizeText(topic.name).includes(preferredKey);
-
-          return {
-            id: topic.id,
-            name: topic.name,
-            questionCount: hasOfflineCoverage ? availableQuestionCounts[topic.id] || 1 : 0,
-            answeredCount: progress?.questions_answered,
-            domainScore: progress?.domain_score,
-            recentlySeen: recentTopicIds.includes(topic.id),
-            priorityBoost: nameMatchesFocus ? 28 : 0,
-          };
-        })
+      setSelectedTopic(nextTopic.id);
+      setTopicAssignmentNote(
+        `Topico diario ${nextTopicIndex + 1} de ${orderedTopics.length}. O sistema avanca em ordem crescente sempre que voce entra aqui.`
       );
-
-      if (decision) {
-        setSelectedTopic(decision.topicId);
-        setTopicAssignmentNote(decision.explanation);
-        return;
-      }
-
-      if (topics[0]) {
-        setSelectedTopic(topics[0].id);
-        setTopicAssignmentNote('Foco automatico definido pelo sistema para manter a cobertura da area.');
-      }
+      localStorage.setItem(storageKey, nextTopic.id);
     } catch (error) {
       console.error('Erro ao atribuir topico automaticamente:', error);
-      if (topics[0]) {
-        setSelectedTopic(topics[0].id);
-        setTopicAssignmentNote('Foco automatico definido pelo sistema para manter a rotina.');
+      if (orderedTopics[0]) {
+        setSelectedTopic(orderedTopics[0].id);
+        setTopicAssignmentNote('Topico diario definido automaticamente para manter a sequencia da area.');
       }
     } finally {
       setAssigningTopic(false);
@@ -220,10 +181,20 @@ export default function Training() {
   }, [sessionTopicId]);
 
   useEffect(() => {
-    if (guidedTrainingEnabled && !sessionTopicId && !selectedTopic && topics.length > 0 && !assigningTopic) {
-      void assignSystemTopic(focusHint);
+    if (!guidedTrainingEnabled || sessionActive || sessionTopicId || orderedTopics.length === 0) {
+      return;
     }
-  }, [assigningTopic, focusHint, guidedTrainingEnabled, selectedTopic, sessionTopicId, topics]);
+
+    void assignSystemTopic();
+  }, [guidedTrainingEnabled, orderedTopics, sessionActive, sessionTopicId, location.key]);
+
+  useEffect(() => {
+    if (!guidedTrainingEnabled || !sessionActive || sessionTopicId || selectedTopic || orderedTopics.length === 0 || assigningTopic) {
+      return;
+    }
+
+    void assignSystemTopic();
+  }, [assigningTopic, guidedTrainingEnabled, orderedTopics, selectedTopic, sessionActive, sessionTopicId, location.key]);
 
   useEffect(() => {
     setSelectedDifficulty(hasPremiumAccess ? sessionDifficulty : (sessionDifficulty === 'hard' ? 'medium' : sessionDifficulty));
@@ -253,13 +224,9 @@ export default function Training() {
     () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Área não definida',
     [areas, profile?.selected_area_id]
   );
-  const orderedTopics = useMemo(
-    () => [...topics].sort((left, right) => left.name.localeCompare(right.name)),
-    [topics]
-  );
 
   const selectedTopicName =
-    topics.find((topic) => topic.id === selectedTopic)?.name || (guidedTrainingEnabled ? 'Foco a ser definido' : 'Selecione um topico');
+    topics.find((topic) => topic.id === selectedTopic)?.name || (guidedTrainingEnabled ? orderedTopics[0]?.name || 'Foco a ser definido' : 'Selecione um topico');
 
   const currentQ = questions[currentQIndex];
   const currentExplanation =
@@ -805,7 +772,7 @@ export default function Training() {
           onSecondaryAction={() => {
             resetTrainingSession();
             setSelectedTopic('');
-            setTopicAssignmentNote(guidedTrainingEnabled ? 'A aguardar a rota de estudo do sistema.' : 'Escolha o topico para montar o seu treino.');
+            setTopicAssignmentNote(guidedTrainingEnabled ? GUIDED_TOPIC_LOADING_NOTE : 'Escolha o topico para montar o seu treino.');
             setSessionSummary(null);
             navigate(trainingBasePath, { replace: true });
           }}
