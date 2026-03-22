@@ -95,71 +95,89 @@ export default function Leagues() {
     const relegationLeague = currentLeagueIndex > 0 ? LEAGUE_ORDER[currentLeagueIndex - 1] : null;
     const canRelegate = Boolean(relegationLeague) && stats.length > 15;
     const relegationStartRank = canRelegate ? stats.length - 4 : null;
-    const isPromotionPosition = Boolean(promotionLeague) && userRank > 0 && userRank <= 10;
-    const isRelegationPosition = Boolean(relegationLeague) && Boolean(relegationStartRank) && userRank >= (relegationStartRank || Infinity);
     const userWeeklyXp = userRank > 0 ? stats[userRank - 1]?.xp_earned || 0 : 0;
-    const outcomeClasses = isPromotionPosition
-        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-        : isRelegationPosition
-            ? 'border-rose-200 bg-rose-50 text-rose-700'
-            : 'border-sky-200 bg-sky-50 text-sky-700';
-    const outcomeTitle = isPromotionPosition
-        ? `Hoje voce sobe para ${promotionLeague}`
-        : isRelegationPosition
-            ? `Hoje voce desce para ${relegationLeague}`
-            : userRank > 0
-                ? `Hoje voce permanece na Liga ${currentLeague}`
-                : 'Ganhe XP para entrar no ranking desta semana';
-    const outcomeBody = isPromotionPosition
-        ? 'Feche a semana no Top 10 para confirmar a promocao.'
-        : isRelegationPosition
-            ? 'Fuja dos ultimos lugares para nao cair de divisao.'
-            : canRelegate
-                ? 'Continue a somar XP para se aproximar da promocao e manter distancia da zona vermelha.'
-                : 'Continue a somar XP para subir para a proxima liga.';
+    const getLeagueStatus = (index: number) => {
+        if (index === currentLeagueIndex) return 'Atual';
+        if (index === currentLeagueIndex - 1) return 'Abaixo';
+        if (index === currentLeagueIndex + 1) return 'Acima';
+        return index < currentLeagueIndex ? 'Base' : 'Topo';
+    };
 
     return (
         <div className="max-w-3xl mx-auto pb-24">
-            {/* League Header */}
-            <div className={`relative overflow-hidden rounded-[2rem] bg-gradient-to-br ${LEAGUE_COLORS[currentLeague]} p-5 text-white shadow-2xl shadow-indigo-500/15 mb-5 md:p-6`}>
-                <div className="absolute right-0 top-0 h-32 w-32 rounded-full bg-white/10 blur-3xl" />
-                <div className="absolute -bottom-8 -left-8 h-24 w-24 rounded-full bg-black/10 blur-2xl" />
+            <div className="mb-4 rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Divisoes</p>
+                        <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">Escala das ligas</h2>
+                    </div>
+                    <div className="rounded-2xl bg-slate-100 px-3 py-2 text-right">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Atual</p>
+                        <p className="mt-1 text-sm font-black text-slate-900">{currentLeague}</p>
+                    </div>
+                </div>
 
-                <div className="relative z-10 flex flex-col gap-4">
-                    <div className="flex items-start gap-4">
-                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[1.5rem] bg-white/15 text-4xl shadow-lg backdrop-blur-sm">
-                            {LEAGUE_ICONS[currentLeague]}
-                        </div>
+                <div className="mt-4 overflow-x-auto pb-1">
+                    <div className="flex min-w-max items-center gap-2">
+                        {LEAGUE_ORDER.map((league, index) => {
+                            const isCurrentLeague = league === currentLeague;
+                            return (
+                                <div key={league} className="flex items-center gap-2">
+                                    <div
+                                        className={`min-w-[94px] rounded-[1.5rem] border px-3 py-3 text-center transition ${isCurrentLeague
+                                            ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
+                                            : 'border-slate-200 bg-slate-50 text-slate-500'
+                                            }`}
+                                    >
+                                        <div className={`text-3xl ${isCurrentLeague ? '' : 'opacity-65'}`}>{LEAGUE_ICONS[league]}</div>
+                                        <p className="mt-2 text-sm font-black">{league}</p>
+                                        <p className={`mt-1 text-[10px] font-black uppercase tracking-[0.18em] ${isCurrentLeague ? 'text-white/70' : 'text-slate-400'}`}>
+                                            {getLeagueStatus(index)}
+                                        </p>
+                                    </div>
 
-                        <div className="min-w-0 flex-1">
-                            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-white/75">Liga atual</p>
-                            <div className="mt-2 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                                <div>
-                                    <h1 className="text-3xl font-black tracking-tight md:text-4xl">Liga {currentLeague}</h1>
-                                    <p className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-white/90">
-                                        <TrendingUp className="h-4 w-4" />
-                                        Termina em <span className="underline decoration-2 underline-offset-4">{timeLeft}</span>
-                                    </p>
+                                    {index < LEAGUE_ORDER.length - 1 && (
+                                        <ChevronRight className="h-4 w-4 text-slate-300" />
+                                    )}
                                 </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
 
-                                <div className="grid grid-cols-2 gap-3 md:min-w-[240px]">
-                                    <div className="rounded-2xl border border-white/20 bg-white/15 px-4 py-3 backdrop-blur-sm">
-                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/70">Posicao</p>
-                                        <p className="mt-1 text-3xl font-black">#{userRank || '--'}</p>
-                                    </div>
-                                    <div className="rounded-2xl border border-white/20 bg-white/15 px-4 py-3 backdrop-blur-sm">
-                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/70">XP semana</p>
-                                        <p className="mt-1 text-3xl font-black">{userRank > 0 ? userWeeklyXp : '--'}</p>
-                                    </div>
+            {/* League Header */}
+            <div className={`relative overflow-hidden rounded-[1.9rem] bg-gradient-to-br ${LEAGUE_COLORS[currentLeague]} p-4 text-white shadow-2xl shadow-indigo-500/15 mb-5 md:p-5`}>
+                <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-white/10 blur-3xl" />
+                <div className="absolute -bottom-8 -left-8 h-20 w-20 rounded-full bg-black/10 blur-2xl" />
+
+                <div className="relative z-10 flex items-start gap-3">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[1.3rem] bg-white/15 text-3xl shadow-lg backdrop-blur-sm">
+                        {LEAGUE_ICONS[currentLeague]}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/75">Classificacao semanal</p>
+                        <div className="mt-1 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                            <div>
+                                <h1 className="text-[2rem] font-black tracking-tight leading-none md:text-[2.4rem]">Liga {currentLeague}</h1>
+                                <p className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-white/90">
+                                    <TrendingUp className="h-4 w-4" />
+                                    Termina em <span className="underline decoration-2 underline-offset-4">{timeLeft}</span>
+                                </p>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                                <div className="rounded-2xl border border-white/20 bg-white/15 px-3 py-2 backdrop-blur-sm">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/70">Posicao</p>
+                                    <p className="mt-1 text-2xl font-black leading-none">#{userRank || '--'}</p>
+                                </div>
+                                <div className="rounded-2xl border border-white/20 bg-white/15 px-3 py-2 backdrop-blur-sm">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/70">XP</p>
+                                    <p className="mt-1 text-2xl font-black leading-none">{userRank > 0 ? userWeeklyXp : '--'}</p>
                                 </div>
                             </div>
                         </div>
-                    </div>
-
-                    <div className={`rounded-[1.5rem] border px-4 py-4 ${outcomeClasses}`}>
-                        <p className="text-[11px] font-black uppercase tracking-[0.2em]">Seu panorama agora</p>
-                        <p className="mt-2 text-lg font-black text-slate-900">{outcomeTitle}</p>
-                        <p className="mt-1 text-sm leading-6 text-slate-700">{outcomeBody}</p>
                     </div>
                 </div>
             </div>
