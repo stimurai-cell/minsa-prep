@@ -10,6 +10,7 @@ type PushPayload = {
     title: string;
     body: string;
     url: string;
+    tag?: string;
 };
 
 type FirebaseAdminLike = {
@@ -20,8 +21,12 @@ type FirebaseAdminLike = {
     };
     messaging: () => {
         sendEachForMulticast: (payload: {
-            notification: { title: string; body: string };
-            data: { url: string };
+            data: { title: string; body: string; url: string; tag: string };
+            webpush?: {
+                fcmOptions?: {
+                    link?: string;
+                };
+            };
             tokens: string[];
         }) => Promise<{
             successCount: number;
@@ -167,6 +172,45 @@ async function cleanupSubscriptions(endpoints: string[]) {
         .in('endpoint', endpoints);
 }
 
+function buildNotificationTag(payload: PushPayload) {
+    if (payload.tag) {
+        return payload.tag;
+    }
+
+    const rawTag = `${payload.url}|${payload.title}|${payload.body}`;
+    return `push-${Buffer.from(rawTag).toString('base64url').slice(0, 80)}`;
+}
+
+function preferCurrentSubscriptions(rows: PushSubscriptionRow[]) {
+    const rowsByUser = new Map<string, PushSubscriptionRow[]>();
+    const unscopedRows: PushSubscriptionRow[] = [];
+
+    rows.forEach((row) => {
+        if (!row.user_id) {
+            unscopedRows.push(row);
+            return;
+        }
+
+        const currentRows = rowsByUser.get(row.user_id) || [];
+        currentRows.push(row);
+        rowsByUser.set(row.user_id, currentRows);
+    });
+
+    const preferredRows = [...unscopedRows];
+
+    rowsByUser.forEach((userRows) => {
+        const webPushRows = userRows.filter(isWebPushSubscription);
+        const fallbackRows = webPushRows.length ? webPushRows : userRows.filter(isFcmToken);
+        const uniqueRows = new Map(
+            fallbackRows.map((row) => [row.endpoint.trim(), row] as const)
+        );
+
+        preferredRows.push(...uniqueRows.values());
+    });
+
+    return preferredRows;
+}
+
 export async function fetchPushSubscriptions(userId?: string) {
     let query = getSupabaseAdmin()
         .from('push_subscriptions')
@@ -194,22 +238,28 @@ export function countRegisteredPushDevices(rows: PushSubscriptionRow[]) {
 }
 
 export async function sendPushToSubscriptions(rows: PushSubscriptionRow[], payload: PushPayload) {
+    const preferredRows = preferCurrentSubscriptions(rows);
     const invalidEndpoints: string[] = [];
     let sent = 0;
     let failures = 0;
+    const notificationTag = buildNotificationTag(payload);
 
-    const fcmTokens = rows.filter(isFcmToken).map((row) => row.endpoint);
+    const fcmTokens = preferredRows.filter(isFcmToken).map((row) => row.endpoint);
     if (fcmTokens.length) {
         const admin = await ensureFirebaseAdmin();
 
         if (admin) {
             const response = await admin.messaging().sendEachForMulticast({
-                notification: {
+                data: {
                     title: payload.title,
                     body: payload.body,
-                },
-                data: {
                     url: payload.url,
+                    tag: notificationTag,
+                },
+                webpush: {
+                    fcmOptions: {
+                        link: payload.url,
+                    },
                 },
                 tokens: fcmTokens,
             });
@@ -225,7 +275,7 @@ export async function sendPushToSubscriptions(rows: PushSubscriptionRow[], paylo
         }
     }
 
-    const webPushRows = rows.filter(isWebPushSubscription);
+    const webPushRows = preferredRows.filter(isWebPushSubscription);
     if (webPushRows.length) {
         const webpush = await ensureWebPush();
 
@@ -239,6 +289,7 @@ export async function sendPushToSubscriptions(rows: PushSubscriptionRow[], paylo
                                 title: payload.title,
                                 body: payload.body,
                                 url: payload.url,
+                                tag: notificationTag,
                             })
                         );
 

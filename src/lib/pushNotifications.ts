@@ -165,6 +165,7 @@ export async function sendPushNotification(params: {
     body: string;
     url?: string;
     userId?: string;
+    tag?: string;
 }): Promise<{ sent: number; reason?: string }> {
     try {
         const response = await fetch('/api/send-push', {

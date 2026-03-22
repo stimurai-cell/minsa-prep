@@ -138,15 +138,19 @@ export default function AdminNews() {
 
         setLoading(true);
         try {
-            const { error } = await supabase.from('feed_items').insert({
-                type: newsType,
-                content: {
-                    title: newsTitle,
-                    body: newsBody,
-                    link: newsLink || undefined
-                },
-                image_url: imageUrl || null
-            });
+            const { data: insertedNews, error } = await supabase
+                .from('feed_items')
+                .insert({
+                    type: newsType,
+                    content: {
+                        title: newsTitle,
+                        body: newsBody,
+                        link: newsLink || undefined
+                    },
+                    image_url: imageUrl || null
+                })
+                .select('id')
+                .single();
 
             if (error) throw error;
 
@@ -154,7 +158,8 @@ export default function AdminNews() {
             await sendPushNotification({
                 title: newsTitle,
                 body: newsBody,
-                url: '/news'
+                url: '/news',
+                tag: insertedNews?.id ? `feed-${insertedNews.id}` : undefined
             });
             setNewsTitle('');
             setNewsBody('');
@@ -173,12 +178,16 @@ export default function AdminNews() {
 
         setLoading(true);
         try {
-            const { error } = await supabase.from('user_notifications').insert({
-                user_id: broadcast ? null : selectedUser.id,
-                title: notifTitle,
-                body: notifBody,
-                type: 'marketing'
-            });
+            const { data: insertedNotification, error } = await supabase
+                .from('user_notifications')
+                .insert({
+                    user_id: broadcast ? null : selectedUser.id,
+                    title: notifTitle,
+                    body: notifBody,
+                    type: 'marketing'
+                })
+                .select('id')
+                .single();
 
             if (error) throw error;
 
@@ -188,6 +197,7 @@ export default function AdminNews() {
                 body: notifBody,
                 url: '/news',
                 userId: broadcast ? undefined : selectedUser.id,
+                tag: insertedNotification?.id ? `admin-alert-${insertedNotification.id}` : undefined,
             });
 
             if (pushResult.sent > 0) {

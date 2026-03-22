@@ -2,12 +2,12 @@ import { writeFileSync } from 'fs';
 import path from 'path';
 import { config } from 'dotenv';
 
-// Carrega .env.local se existir, depois .env padrão
 config({ path: path.join(process.cwd(), '.env.local'), override: true });
 config();
 
 const normalizeEnv = (value?: string) => {
   if (!value) return '';
+
   const trimmed = value.trim().replace(/[\r\n]+/g, '');
 
   if (
@@ -32,11 +32,11 @@ const requiredEnv = [
 
 const missing = requiredEnv.filter((key) => !process.env[key]);
 if (missing.length) {
-  console.error(`[generate-sw] Faltam variáveis: ${missing.join(', ')}`);
+  console.error(`[generate-sw] Missing env vars: ${missing.join(', ')}`);
   process.exit(1);
 }
 
-const cfg = {
+const firebaseConfig = {
   apiKey: normalizeEnv(process.env.VITE_FIREBASE_API_KEY),
   authDomain: normalizeEnv(process.env.VITE_FIREBASE_AUTH_DOMAIN),
   projectId: normalizeEnv(process.env.VITE_FIREBASE_PROJECT_ID),
@@ -46,7 +46,6 @@ const cfg = {
   measurementId: normalizeEnv(process.env.VITE_FIREBASE_MEASUREMENT_ID),
 };
 
-// Version string para cache bust. Usa package.json version se existir; senão timestamp.
 let cacheVersion = `v-${Date.now()}`;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -56,24 +55,54 @@ try {
   // ignore
 }
 
-const swContent = `// Gerado automaticamente por scripts/generate-sw.ts
+const swContent = `// Generated automatically by scripts/generate-sw.ts
 importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-messaging-compat.js');
 
-const firebaseConfig = ${JSON.stringify(cfg, null, 4)};
+const firebaseConfig = ${JSON.stringify(firebaseConfig, null, 4)};
 
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
 const CACHE_NAME = 'minsa-prep-${cacheVersion}';
 const DATA_CACHE_NAME = 'minsa-prep-data-${cacheVersion}';
+const APP_ICON = '/app-icon.png';
+const APP_BADGE = '/app-badge.png';
 
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/version.json'
+  '/version.json',
+  APP_ICON,
+  APP_BADGE
 ];
+
+const buildNotificationTag = (title, body, url, rawTag) => {
+  if (rawTag) return rawTag;
+
+  return 'push-' + btoa(unescape(encodeURIComponent([title, body, url].join('|'))))
+    .replace(/=/g, '')
+    .replace(/[+/]/g, '-')
+    .slice(0, 80);
+};
+
+const buildNotificationOptions = ({ body, url, clickAction, tag }) => ({
+  body,
+  badge: APP_BADGE,
+  vibrate: [200, 100, 200],
+  requireInteraction: false,
+  renotify: false,
+  tag,
+  data: {
+    url,
+    click_action: clickAction || url,
+  },
+  actions: [
+    { action: 'open', title: 'Abrir App' },
+    { action: 'close', title: 'Fechar' }
+  ]
+});
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -152,48 +181,53 @@ self.addEventListener('fetch', (event) => {
 });
 
 messaging.onBackgroundMessage((payload) => {
-  const notificationTitle = payload.notification?.title || 'MINSA Prep';
-  const notificationOptions = {
-    body: payload.notification?.body || 'Tens uma nova notificação!',
-    icon: 'https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png',
-    badge: 'https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png',
-    vibrate: [200, 100, 200],
-    requireInteraction: false,
-    data: {
-      url: payload.data?.url || '/dashboard',
-      click_action: payload.fcmOptions?.link || '/dashboard'
-    },
-    actions: [
-      { action: 'open', title: 'Abrir App' },
-      { action: 'close', title: 'Fechar' }
-    ]
-  };
+  const notificationTitle = payload.data?.title || payload.notification?.title || 'MINSA Prep';
+  const notificationBody = payload.data?.body || payload.notification?.body || 'Tens uma nova notificacao!';
+  const notificationUrl = payload.data?.url || '/dashboard';
 
-  return self.registration.showNotification(notificationTitle, notificationOptions);
+  return self.registration.showNotification(
+    notificationTitle,
+    buildNotificationOptions({
+      body: notificationBody,
+      url: notificationUrl,
+      clickAction: payload.fcmOptions?.link || notificationUrl,
+      tag: buildNotificationTag(
+        notificationTitle,
+        notificationBody,
+        notificationUrl,
+        payload.data?.tag
+      ),
+    })
+  );
 });
 
 self.addEventListener('push', (event) => {
-  let data = { title: 'MINSA Prep', body: 'Tens uma nova notificação!', url: '/dashboard' };
+  let data = { title: 'MINSA Prep', body: 'Tens uma nova notificacao!', url: '/dashboard' };
 
   if (event.data) {
-    try { data = { ...data, ...event.data.json() }; }
-    catch (e) { data.body = event.data.text() || data.body; }
+    try {
+      data = { ...data, ...event.data.json() };
+    } catch (error) {
+      data.body = event.data.text() || data.body;
+    }
   }
 
-  const options = {
-    body: data.body,
-    icon: 'https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png',
-    badge: 'https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png',
-    vibrate: [200, 100, 200],
-    requireInteraction: false,
-    data: { url: data.url || '/dashboard' },
-    actions: [
-      { action: 'open', title: 'Abrir App' },
-      { action: 'close', title: 'Fechar' }
-    ]
-  };
-
-  event.waitUntil(self.registration.showNotification(data.title, options));
+  event.waitUntil(
+    self.registration.showNotification(
+      data.title,
+      buildNotificationOptions({
+        body: data.body,
+        url: data.url || '/dashboard',
+        clickAction: data.url || '/dashboard',
+        tag: buildNotificationTag(
+          data.title,
+          data.body,
+          data.url || '/dashboard',
+          data.tag
+        ),
+      })
+    )
+  );
 });
 
 self.addEventListener('notificationclick', (event) => {
@@ -211,6 +245,7 @@ self.addEventListener('notificationclick', (event) => {
           return;
         }
       }
+
       if (clients.openWindow) return clients.openWindow(urlToOpen);
       return null;
     })
@@ -220,4 +255,4 @@ self.addEventListener('notificationclick', (event) => {
 
 const outPath = path.join(process.cwd(), 'public', 'sw.js');
 writeFileSync(outPath, swContent, { encoding: 'utf8' });
-console.log(`[generate-sw] Service worker escrito em ${outPath}`);
+console.log(`[generate-sw] Service worker written to ${outPath}`);

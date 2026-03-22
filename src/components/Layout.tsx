@@ -26,6 +26,8 @@ import { supabase } from '../lib/supabase';
 import ErrorBoundary from './ErrorBoundary';
 import PushActivationPrompt from './PushActivationPrompt';
 
+const APP_ICON_SRC = '/app-icon.png';
+
 export default function Layout() {
   const { profile, signOut } = useAuthStore();
   const { areas, fetchAreas, deferredPrompt, setDeferredPrompt } = useAppStore();
@@ -159,11 +161,11 @@ export default function Layout() {
         <aside className={`hidden w-80 shrink-0 border-r border-slate-200 bg-white xl:flex xl:flex-col ${isImmersiveSession ? 'xl:hidden' : ''}`}>
           <div className="border-b border-slate-100 px-7 py-8">
             <div className="flex flex-col items-center">
-              <div className="flex h-24 w-full items-center justify-center rounded-[2rem] bg-white shadow-xl shadow-emerald-900/5 border border-slate-100 p-4 transition-transform hover:scale-[1.02]">
+              <div className="flex h-24 w-24 items-center justify-center rounded-[2rem] border border-slate-100 bg-white p-2 shadow-xl shadow-emerald-900/5 transition-transform hover:scale-[1.02]">
                 <img
-                  src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/abj60fbildawqtq47qgu.png"
+                  src={APP_ICON_SRC}
                   alt="MINSA Prep Logo"
-                  className="h-full w-full object-contain"
+                  className="h-full w-full scale-[1.12] object-contain"
                 />
               </div>
             </div>
@@ -267,11 +269,11 @@ export default function Layout() {
             <div className="px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-12 w-32 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm border border-slate-100 p-1.5">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-100 bg-white p-1 shadow-sm">
                     <img
-                      src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/abj60fbildawqtq47qgu.png"
+                      src={APP_ICON_SRC}
                       alt="MINSA Prep Logo"
-                      className="h-full w-full object-contain"
+                      className="h-full w-full scale-[1.12] object-contain"
                     />
                   </div>
                   <div className="min-w-0">

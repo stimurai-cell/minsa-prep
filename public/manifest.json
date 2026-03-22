@@ -11,16 +11,16 @@
     "scope": "/",
     "icons": [
         {
-            "src": "https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png",
-            "sizes": "192x192",
+            "src": "/app-icon.png",
+            "sizes": "1024x1024",
             "type": "image/png",
             "purpose": "any maskable"
         },
         {
-            "src": "https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png",
-            "sizes": "512x512",
+            "src": "/app-badge.png",
+            "sizes": "96x96",
             "type": "image/png",
-            "purpose": "any maskable"
+            "purpose": "monochrome"
         }
     ],
     "notifications": {
