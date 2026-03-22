@@ -1,6 +1,4 @@
-import admin from 'firebase-admin';
-import webpush from 'web-push';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 type PushSubscriptionRow = {
     endpoint: string;
@@ -13,6 +11,13 @@ type PushPayload = {
     body: string;
     url: string;
 };
+
+type FirebaseAdminModule = typeof import('firebase-admin');
+type WebPushModule = typeof import('web-push');
+
+let supabaseAdmin: SupabaseClient | null = null;
+let firebaseAdminModule: FirebaseAdminModule['default'] | null = null;
+let webPushModule: WebPushModule['default'] | null = null;
 
 function normalizeServerEnv(value?: string | null) {
     if (!value) return '';
@@ -41,39 +46,83 @@ function getFirebaseConfig() {
     };
 }
 
-function ensureFirebaseAdmin() {
+function getSupabaseAdmin() {
+    if (supabaseAdmin) {
+        return supabaseAdmin;
+    }
+
+    const supabaseUrl = normalizeServerEnv(process.env.VITE_SUPABASE_URL);
+    const serviceRoleKey = normalizeServerEnv(process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+    if (!supabaseUrl || !serviceRoleKey) {
+        throw new Error('Supabase admin env vars are missing.');
+    }
+
+    supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    return supabaseAdmin;
+}
+
+async function getFirebaseAdmin() {
+    if (firebaseAdminModule) {
+        return firebaseAdminModule;
+    }
+
+    const module = await import('firebase-admin');
+    firebaseAdminModule = module.default;
+    return firebaseAdminModule;
+}
+
+async function getWebPush() {
+    if (webPushModule) {
+        return webPushModule;
+    }
+
+    const module = await import('web-push');
+    webPushModule = module.default;
+    return webPushModule;
+}
+
+async function ensureFirebaseAdmin() {
     const firebaseConfig = getFirebaseConfig();
 
     if (!firebaseConfig.privateKey) {
-        return false;
+        return null;
     }
 
-    if (!admin.apps.length) {
-        admin.initializeApp({
-            credential: admin.credential.cert(firebaseConfig),
-        });
-    }
+    try {
+        const admin = await getFirebaseAdmin();
 
-    return true;
+        if (!admin.apps.length) {
+            admin.initializeApp({
+                credential: admin.credential.cert(firebaseConfig),
+            });
+        }
+
+        return admin;
+    } catch (error) {
+        console.error('[push] Firebase Admin init error:', error);
+        return null;
+    }
 }
 
-function ensureWebPush() {
+async function ensureWebPush() {
     const subject = normalizeServerEnv(process.env.VAPID_SUBJECT) || 'mailto:admin@minsaprep.ao';
     const publicKey = normalizeServerEnv(process.env.VITE_VAPID_PUBLIC_KEY);
     const privateKey = normalizeServerEnv(process.env.VAPID_PRIVATE_KEY);
 
     if (!publicKey || !privateKey) {
-        return false;
+        return null;
     }
 
-    webpush.setVapidDetails(subject, publicKey, privateKey);
-    return true;
+    try {
+        const webpush = await getWebPush();
+        webpush.setVapidDetails(subject, publicKey, privateKey);
+        return webpush;
+    } catch (error) {
+        console.error('[push] Web Push init error:', error);
+        return null;
+    }
 }
-
-export const supabaseAdmin = createClient(
-    normalizeServerEnv(process.env.VITE_SUPABASE_URL),
-    normalizeServerEnv(process.env.SUPABASE_SERVICE_ROLE_KEY)
-);
 
 function isFcmToken(row: PushSubscriptionRow) {
     return Boolean(row.endpoint) && !row.endpoint.startsWith('http');
@@ -91,14 +140,14 @@ function isWebPushSubscription(row: PushSubscriptionRow) {
 async function cleanupSubscriptions(endpoints: string[]) {
     if (!endpoints.length) return;
 
-    await supabaseAdmin
+    await getSupabaseAdmin()
         .from('push_subscriptions')
         .delete()
         .in('endpoint', endpoints);
 }
 
 export async function fetchPushSubscriptions(userId?: string) {
-    let query = supabaseAdmin
+    let query = getSupabaseAdmin()
         .from('push_subscriptions')
         .select('endpoint, user_id, subscription');
 
@@ -121,56 +170,64 @@ export async function sendPushToSubscriptions(rows: PushSubscriptionRow[], paylo
     let failures = 0;
 
     const fcmTokens = rows.filter(isFcmToken).map((row) => row.endpoint);
-    if (fcmTokens.length && ensureFirebaseAdmin()) {
-        const response = await admin.messaging().sendEachForMulticast({
-            notification: {
-                title: payload.title,
-                body: payload.body,
-            },
-            data: {
-                url: payload.url,
-            },
-            tokens: fcmTokens,
-        });
+    if (fcmTokens.length) {
+        const admin = await ensureFirebaseAdmin();
 
-        sent += response.successCount;
-        failures += response.failureCount;
+        if (admin) {
+            const response = await admin.messaging().sendEachForMulticast({
+                notification: {
+                    title: payload.title,
+                    body: payload.body,
+                },
+                data: {
+                    url: payload.url,
+                },
+                tokens: fcmTokens,
+            });
 
-        response.responses.forEach((result, index) => {
-            if (!result.success) {
-                invalidEndpoints.push(fcmTokens[index]);
-            }
-        });
+            sent += response.successCount;
+            failures += response.failureCount;
+
+            response.responses.forEach((result, index) => {
+                if (!result.success) {
+                    invalidEndpoints.push(fcmTokens[index]);
+                }
+            });
+        }
     }
 
     const webPushRows = rows.filter(isWebPushSubscription);
-    if (webPushRows.length && ensureWebPush()) {
-        const results = await Promise.all(
-            webPushRows.map(async (row) => {
-                try {
-                    await webpush.sendNotification(
-                        row.subscription,
-                        JSON.stringify({
-                            title: payload.title,
-                            body: payload.body,
-                            url: payload.url,
-                        })
-                    );
+    if (webPushRows.length) {
+        const webpush = await ensureWebPush();
 
-                    return true;
-                } catch (error: any) {
-                    const statusCode = Number(error?.statusCode || 0);
-                    if (statusCode === 404 || statusCode === 410) {
-                        invalidEndpoints.push(row.endpoint);
+        if (webpush) {
+            const results = await Promise.all(
+                webPushRows.map(async (row) => {
+                    try {
+                        await webpush.sendNotification(
+                            row.subscription,
+                            JSON.stringify({
+                                title: payload.title,
+                                body: payload.body,
+                                url: payload.url,
+                            })
+                        );
+
+                        return true;
+                    } catch (error: any) {
+                        const statusCode = Number(error?.statusCode || 0);
+                        if (statusCode === 404 || statusCode === 410) {
+                            invalidEndpoints.push(row.endpoint);
+                        }
+                        console.error('[push] Web Push error:', error);
+                        return false;
                     }
-                    console.error('[push] Web Push error:', error);
-                    return false;
-                }
-            })
-        );
+                })
+            );
 
-        sent += results.filter(Boolean).length;
-        failures += results.filter((result) => !result).length;
+            sent += results.filter(Boolean).length;
+            failures += results.filter((result) => !result).length;
+        }
     }
 
     if (invalidEndpoints.length > 0) {
