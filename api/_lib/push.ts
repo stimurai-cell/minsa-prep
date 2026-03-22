@@ -12,12 +12,33 @@ type PushPayload = {
     url: string;
 };
 
-type FirebaseAdminModule = typeof import('firebase-admin');
-type WebPushModule = typeof import('web-push');
+type FirebaseAdminLike = {
+    apps: any[];
+    initializeApp: (options: any) => unknown;
+    credential: {
+        cert: (config: any) => unknown;
+    };
+    messaging: () => {
+        sendEachForMulticast: (payload: {
+            notification: { title: string; body: string };
+            data: { url: string };
+            tokens: string[];
+        }) => Promise<{
+            successCount: number;
+            failureCount: number;
+            responses: Array<{ success: boolean }>;
+        }>;
+    };
+};
+
+type WebPushLike = {
+    setVapidDetails: (subject: string, publicKey: string, privateKey: string) => void;
+    sendNotification: (subscription: any, payload: string) => Promise<unknown>;
+};
 
 let supabaseAdmin: SupabaseClient | null = null;
-let firebaseAdminModule: FirebaseAdminModule['default'] | null = null;
-let webPushModule: WebPushModule['default'] | null = null;
+let firebaseAdminModule: FirebaseAdminLike | null = null;
+let webPushModule: WebPushLike | null = null;
 
 function normalizeServerEnv(value?: string | null) {
     if (!value) return '';
@@ -46,7 +67,7 @@ function getFirebaseConfig() {
     };
 }
 
-function getSupabaseAdmin() {
+export function getSupabaseAdmin() {
     if (supabaseAdmin) {
         return supabaseAdmin;
     }
@@ -68,7 +89,7 @@ async function getFirebaseAdmin() {
     }
 
     const module = await import('firebase-admin');
-    firebaseAdminModule = module.default;
+    firebaseAdminModule = ((module as any).default || module) as FirebaseAdminLike;
     return firebaseAdminModule;
 }
 
@@ -78,7 +99,7 @@ async function getWebPush() {
     }
 
     const module = await import('web-push');
-    webPushModule = module.default;
+    webPushModule = ((module as any).default || module) as WebPushLike;
     return webPushModule;
 }
 

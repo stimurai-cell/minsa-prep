@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { fetchPushSubscriptions, sendPushToSubscriptions, supabaseAdmin as supabase } from './_lib/push';
+import { fetchPushSubscriptions, getSupabaseAdmin, sendPushToSubscriptions } from './_lib/push';
 
 function send(res: ServerResponse, status: number, body: object) {
     const json = JSON.stringify(body);
@@ -45,6 +45,7 @@ function hasLowSimulation(dailyPlan: Record<string, any>): boolean {
 }
 
 async function ensureInsight(userId: string, title: string, description: string) {
+    const supabase = getSupabaseAdmin();
     const today = new Date();
     const todayStart = new Date(today.toDateString());
     const { data: existing } = await supabase
@@ -68,6 +69,7 @@ async function ensureInsight(userId: string, title: string, description: string)
 }
 
 async function processEliteFlags() {
+    const supabase = getSupabaseAdmin();
     const { data: plans } = await supabase
         .from('elite_study_plans')
         .select('id,user_id,week_start,week_end,daily_plan,status')
