@@ -24,6 +24,7 @@ import { useAppStore } from '../store/useAppStore';
 import { getRoleLabel } from '../lib/labels';
 import { supabase } from '../lib/supabase';
 import ErrorBoundary from './ErrorBoundary';
+import PushActivationPrompt from './PushActivationPrompt';
 
 export default function Layout() {
   const { profile, signOut } = useAuthStore();
@@ -153,6 +154,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
+      <PushActivationPrompt />
       <div className="mx-auto flex min-h-screen max-w-[1600px]">
         <aside className={`hidden w-80 shrink-0 border-r border-slate-200 bg-white xl:flex xl:flex-col ${isImmersiveSession ? 'xl:hidden' : ''}`}>
           <div className="border-b border-slate-100 px-7 py-8">

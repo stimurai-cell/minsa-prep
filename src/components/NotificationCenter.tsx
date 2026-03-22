@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Bell, BellOff, ExternalLink, Info, Megaphone, Trophy, X, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
-import { requestNotificationPermission } from '../lib/pushNotifications';
+import { requestNotificationPermission, syncPushSubscriptionIfGranted } from '../lib/pushNotifications';
 
 type AppNotification = {
     id: string;
@@ -68,7 +68,11 @@ export default function NotificationCenter() {
         if (!profile?.id) return;
 
         fetchNotifications();
-        requestNotificationPermission(profile.id).then(setPermissionStatus);
+        setPermissionStatus('Notification' in window ? Notification.permission : 'denied');
+
+        if ('Notification' in window && Notification.permission === 'granted') {
+            void syncPushSubscriptionIfGranted(profile.id);
+        }
 
         const subscription = supabase
             .channel('user_notifications')

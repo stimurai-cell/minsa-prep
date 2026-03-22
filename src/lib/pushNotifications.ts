@@ -147,6 +147,19 @@ export async function requestNotificationPermission(userId: string): Promise<Not
     return permission;
 }
 
+export async function syncPushSubscriptionIfGranted(userId: string): Promise<boolean> {
+    if (!userId || !('Notification' in window) || Notification.permission !== 'granted') {
+        return false;
+    }
+
+    try {
+        return await subscribeToPush(userId);
+    } catch (error) {
+        console.error('[Push] Falha ao sincronizar a subscricao ativa:', error);
+        return false;
+    }
+}
+
 export async function sendPushNotification(params: {
     title: string;
     body: string;

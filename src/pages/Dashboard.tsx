@@ -159,26 +159,6 @@ export default function Dashboard() {
     checkEliteOnboarding();
   }, [profile]);
 
-  // Autoreservar Notificações
-  useEffect(() => {
-    const askForNotifications = async () => {
-      if ("Notification" in window && Notification.permission === "default") {
-        try {
-          const permission = await Notification.requestPermission();
-          if (permission === "granted") {
-            new Notification("Notificações Ativadas!", {
-              body: "Agora você receberá lembretes de estudo e novidades do MINSA Prep.",
-              icon: "https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png"
-            });
-          }
-        } catch (error) {
-          console.error('Error requesting notification permission:', error);
-        }
-      }
-    };
-    askForNotifications();
-  }, []);
-
   useEffect(() => {
     const fetchStats = async () => {
       if (!profile?.id) {
@@ -370,7 +350,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5 md:space-y-8">
-
       {/* Aviso para utilizadores antigos sem meta definida */}
       {(profile as any)?.goal === null && (
         <div className="bg-orange-50 border-2 border-orange-200 rounded-[2rem] p-6 shadow-sm flex flex-col items-center text-center animate-in zoom-in duration-300">

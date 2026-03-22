@@ -18,6 +18,8 @@ const LEAGUE_ICONS: Record<string, string> = {
     'Ouro': '🥇',
 };
 
+const LEAGUE_ORDER = ['Bronze', 'Prata', 'Ouro'];
+
 export default function Leagues() {
     const navigate = useNavigate();
     const { profile } = useAuthStore();
@@ -86,11 +88,124 @@ export default function Leagues() {
 
     const userRank = stats.findIndex(s => s.user_id === profile?.id) + 1;
     const currentLeague = profile?.current_league || 'Bronze';
+    const currentLeagueIndex = LEAGUE_ORDER.indexOf(currentLeague);
+    const promotionLeague = currentLeagueIndex >= 0 && currentLeagueIndex < LEAGUE_ORDER.length - 1
+        ? LEAGUE_ORDER[currentLeagueIndex + 1]
+        : null;
+    const relegationLeague = currentLeagueIndex > 0 ? LEAGUE_ORDER[currentLeagueIndex - 1] : null;
+    const canRelegate = Boolean(relegationLeague) && stats.length > 15;
+    const relegationStartRank = canRelegate ? stats.length - 4 : null;
+    const isPromotionPosition = Boolean(promotionLeague) && userRank > 0 && userRank <= 10;
+    const isRelegationPosition = Boolean(relegationLeague) && Boolean(relegationStartRank) && userRank >= (relegationStartRank || Infinity);
+    const userWeeklyXp = userRank > 0 ? stats[userRank - 1]?.xp_earned || 0 : 0;
+    const outcomeClasses = isPromotionPosition
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+        : isRelegationPosition
+            ? 'border-rose-200 bg-rose-50 text-rose-700'
+            : 'border-sky-200 bg-sky-50 text-sky-700';
+    const outcomeTitle = isPromotionPosition
+        ? `Hoje voce sobe para ${promotionLeague}`
+        : isRelegationPosition
+            ? `Hoje voce desce para ${relegationLeague}`
+            : userRank > 0
+                ? `Hoje voce permanece na Liga ${currentLeague}`
+                : 'Ganhe XP para entrar no ranking desta semana';
+    const outcomeBody = isPromotionPosition
+        ? 'Feche a semana no Top 10 para confirmar a promocao.'
+        : isRelegationPosition
+            ? 'Fuja dos ultimos lugares para nao cair de divisao.'
+            : canRelegate
+                ? 'Continue a somar XP para se aproximar da promocao e manter distancia da zona vermelha.'
+                : 'Continue a somar XP para subir para a proxima liga.';
 
     return (
         <div className="max-w-3xl mx-auto pb-24">
             {/* League Header */}
-            <div className={`relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br ${LEAGUE_COLORS[currentLeague]} p-8 text-white shadow-2xl shadow-indigo-500/20 mb-8`}>
+            <div className={`relative overflow-hidden rounded-[2rem] bg-gradient-to-br ${LEAGUE_COLORS[currentLeague]} p-5 text-white shadow-2xl shadow-indigo-500/15 mb-5 md:p-6`}>
+                <div className="absolute right-0 top-0 h-32 w-32 rounded-full bg-white/10 blur-3xl" />
+                <div className="absolute -bottom-8 -left-8 h-24 w-24 rounded-full bg-black/10 blur-2xl" />
+
+                <div className="relative z-10 flex flex-col gap-4">
+                    <div className="flex items-start gap-4">
+                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[1.5rem] bg-white/15 text-4xl shadow-lg backdrop-blur-sm">
+                            {LEAGUE_ICONS[currentLeague]}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-white/75">Liga atual</p>
+                            <div className="mt-2 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                                <div>
+                                    <h1 className="text-3xl font-black tracking-tight md:text-4xl">Liga {currentLeague}</h1>
+                                    <p className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-white/90">
+                                        <TrendingUp className="h-4 w-4" />
+                                        Termina em <span className="underline decoration-2 underline-offset-4">{timeLeft}</span>
+                                    </p>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3 md:min-w-[240px]">
+                                    <div className="rounded-2xl border border-white/20 bg-white/15 px-4 py-3 backdrop-blur-sm">
+                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/70">Posicao</p>
+                                        <p className="mt-1 text-3xl font-black">#{userRank || '--'}</p>
+                                    </div>
+                                    <div className="rounded-2xl border border-white/20 bg-white/15 px-4 py-3 backdrop-blur-sm">
+                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/70">XP semana</p>
+                                        <p className="mt-1 text-3xl font-black">{userRank > 0 ? userWeeklyXp : '--'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className={`rounded-[1.5rem] border px-4 py-4 ${outcomeClasses}`}>
+                        <p className="text-[11px] font-black uppercase tracking-[0.2em]">Seu panorama agora</p>
+                        <p className="mt-2 text-lg font-black text-slate-900">{outcomeTitle}</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-700">{outcomeBody}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3 mb-6">
+                <div className="rounded-[1.6rem] border border-emerald-100 bg-emerald-50 px-4 py-4">
+                    <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                        <Trophy className="h-4 w-4" />
+                        Se subir
+                    </div>
+                    <p className="mt-3 text-base font-black text-slate-900">
+                        {promotionLeague ? `Vai para ${promotionLeague}` : 'Ja esta na liga maxima'}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
+                        {promotionLeague ? 'Top 10 garante a promocao no fecho semanal.' : 'Continue no topo para se manter no nivel mais alto.'}
+                    </p>
+                </div>
+
+                <div className="rounded-[1.6rem] border border-sky-100 bg-sky-50 px-4 py-4">
+                    <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-sky-700">
+                        <ShieldCheck className="h-4 w-4" />
+                        Faixa segura
+                    </div>
+                    <p className="mt-3 text-base font-black text-slate-900">
+                        {canRelegate ? 'Do meio da tabela para cima voce respira melhor' : 'Nesta liga o foco principal e subir'}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
+                        {canRelegate ? 'Ganhe XP para sair da pressao da zona vermelha e atacar o Top 10.' : 'Quanto mais cedo entrar no ranking, mais perto fica da proxima divisao.'}
+                    </p>
+                </div>
+
+                <div className="rounded-[1.6rem] border border-rose-100 bg-rose-50 px-4 py-4">
+                    <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-rose-700">
+                        <Flame className="h-4 w-4" />
+                        Se cair
+                    </div>
+                    <p className="mt-3 text-base font-black text-slate-900">
+                        {relegationLeague ? `Vai para ${relegationLeague}` : 'Sem liga abaixo da Bronze'}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
+                        {canRelegate ? `Os ultimos 5 colocados, a partir do #${relegationStartRank}, entram em risco.` : 'Nesta divisao nao existe rebaixamento abaixo da base.'}
+                    </p>
+                </div>
+            </div>
+
+            <div className={`hidden relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br ${LEAGUE_COLORS[currentLeague]} p-8 text-white shadow-2xl shadow-indigo-500/20 mb-8`}>
                 <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
                     <div className="text-6xl filter drop-shadow-lg animate-bounce duration-[2000ms]">
                         {LEAGUE_ICONS[currentLeague]}
@@ -113,7 +228,7 @@ export default function Leagues() {
             </div>
 
             {/* Promotion/Relegation Zone Legend */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="hidden grid grid-cols-2 gap-4 mb-6">
                 <div className="bg-emerald-50 border-2 border-emerald-100 p-4 rounded-2xl flex items-center gap-3">
                     <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
                     <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Zona de Promoção (Top 10)</p>

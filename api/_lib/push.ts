@@ -185,6 +185,14 @@ export async function fetchPushSubscriptions(userId?: string) {
     return (data || []) as PushSubscriptionRow[];
 }
 
+export function countRegisteredPushDevices(rows: PushSubscriptionRow[]) {
+    return new Set(
+        rows
+            .filter((row) => isFcmToken(row) || isWebPushSubscription(row))
+            .map((row) => row.endpoint.trim())
+    ).size;
+}
+
 export async function sendPushToSubscriptions(rows: PushSubscriptionRow[], payload: PushPayload) {
     const invalidEndpoints: string[] = [];
     let sent = 0;

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
-import { requestNotificationPermission, sendPushNotification } from '../lib/pushNotifications';
+import { sendPushNotification, syncPushSubscriptionIfGranted } from '../lib/pushNotifications';
 
 export default function PaymentNotificationListener() {
     const { profile } = useAuthStore();
@@ -10,7 +10,9 @@ export default function PaymentNotificationListener() {
     // Solicitar permissão e subscrever para push quando o utilizador abre o app
     useEffect(() => {
         if (!profile?.id) return;
-        requestNotificationPermission(profile.id);
+        if ('Notification' in window && Notification.permission === 'granted') {
+            void syncPushSubscriptionIfGranted(profile.id);
+        }
     }, [profile?.id]);
 
     // Ouvir novos pagamentos e enviar push ao admin

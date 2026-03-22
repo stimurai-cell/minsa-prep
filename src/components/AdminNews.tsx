@@ -58,7 +58,32 @@ export default function AdminNews() {
             setDeviceCount(null);
             return;
         }
+        let cancelled = false;
+        setDeviceCount(null);
         const fetchDeviceCount = async () => {
+            try {
+                const response = await fetch('/api/push-status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: selectedUser.id }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`status_${response.status}`);
+                }
+
+                const data = await response.json();
+                if (!cancelled) {
+                    setDeviceCount(Number(data.count || 0));
+                }
+                return;
+            } catch (error) {
+                console.error('[Admin] Erro ao verificar dispositivos pela API:', error);
+                if (!cancelled) {
+                    setDeviceCount(0);
+                }
+                return;
+            }
             console.log(`[Admin] A verificar dispositivos para usuário: ${selectedUser.id} (${selectedUser.full_name})`);
             const { data, count, error } = await supabase
                 .from('push_subscriptions')
@@ -103,7 +128,10 @@ export default function AdminNews() {
             setDeviceCount(registeredEndpoints.size);
         };
         fetchDeviceCount();
-    }, [selectedUser]);
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedUser?.id]);
 
     const handlePostNews = async () => {
         if (!newsTitle || !newsBody) return alert('Preencha o título e o corpo da notícia.');
@@ -308,10 +336,10 @@ export default function AdminNews() {
                                 <div className="flex items-center justify-between bg-amber-50 border-2 border-amber-200 rounded-2xl px-4 py-3">
                                     <div className="flex flex-col">
                                         <p className="text-sm font-black text-slate-900">{selectedUser.full_name}</p>
-                                        <p className={`text-[10px] font-bold uppercase ${deviceCount && deviceCount > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                            {deviceCount === null ? 'A carregar dispositivos...' :
-                                                deviceCount === 0 ? '⚠️ Nenhum dispositivo registado (Push OFF)' :
-                                                    `✅ ${deviceCount} dispositivo(s) registado(s)`}
+                                        <p className={`text-[10px] font-bold uppercase ${deviceCount === null ? 'text-slate-400' : deviceCount > 0 ? 'text-emerald-500' : 'text-amber-600'}`}>
+                                            {deviceCount === null ? 'A verificar telefones ativos...' :
+                                                deviceCount === 0 ? 'Aviso interno disponivel, mas sem telefone ligado ao push' :
+                                                    `Push ativo em ${deviceCount} aparelho(s)`}
                                         </p>
                                     </div>
                                     <button
