@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, TrendingUp, Trophy, Flame, ChevronRight, Info } from 'lucide-react';
+import { TrendingUp, ChevronRight, Info } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { motion } from 'motion/react';
@@ -89,12 +89,6 @@ export default function Leagues() {
     const userRank = stats.findIndex(s => s.user_id === profile?.id) + 1;
     const currentLeague = profile?.current_league || 'Bronze';
     const currentLeagueIndex = LEAGUE_ORDER.indexOf(currentLeague);
-    const promotionLeague = currentLeagueIndex >= 0 && currentLeagueIndex < LEAGUE_ORDER.length - 1
-        ? LEAGUE_ORDER[currentLeagueIndex + 1]
-        : null;
-    const relegationLeague = currentLeagueIndex > 0 ? LEAGUE_ORDER[currentLeagueIndex - 1] : null;
-    const canRelegate = Boolean(relegationLeague) && stats.length > 15;
-    const relegationStartRank = canRelegate ? stats.length - 4 : null;
     const userWeeklyXp = userRank > 0 ? stats[userRank - 1]?.xp_earned || 0 : 0;
     const getLeagueStatus = (index: number) => {
         if (index === currentLeagueIndex) return 'Atual';
@@ -179,47 +173,6 @@ export default function Leagues() {
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-3 mb-6">
-                <div className="rounded-[1.6rem] border border-emerald-100 bg-emerald-50 px-4 py-4">
-                    <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">
-                        <Trophy className="h-4 w-4" />
-                        Se subir
-                    </div>
-                    <p className="mt-3 text-base font-black text-slate-900">
-                        {promotionLeague ? `Vai para ${promotionLeague}` : 'Ja esta na liga maxima'}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                        {promotionLeague ? 'Top 10 garante a promocao no fecho semanal.' : 'Continue no topo para se manter no nivel mais alto.'}
-                    </p>
-                </div>
-
-                <div className="rounded-[1.6rem] border border-sky-100 bg-sky-50 px-4 py-4">
-                    <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-sky-700">
-                        <ShieldCheck className="h-4 w-4" />
-                        Faixa segura
-                    </div>
-                    <p className="mt-3 text-base font-black text-slate-900">
-                        {canRelegate ? 'Do meio da tabela para cima voce respira melhor' : 'Nesta liga o foco principal e subir'}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                        {canRelegate ? 'Ganhe XP para sair da pressao da zona vermelha e atacar o Top 10.' : 'Quanto mais cedo entrar no ranking, mais perto fica da proxima divisao.'}
-                    </p>
-                </div>
-
-                <div className="rounded-[1.6rem] border border-rose-100 bg-rose-50 px-4 py-4">
-                    <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-rose-700">
-                        <Flame className="h-4 w-4" />
-                        Se cair
-                    </div>
-                    <p className="mt-3 text-base font-black text-slate-900">
-                        {relegationLeague ? `Vai para ${relegationLeague}` : 'Sem liga abaixo da Bronze'}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                        {canRelegate ? `Os ultimos 5 colocados, a partir do #${relegationStartRank}, entram em risco.` : 'Nesta divisao nao existe rebaixamento abaixo da base.'}
-                    </p>
                 </div>
             </div>
 
