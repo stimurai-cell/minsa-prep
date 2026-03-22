@@ -1,4 +1,4 @@
-import { fetchPushSubscriptions, sendPushToSubscriptions } from './_lib/push';
+import { fetchPushSubscriptions, sendPushToSubscriptions } from './_lib/push.js';
 
 export default async function handler(req: any, res: any) {
     if (req.method !== 'POST') {

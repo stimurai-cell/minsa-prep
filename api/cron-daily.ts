@@ -1,4 +1,4 @@
-import { fetchPushSubscriptions, getSupabaseAdmin, sendPushToSubscriptions } from './_lib/push';
+import { fetchPushSubscriptions, getSupabaseAdmin, sendPushToSubscriptions } from './_lib/push.js';
 
 const morningMessages = [
     { title: 'Bom dia, futuro craque!', body: 'Que tal 15 minutinhos de treino agora para comecar o dia com o pe direito?' },
