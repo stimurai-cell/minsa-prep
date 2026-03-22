@@ -1,11 +1,4 @@
-import type { IncomingMessage, ServerResponse } from 'http';
 import { fetchPushSubscriptions, getSupabaseAdmin, sendPushToSubscriptions } from './_lib/push';
-
-function send(res: ServerResponse, status: number, body: object) {
-    const json = JSON.stringify(body);
-    res.writeHead(status, { 'Content-Type': 'application/json' });
-    res.end(json);
-}
 
 const morningMessages = [
     { title: 'Bom dia, futuro craque!', body: 'Que tal 15 minutinhos de treino agora para comecar o dia com o pe direito?' },
@@ -119,16 +112,16 @@ async function processEliteFlags() {
     return { replanFlags, lowSimFlags };
 }
 
-export default async function handler(req: IncomingMessage, res: ServerResponse) {
+export default async function handler(req: any, res: any) {
     if (req.method !== 'GET' && req.method !== 'POST') {
-        return send(res, 405, { error: 'Method not allowed' });
+        return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const authHeader = req.headers.authorization;
+    const authHeader = req.headers?.authorization;
     const cronSecret = process.env.VERCEL_CRON_SECRET;
 
     if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-        return send(res, 401, { error: 'Unauthorized' });
+        return res.status(401).json({ error: 'Unauthorized' });
     }
 
     const hour = new Date().getHours();
@@ -139,7 +132,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         const subscriptions = await fetchPushSubscriptions();
 
         if (!subscriptions.length) {
-            return send(res, 200, { sent: 0, message: 'No subscriptions found' });
+            return res.status(200).json({ sent: 0, message: 'No subscriptions found' });
         }
 
         const response = await sendPushToSubscriptions(subscriptions, {
@@ -155,7 +148,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             console.error('[cron-daily] flag processing error:', flagErr);
         }
 
-        return send(res, 200, {
+        return res.status(200).json({
             sent: response.sent,
             failures: response.failures,
             total: response.total,
@@ -165,6 +158,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         });
     } catch (err: any) {
         console.error('[cron-daily] Error:', err);
-        return send(res, 500, { error: err.message });
+        return res.status(500).json({ error: err.message });
     }
 }
