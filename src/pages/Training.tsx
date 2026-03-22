@@ -100,10 +100,10 @@ export default function Training() {
   const sessionTopicId = searchParams.get('topic') || '';
   const isReviewMode = searchParams.get('type') === 'review';
   const sessionDifficulty = (searchParams.get('difficulty') as DifficultyPreference) || 'mixed';
-  const freeAutoTopicEnabled = profile?.role === 'free';
-  const manualModeRequested = searchParams.get('mode') === 'manual' && !freeAutoTopicEnabled;
+  const isFreeUser = profile?.role === 'free';
+  const manualModeRequested = searchParams.get('mode') === 'manual';
   const guidedTrainingEnabled = hasGuidedTraining && !manualModeRequested;
-  const autoTopicEnabled = guidedTrainingEnabled || freeAutoTopicEnabled;
+  const autoTopicEnabled = guidedTrainingEnabled;
   const trainingBasePath = autoTopicEnabled ? '/training' : '/training?mode=manual';
   const offlineQuestions = hasOfflinePackage ? downloadedQuestions : [];
   const availableOfflineQuestionCount = hasOfflinePackage ? questionCount : 0;
@@ -148,21 +148,13 @@ export default function Training() {
       if (!nextTopic) return;
 
       setSelectedTopic(nextTopic.id);
-      setTopicAssignmentNote(
-        guidedTrainingEnabled
-          ? `Topico guiado ${nextTopicIndex + 1} de ${orderedTopics.length}. O sistema avanca em ordem crescente sempre que voce entra nesta pagina.`
-          : 'Tema de hoje pronto para praticar.'
-      );
+      setTopicAssignmentNote(`Topico guiado ${nextTopicIndex + 1} de ${orderedTopics.length}. O sistema avanca em ordem crescente sempre que voce entra nesta pagina.`);
       localStorage.setItem(storageKey, nextTopic.id);
     } catch (error) {
       console.error('Erro ao atribuir topico automaticamente:', error);
       if (orderedTopics[0]) {
         setSelectedTopic(orderedTopics[0].id);
-        setTopicAssignmentNote(
-          guidedTrainingEnabled
-            ? 'Topico guiado definido automaticamente para manter a sequencia da area.'
-            : 'Tema de hoje pronto para praticar.'
-        );
+        setTopicAssignmentNote('Topico guiado definido automaticamente para manter a sequencia da area.');
       }
     } finally {
       setAssigningTopic(false);
@@ -1122,15 +1114,15 @@ export default function Training() {
           <h2 className="text-2xl font-black text-slate-900">
             {guidedTrainingEnabled
               ? 'Treino guiado pelo sistema'
-              : freeAutoTopicEnabled
-                ? 'Treino do dia'
+              : isFreeUser
+                ? 'Treino diario'
                 : 'Monte o seu treino'}
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             {guidedTrainingEnabled
               ? 'Seu proximo treino ja esta pronto.'
-              : freeAutoTopicEnabled
-                ? 'Seu treino ja esta pronto para comecar.'
+              : isFreeUser
+                ? 'Escolha o topico e o nivel para praticar hoje.'
                 : 'Escolha o topico e o nivel para comecar.'}
           </p>
 
@@ -1144,20 +1136,16 @@ export default function Training() {
               <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,#f8fffb_0%,#ffffff_100%)] px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-500">
-                      {guidedTrainingEnabled ? 'Foco definido pelo sistema' : 'Tema selecionado'}
-                    </p>
+                    <p className="text-sm font-semibold text-slate-500">Foco definido pelo sistema</p>
                     <p className="mt-1 text-lg font-black text-slate-900">
                       {assigningTopic ? 'A organizar o proximo foco...' : selectedTopicName}
                     </p>
                   </div>
                   <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
-                    {guidedTrainingEnabled ? 'Auto' : 'Hoje'}
+                    Auto
                   </span>
                 </div>
-                {guidedTrainingEnabled && (
-                  <p className="mt-3 text-sm leading-6 text-slate-600">{topicAssignmentNote}</p>
-                )}
+                <p className="mt-3 text-sm leading-6 text-slate-600">{topicAssignmentNote}</p>
               </div>
             ) : (
               <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,#f8fffb_0%,#ffffff_100%)] px-4 py-4">
@@ -1175,7 +1163,7 @@ export default function Training() {
                   ))}
                 </select>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
-                  Escolha o foco desta sessao manualmente.
+                  {isFreeUser ? 'Escolha o foco desta sessao.' : 'Escolha o foco desta sessao manualmente.'}
                 </p>
               </div>
             )}
@@ -1269,8 +1257,8 @@ export default function Training() {
               </>
             ) : (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs leading-5 text-emerald-900">
-                {freeAutoTopicEnabled
-                  ? 'Entre, pratique e siga para a proxima sessao quando quiser.'
+                {isFreeUser
+                  ? 'Escolha o tema do treino e pratique no seu ritmo.'
                   : 'Os recursos avancados desta pagina continuam disponiveis no plano Elite.'}
                 <Link to="/premium" className="ml-1 font-black underline">
                   Ver Elite
@@ -1286,7 +1274,7 @@ export default function Training() {
             >
               {guidedTrainingEnabled
                 ? (assigningTopic ? 'A definir foco...' : 'Iniciar treino guiado')
-                : freeAutoTopicEnabled
+                : isFreeUser
                   ? (assigningTopic ? 'A preparar treino...' : 'Comecar treino')
                   : 'Iniciar treino'}
             </button>

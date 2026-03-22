@@ -48,7 +48,7 @@ export default function Dashboard() {
   const perms = usePermissions();
   const isPaidUser = perms.canAccessSimulation;
   const isFreeUser = profile?.role === 'free';
-  const trainingUsesAutomaticTopic = perms.hasGuidedTraining || isFreeUser;
+  const trainingUsesAutomaticTopic = perms.hasGuidedTraining;
   const [stats, setStats] = useState({
     totalQuestions: 0,
     avgScore: 0,

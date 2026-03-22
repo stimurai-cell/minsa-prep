@@ -62,7 +62,7 @@ export default function AdminNews() {
             console.log(`[Admin] A verificar dispositivos para usuário: ${selectedUser.id} (${selectedUser.full_name})`);
             const { data, count, error } = await supabase
                 .from('push_subscriptions')
-                .select('endpoint, user_id, created_at')
+                .select('endpoint, user_id, created_at, subscription')
                 .eq('user_id', selectedUser.id);
             
             console.log(`[Admin] Resultado da consulta:`, { data, count, error });
@@ -79,9 +79,28 @@ export default function AdminNews() {
                 typeof sub.endpoint === 'string' && 
                 !sub.endpoint.startsWith('http')
             ) || [];
+            const registeredEndpoints = new Set(
+                (data || [])
+                    .filter((sub) => {
+                        if (!sub?.endpoint || typeof sub.endpoint !== 'string') {
+                            return false;
+                        }
+
+                        if (!sub.endpoint.startsWith('http')) {
+                            return true;
+                        }
+
+                        return Boolean(
+                            sub.subscription?.endpoint &&
+                            sub.subscription?.keys?.auth &&
+                            sub.subscription?.keys?.p256dh
+                        );
+                    })
+                    .map((sub) => sub.endpoint.trim())
+            );
             
             console.log(`[Admin] Tokens FCM válidos encontrados:`, validFCMTokens.length);
-            setDeviceCount(validFCMTokens.length);
+            setDeviceCount(registeredEndpoints.size);
         };
         fetchDeviceCount();
     }, [selectedUser]);

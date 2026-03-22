@@ -853,7 +853,11 @@ export default function Simulation() {
             Iniciar simulacao de prova
           </button>
 
-          <div className="mt-4">
+          <p className="mt-4 text-sm leading-6 text-slate-600">
+            As 30 questoes ja saem equilibradas automaticamente para refletir melhor a prova real.
+          </p>
+
+          <div className="hidden">
             <label className="mb-2 block text-sm font-semibold text-slate-700">Nível</label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {(['mixed', 'easy', 'medium', 'hard'] as DifficultyPreference[]).map((difficulty) => (

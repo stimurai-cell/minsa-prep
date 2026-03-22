@@ -7,7 +7,7 @@ export default function Practice() {
     const { profile } = useAuthStore();
     const { hasGuidedTraining, hasBattleMode } = usePermissions();
     const isFreeUser = profile?.role === 'free';
-    const trainingUsesAutomaticTopic = hasGuidedTraining || isFreeUser;
+    const trainingUsesAutomaticTopic = hasGuidedTraining;
 
     const practiceModes = [
         {
@@ -16,7 +16,7 @@ export default function Practice() {
             description: hasGuidedTraining
                 ? 'Seu proximo treino ja esta preparado.'
                 : isFreeUser
-                    ? 'Entre e comece a praticar.'
+                    ? 'Escolha o topico e comece a praticar.'
                     : 'Escolha o topico e comece o treino.',
             icon: BookOpen,
             color: 'emerald',
