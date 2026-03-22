@@ -23,10 +23,9 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import { getRoleLabel } from '../lib/labels';
 import { supabase } from '../lib/supabase';
+import AppLogo from './AppLogo';
 import ErrorBoundary from './ErrorBoundary';
 import PushActivationPrompt from './PushActivationPrompt';
-
-const APP_ICON_SRC = '/app-icon.png';
 
 export default function Layout() {
   const { profile, signOut } = useAuthStore();
@@ -161,13 +160,7 @@ export default function Layout() {
         <aside className={`hidden w-80 shrink-0 border-r border-slate-200 bg-white xl:flex xl:flex-col ${isImmersiveSession ? 'xl:hidden' : ''}`}>
           <div className="border-b border-slate-100 px-7 py-8">
             <div className="flex flex-col items-center">
-              <div className="flex h-24 w-24 items-center justify-center rounded-[2rem] border border-slate-100 bg-white p-2 shadow-xl shadow-emerald-900/5 transition-transform hover:scale-[1.02]">
-                <img
-                  src={APP_ICON_SRC}
-                  alt="MINSA Prep Logo"
-                  className="h-full w-full scale-[1.12] object-contain"
-                />
-              </div>
+              <AppLogo className="h-24 w-24 rounded-[2rem] border border-slate-100 bg-white p-2 shadow-xl shadow-emerald-900/5 transition-transform hover:scale-[1.02]" />
             </div>
           </div>
 
@@ -269,13 +262,7 @@ export default function Layout() {
             <div className="px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-100 bg-white p-1 shadow-sm">
-                    <img
-                      src={APP_ICON_SRC}
-                      alt="MINSA Prep Logo"
-                      className="h-full w-full scale-[1.12] object-contain"
-                    />
-                  </div>
+                  <AppLogo className="h-12 w-12 shrink-0 rounded-2xl border border-slate-100 bg-white p-1 shadow-sm" />
                   <div className="min-w-0">
                     <p className="truncate text-xl font-black tracking-tight text-emerald-700">MINSA Prep</p>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
+import { APP_ICON_SRC } from '../lib/brand';
 import { sendPushNotification, syncPushSubscriptionIfGranted } from '../lib/pushNotifications';
 
 export default function PaymentNotificationListener() {
@@ -42,7 +43,7 @@ export default function PaymentNotificationListener() {
                     if ('Notification' in window && Notification.permission === 'granted') {
                         new Notification('💰 Novo Pagamento Recebido!', {
                             body: `${newRequest.payer_name} enviou um comprovativo para o plano ${newRequest.plan_name}.`,
-                            icon: 'https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png',
+                            icon: APP_ICON_SRC,
                             tag: `payment-${newRequest.id}`,
                         });
                     }

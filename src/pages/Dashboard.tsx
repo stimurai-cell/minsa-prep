@@ -29,6 +29,7 @@ import { useNavigate } from 'react-router-dom';
 import DailyTasks from '../components/DailyTasks';
 import AIMentor from '../components/AIMentor';
 import NotificationCenter from '../components/NotificationCenter';
+import { APP_ICON_SRC } from '../lib/brand';
 import { usePermissions } from '../lib/permissions';
 import { EliteStrategyManager } from '../lib/eliteStrategy';
 import { fetchStreakSnapshot } from '../lib/streak';
@@ -266,7 +267,7 @@ export default function Dashboard() {
         if ("Notification" in window && Notification.permission === "granted") {
           new Notification("Tarefa Concluída! 🎉", {
             body: "Você deu mais um passo importante na sua preparação. Continue assim!",
-            icon: "https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png"
+            icon: APP_ICON_SRC
           });
         }
       }
@@ -397,9 +398,9 @@ export default function Dashboard() {
             <div className="flex items-center gap-6">
               <div className={`w-24 h-24 rounded-full border-4 border-white bg-white flex items-center justify-center shadow-lg shadow-emerald-600/10 overflow-hidden relative ${!profile?.avatar_url ? 'p-1' : ''}`}>
                 <img
-                  src={profile?.avatar_url || "https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/qosfbrnflucygej3us4h.png"}
+                  src={profile?.avatar_url || APP_ICON_SRC}
                   alt="Avatar"
-                  className="w-full h-full object-cover"
+                  className={`w-full h-full ${profile?.avatar_url ? 'object-cover' : 'object-contain scale-[1.08]'}`}
                 />
               </div>
               <div>

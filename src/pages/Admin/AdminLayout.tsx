@@ -6,6 +6,7 @@ import {
     Megaphone, HardDrive, Brain
 } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
+import AppLogo from '../../components/AppLogo';
 
 interface AdminLayoutProps {
     children: ReactNode;
@@ -91,9 +92,7 @@ export default function AdminLayout({ children, activeTab, onTabChange }: AdminL
             {/* --- DESKTOP SIDEBAR --- */}
             <aside className="hidden md:flex flex-col w-72 bg-white border-r border-slate-200 h-screen sticky top-0 overflow-y-auto">
                 <div className="p-6 border-b border-slate-100">
-                    <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-md mb-2">
-                        M
-                    </div>
+                    <AppLogo className="mb-2 h-10 w-10 rounded-xl border border-slate-100 bg-white p-1 shadow-md" />
                     <h2 className="font-black text-slate-900 text-lg">MINSA Admin</h2>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Centro de Gestão</p>
                 </div>
@@ -143,9 +142,7 @@ export default function AdminLayout({ children, activeTab, onTabChange }: AdminL
                 {/* Mobile Header */}
                 <header className="md:hidden flex items-center justify-between mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white font-black shadow-md">
-                            M
-                        </div>
+                        <AppLogo className="h-10 w-10 rounded-xl border border-slate-100 bg-white p-1 shadow-md" />
                         <div>
                             <h1 className="font-black text-slate-900 leading-tight">Painel Admin</h1>
                             <p className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold">Gestão Ativa</p>

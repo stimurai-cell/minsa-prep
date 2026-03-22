@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Activity, Eye, EyeOff, Mail, ShieldCheck, Download } from 'lucide-react';
+import AppLogo from '../components/AppLogo';
 
 const REMEMBERED_EMAIL_KEY = 'minsa-prep-remembered-email';
 
@@ -103,13 +104,7 @@ export default function Login() {
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md z-10">
         <div className="flex justify-center">
-          <div className="flex h-20 w-48 items-center justify-center rounded-[2rem] bg-white shadow-xl border border-white/20 p-4">
-            <img
-              src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/abj60fbildawqtq47qgu.png"
-              alt="MINSA Prep Logo"
-              className="h-full w-full object-contain"
-            />
-          </div>
+          <AppLogo className="h-20 w-20 rounded-[2rem] border border-white/20 bg-white p-2 shadow-xl" />
         </div>
         <h2 className="mt-8 text-center text-3xl font-black tracking-tight text-white">
           Entrar na sua conta

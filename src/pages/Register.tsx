@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import { Activity, Eye, EyeOff, Download } from 'lucide-react';
+import AppLogo from '../components/AppLogo';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
@@ -150,13 +151,7 @@ export default function Register() {
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md z-10">
         <div className="flex justify-center">
-          <div className="flex h-16 w-40 items-center justify-center rounded-[1.5rem] bg-white shadow-xl border border-white/20 p-3">
-            <img
-              src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/abj60fbildawqtq47qgu.png"
-              alt="MINSA Prep Logo"
-              className="h-full w-full object-contain"
-            />
-          </div>
+          <AppLogo className="h-16 w-16 rounded-[1.5rem] border border-white/20 bg-white p-1.5 shadow-xl" />
         </div>
         <h2 className="mt-6 text-center text-2xl font-black tracking-tight text-white">
           Crie a sua conta

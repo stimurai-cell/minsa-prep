@@ -2,6 +2,7 @@ import { ShieldCheck, Zap, ArrowRight, UserPlus, LogIn, Sparkles, BookOpen, Targ
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { useState, useEffect } from 'react';
+import AppLogo from '../components/AppLogo';
 
 export default function Welcome() {
     const [isStandalone, setIsStandalone] = useState(false);
@@ -72,13 +73,7 @@ export default function Welcome() {
                         transition={{ duration: 0.8, delay: 0.2 }}
                         className="flex justify-center"
                     >
-                        <div className="h-24 w-64 bg-white/90 backdrop-blur-xl rounded-[2.5rem] p-4 shadow-2xl border border-white/20">
-                            <img
-                                src="https://res.cloudinary.com/dzvusz0u4/image/upload/v1773051625/abj60fbildawqtq47qgu.png"
-                                alt="MINSA Prep Logo"
-                                className="h-full w-full object-contain"
-                            />
-                        </div>
+                        <AppLogo className="h-24 w-24 rounded-[2.5rem] border border-white/20 bg-white/90 p-2 shadow-2xl backdrop-blur-xl" />
                     </motion.div>
 
                     <motion.h1
