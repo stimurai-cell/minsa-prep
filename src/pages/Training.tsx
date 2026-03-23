@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useRef } from 'react';
 import {
   ArrowRight,
   BookOpen,
@@ -72,6 +73,7 @@ export default function Training() {
   const [earnedBadges, setEarnedBadges] = useState<Badge[]>([]);
   const [showBadge, setShowBadge] = useState<Badge | null>(null);
   const [dailyLessonRegistered, setDailyLessonRegistered] = useState(false);
+  const selectedDifficultyRef = useRef<DifficultyPreference>('mixed');
   const {
     downloadedQuestions,
     hydrateBundle,
@@ -209,7 +211,9 @@ export default function Training() {
   }, [assigningTopic, autoTopicEnabled, orderedTopics, selectedTopic, sessionActive, sessionTopicId, location.key]);
 
   useEffect(() => {
-    setSelectedDifficulty(hasPremiumAccess ? sessionDifficulty : (sessionDifficulty === 'hard' ? 'medium' : sessionDifficulty));
+    const nextDifficulty = hasPremiumAccess ? sessionDifficulty : (sessionDifficulty === 'hard' ? 'medium' : sessionDifficulty);
+    selectedDifficultyRef.current = nextDifficulty;
+    setSelectedDifficulty(nextDifficulty);
   }, [hasPremiumAccess, sessionDifficulty]);
 
   useEffect(() => {
@@ -255,6 +259,7 @@ export default function Training() {
 
     setGuidedOverrideEnabled(false);
     setSelectedTopic('');
+    selectedDifficultyRef.current = 'mixed';
     setSelectedDifficulty('mixed');
     setTopicAssignmentNote(AUTO_TOPIC_LOADING_NOTE);
   };
@@ -269,6 +274,7 @@ export default function Training() {
 
     setGuidedOverrideEnabled(true);
     setSelectedTopic('');
+    selectedDifficultyRef.current = 'mixed';
     setSelectedDifficulty('mixed');
   };
 
@@ -693,7 +699,8 @@ export default function Training() {
       return;
     }
 
-    const difficulty = hasPremiumAccess ? selectedDifficulty : (selectedDifficulty === 'hard' ? 'medium' : selectedDifficulty);
+    const requestedDifficulty = selectedDifficultyRef.current;
+    const difficulty = hasPremiumAccess ? requestedDifficulty : (requestedDifficulty === 'hard' ? 'medium' : requestedDifficulty);
     const actualTopic = selectedTopic;
     const sessionUrl = `${trainingBasePath}${trainingBasePath.includes('?') ? '&' : '?'}session=1&topic=${actualTopic}&difficulty=${difficulty}`;
 
@@ -1279,6 +1286,7 @@ export default function Training() {
                         navigate(`/premium?plan=focus#payment-section`);
                         return;
                       }
+                      selectedDifficultyRef.current = difficulty;
                       setSelectedDifficulty(difficulty);
                     }}
                     disabled={!hasPremiumAccess && difficulty === 'hard'}
