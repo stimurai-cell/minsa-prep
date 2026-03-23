@@ -240,16 +240,20 @@ export default function Leagues() {
     const handleAcknowledgeResult = async () => {
         if (!pendingResult) return;
 
-        setPendingResult(null);
-
-        const { error } = await supabase
-            .from('league_results')
-            .update({ acknowledged_at: new Date().toISOString() })
-            .eq('id', pendingResult.id);
+        const { data, error } = await supabase
+            .rpc('acknowledge_league_result', { p_result_id: pendingResult.id });
 
         if (error) {
             console.error('[Leagues] Erro ao marcar resultado como visto:', error);
+            return;
         }
+
+        if (!data) {
+            console.error('[Leagues] Resultado semanal nao foi confirmado para o utilizador atual.');
+            return;
+        }
+
+        setPendingResult(null);
     };
 
     const renderLeaderboard = () => {

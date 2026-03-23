@@ -449,10 +449,16 @@ export default function Training() {
     recentQuestionIds: string[],
     options: { strictDifficulty?: boolean } = {}
   ) => {
-    const { data: idData, error: idError } = await supabase
+    let idQuery = supabase
       .from('questions')
-      .select('id')
+      .select('id, difficulty')
       .eq('topic_id', topicId);
+
+    if (options.strictDifficulty && difficulty !== 'mixed') {
+      idQuery = idQuery.eq('difficulty', difficulty);
+    }
+
+    const { data: idData, error: idError } = await idQuery;
 
     if (idError) throw idError;
     if (!idData?.length) {
