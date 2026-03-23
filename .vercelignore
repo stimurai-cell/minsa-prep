@@ -1,0 +1,20 @@
+tools
+android
+node_modules
+dist
+.agent
+docs
+minsa-prep-master
+sql
+*.log
+push_error.txt
+check_*.ts
+check_*.mjs
+test-*.js
+test-*.ts
+api-test.html
+PROMT MINSA Prep stimurai.txt
+PROPOSTA_VALOR_ELITE_MARKETING.md
+RESUMO_MINSA_PREP.md
+TEST_NOTIFICACOES.md
+vercel-ignore-protection.json
