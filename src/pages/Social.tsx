@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
+import WhatsAppCommunityCard from '../components/WhatsAppCommunityCard';
 
 export default function Social() {
     const { profile } = useAuthStore();
@@ -205,6 +206,8 @@ export default function Social() {
                     Novidades
                 </button>
             </div>
+
+            <WhatsAppCommunityCard compact />
 
             {activeTab === 'friends' && (
                 <div className="space-y-8">

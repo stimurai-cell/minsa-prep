@@ -29,6 +29,7 @@ import { useNavigate } from 'react-router-dom';
 import DailyTasks from '../components/DailyTasks';
 import AIMentor from '../components/AIMentor';
 import NotificationCenter from '../components/NotificationCenter';
+import WhatsAppCommunityCard from '../components/WhatsAppCommunityCard';
 import { APP_ICON_SRC } from '../lib/brand';
 import { usePermissions } from '../lib/permissions';
 import { EliteStrategyManager } from '../lib/eliteStrategy';
@@ -391,6 +392,11 @@ export default function Dashboard() {
           <p className="text-sm font-medium text-indigo-900">{dailyTip}</p>
         </div>
       </div>
+
+      <WhatsAppCommunityCard
+        title="Entrar na comunidade dos estudantes"
+        description="Entre direto na comunidade oficial do WhatsApp para receber orientacoes, trocar experiencias e estudar com outros candidatos."
+      />
 
       <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,#dff7ea,transparent_36%),linear-gradient(135deg,#ffffff_0%,#f5fff9_48%,#eff6ff_100%)] p-5 shadow-[0_28px_90px_-48px_rgba(15,23,42,0.45)] md:p-8">
         <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
