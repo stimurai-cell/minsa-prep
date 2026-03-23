@@ -1,12 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { ChevronRight, Moon, Sun, Trash2 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
-import { ChevronRight, LogOut, ExternalLink, Settings as SettingsIcon, Sun, Moon } from 'lucide-react';
 
 export default function Settings() {
-    const { signOut } = useAuthStore();
+    const { signOut, setUser, setProfile } = useAuthStore();
     const navigate = useNavigate();
     const [theme, setTheme] = useState(localStorage.getItem('minsa-theme') || 'dark');
+    const [deletingAccount, setDeletingAccount] = useState(false);
+    const [accountError, setAccountError] = useState('');
 
     useEffect(() => {
         if (theme === 'light') {
@@ -22,79 +25,136 @@ export default function Settings() {
         navigate('/login');
     };
 
+    const handleDeleteAccount = async () => {
+        const confirmed = window.confirm('Esta acao vai apagar a tua conta e o teu progresso de forma permanente. Desejas continuar?');
+        if (!confirmed) return;
+
+        setDeletingAccount(true);
+        setAccountError('');
+
+        try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const accessToken = sessionData.session?.access_token;
+
+            if (!accessToken) {
+                throw new Error('Sessao expirada. Inicia sessao novamente antes de excluir a conta.');
+            }
+
+            const response = await fetch('/api/delete-account', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({ confirmDeletion: true }),
+            });
+
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(result.error || 'Nao foi possivel excluir a conta.');
+            }
+
+            setUser(null);
+            setProfile(null);
+            localStorage.removeItem('minsa-prep-auth-storage');
+            navigate('/welcome', { replace: true });
+        } catch (error: any) {
+            setAccountError(error.message || 'Nao foi possivel excluir a conta agora.');
+        } finally {
+            setDeletingAccount(false);
+        }
+    };
+
     return (
-        <div className="mx-auto max-w-2xl bg-slate-50 min-h-screen">
-            <div className="flex items-center justify-between px-4 py-4 bg-white border-b-2 border-slate-100 sticky top-0 z-10">
-                <h1 className="text-xl font-black text-slate-400 uppercase tracking-widest mx-auto translate-x-3">Configurações</h1>
-                <Link to="/profile" className="text-sky-500 font-bold tracking-wide uppercase text-sm pr-2">Pronto</Link>
+        <div className="mx-auto min-h-screen max-w-2xl bg-slate-50">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b-2 border-slate-100 bg-white px-4 py-4">
+                <h1 className="mx-auto translate-x-3 text-xl font-black uppercase tracking-widest text-slate-400">
+                    Configuracoes
+                </h1>
+                <Link to="/profile" className="pr-2 text-sm font-bold uppercase tracking-wide text-sky-500">
+                    Pronto
+                </Link>
             </div>
 
-            <div className="p-4 space-y-6 animate-in fade-in duration-300">
-
-                {/* Account Section */}
-                <div className="bg-white rounded-2xl border-2 border-slate-200 divide-y-2 divide-slate-100 overflow-hidden">
-                    <Link to="/settings/profile" className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors active:bg-slate-100">
+            <div className="animate-in fade-in space-y-6 p-4 duration-300">
+                <div className="overflow-hidden rounded-2xl border-2 border-slate-200 bg-white">
+                    <Link to="/settings/profile" className="flex items-center justify-between p-4 transition-colors hover:bg-slate-50 active:bg-slate-100">
                         <span className="font-bold text-slate-700">Perfil</span>
-                        <ChevronRight className="w-5 h-5 text-slate-400" />
+                        <ChevronRight className="h-5 w-5 text-slate-400" />
                     </Link>
 
-                    {/* Theme Toggle */}
                     <button
                         onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                        className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors active:bg-slate-100 text-left"
+                        className="flex w-full items-center justify-between border-t-2 border-slate-100 p-4 text-left transition-colors hover:bg-slate-50 active:bg-slate-100"
                     >
-                        <span className="font-bold text-slate-700 flex items-center gap-3">
-                            {theme === 'dark' ? <Moon className="w-5 h-5 text-indigo-500" /> : <Sun className="w-5 h-5 text-amber-500" />}
-                            Aparência: {theme === 'dark' ? 'Modo Escuro' : 'Modo Claro'}
+                        <span className="flex items-center gap-3 font-bold text-slate-700">
+                            {theme === 'dark' ? <Moon className="h-5 w-5 text-indigo-500" /> : <Sun className="h-5 w-5 text-amber-500" />}
+                            Aparencia: {theme === 'dark' ? 'Modo Escuro' : 'Modo Claro'}
                         </span>
-                        <div className={`w-12 h-6 rounded-full p-1 transition-colors ${theme === 'light' ? 'bg-amber-400' : 'bg-slate-300'}`}>
-                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${theme === 'light' ? 'translate-x-6' : 'translate-x-0'}`} />
+                        <div className={`h-6 w-12 rounded-full p-1 transition-colors ${theme === 'light' ? 'bg-amber-400' : 'bg-slate-300'}`}>
+                            <div className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${theme === 'light' ? 'translate-x-6' : 'translate-x-0'}`} />
                         </div>
                     </button>
 
-                    <button className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors active:bg-slate-100 text-left">
-                        <span className="font-bold text-slate-700">Notificações</span>
-                        <ChevronRight className="w-5 h-5 text-slate-400" />
+                    <button className="flex w-full items-center justify-between border-t-2 border-slate-100 p-4 text-left transition-colors hover:bg-slate-50 active:bg-slate-100">
+                        <span className="font-bold text-slate-700">Notificacoes</span>
+                        <ChevronRight className="h-5 w-5 text-slate-400" />
                     </button>
-                    <button className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors active:bg-slate-100 text-left">
-                        <span className="font-bold text-slate-700">Preferências de Cursos</span>
-                        <ChevronRight className="w-5 h-5 text-slate-400" />
+
+                    <button className="flex w-full items-center justify-between border-t-2 border-slate-100 p-4 text-left transition-colors hover:bg-slate-50 active:bg-slate-100">
+                        <span className="font-bold text-slate-700">Preferencias de Cursos</span>
+                        <ChevronRight className="h-5 w-5 text-slate-400" />
                     </button>
-                    <button className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors active:bg-slate-100 text-left">
-                        <span className="font-bold text-slate-700">Configurações de privacidade</span>
-                        <ChevronRight className="w-5 h-5 text-slate-400" />
+
+                    <button className="flex w-full items-center justify-between border-t-2 border-slate-100 p-4 text-left transition-colors hover:bg-slate-50 active:bg-slate-100">
+                        <span className="font-bold text-slate-700">Configuracoes de privacidade</span>
+                        <ChevronRight className="h-5 w-5 text-slate-400" />
+                    </button>
+
+                    <button
+                        onClick={handleDeleteAccount}
+                        disabled={deletingAccount}
+                        className="flex w-full items-center justify-between border-t-2 border-slate-100 p-4 text-left transition-colors hover:bg-rose-50 active:bg-rose-100 disabled:opacity-60"
+                    >
+                        <span className="flex items-center gap-3 font-bold text-rose-600">
+                            <Trash2 className="h-5 w-5" />
+                            {deletingAccount ? 'Excluindo conta...' : 'Excluir conta'}
+                        </span>
+                        <ChevronRight className="h-5 w-5 text-rose-300" />
                     </button>
                 </div>
 
-                {/* Support Section */}
+                {accountError && (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-600">
+                        {accountError}
+                    </div>
+                )}
+
                 <div>
-                    <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2 px-2">Suporte</h2>
-                    <div className="bg-white rounded-2xl border-2 border-slate-200 divide-y-2 divide-slate-100 overflow-hidden">
-                        <Link to="/help" className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors active:bg-slate-100 text-left">
+                    <h2 className="mb-2 px-2 text-sm font-bold uppercase tracking-wider text-slate-500">Suporte</h2>
+                    <div className="overflow-hidden rounded-2xl border-2 border-slate-200 bg-white">
+                        <Link to="/help" className="flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-slate-50 active:bg-slate-100">
                             <span className="font-bold text-slate-700">Central de Ajuda</span>
-                            <ChevronRight className="w-5 h-5 text-slate-400" />
+                            <ChevronRight className="h-5 w-5 text-slate-400" />
                         </Link>
                     </div>
                 </div>
 
-                {/* Sign Out */}
                 <button
                     onClick={handleSignOut}
-                    className="w-full bg-white border-2 border-slate-200 text-sky-500 font-bold uppercase tracking-wider py-4 rounded-2xl hover:bg-slate-50 active:bg-slate-100 transition-colors mb-6"
+                    className="mb-6 w-full rounded-2xl border-2 border-slate-200 bg-white py-4 font-bold uppercase tracking-wider text-sky-500 transition-colors hover:bg-slate-50 active:bg-slate-100"
                 >
                     Sair
                 </button>
 
-                {/* Footer Links */}
                 <div className="flex flex-col gap-3 px-2 pb-12">
-                    <Link to="/terms" className="text-left text-xs font-bold text-sky-500 uppercase tracking-widest hover:text-sky-600 w-fit">
+                    <Link to="/terms" className="w-fit text-left text-xs font-bold uppercase tracking-widest text-sky-500 hover:text-sky-600">
                         Termos de Uso
                     </Link>
-                    <Link to="/privacy" className="text-left text-xs font-bold text-sky-500 uppercase tracking-widest hover:text-sky-600 w-fit">
-                        Política de Privacidade
+                    <Link to="/privacy" className="w-fit text-left text-xs font-bold uppercase tracking-widest text-sky-500 hover:text-sky-600">
+                        Politica de Privacidade
                     </Link>
                 </div>
-
             </div>
         </div>
     );
