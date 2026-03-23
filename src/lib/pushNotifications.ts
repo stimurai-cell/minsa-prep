@@ -40,11 +40,18 @@ function getFriendlyPushError(error: unknown) {
 
 async function getPushSubscription(registration: ServiceWorkerRegistration) {
     const existingSubscription = await registration.pushManager.getSubscription();
+    const vapidPublicKey = resolveVapidPublicKey();
+
     if (existingSubscription) {
-        return existingSubscription;
+        try {
+            // Renew the browser subscription so stale VAPID-linked endpoints do not linger.
+            await existingSubscription.unsubscribe();
+        } catch (error) {
+            console.warn('[Push] Nao foi possivel renovar a subscricao existente, mantendo a atual.', error);
+            return existingSubscription;
+        }
     }
 
-    const vapidPublicKey = resolveVapidPublicKey();
     return registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),

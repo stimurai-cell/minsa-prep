@@ -296,7 +296,7 @@ export async function sendPushToSubscriptions(rows: PushSubscriptionRow[], paylo
                         return true;
                     } catch (error: any) {
                         const statusCode = Number(error?.statusCode || 0);
-                        if (statusCode === 404 || statusCode === 410) {
+                        if (statusCode === 403 || statusCode === 404 || statusCode === 410) {
                             invalidEndpoints.push(row.endpoint);
                         }
                         console.error('[push] Web Push error:', error);
