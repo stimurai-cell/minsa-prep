@@ -94,12 +94,18 @@ const interleaveByTopic = (questions: any[]) => {
 export const pickQuestionsForSession = (
   questions: any[],
   count: number,
-  preference: DifficultyPreference = 'mixed'
+  preference: DifficultyPreference = 'mixed',
+  options: { strictDifficulty?: boolean } = {}
 ) => {
   const prepared = interleaveByTopic(shuffleArray(questions));
 
   if (preference !== 'mixed') {
     const exact = prepared.filter((question) => question.difficulty === preference);
+
+    if (options.strictDifficulty) {
+      return exact.slice(0, count);
+    }
+
     const fallback = prepared.filter((question) => question.difficulty !== preference);
 
     return [...exact, ...fallback].slice(0, count);

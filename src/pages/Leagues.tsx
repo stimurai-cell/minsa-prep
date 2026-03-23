@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Crown, Info, Shield, Sparkles, TrendingDown, TrendingUp, Users } from 'lucide-react';
+import { ChevronRight, Crown, Shield, TrendingUp } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
@@ -10,8 +10,6 @@ import {
     LEAGUE_COLORS,
     LEAGUE_ICONS,
     LEAGUE_ORDER,
-    getLeagueDemotionSlots,
-    getLeaguePromotionSlots,
     getLeagueStepStatus,
     getLeagueTimeLeft,
     getLeagueWeekStart,
@@ -114,6 +112,7 @@ export default function Leagues() {
                 if (resultError) throw resultError;
 
                 let roomStats: LeagueEntry[] = [];
+                const currentLeagueName = ownStat?.league_name || freshProfile?.current_league || 'Bronze';
                 if (ownStat?.room_id) {
                     const { data: roomLeaderboard, error: roomError } = await supabase
                         .from('weekly_league_stats')
@@ -131,6 +130,27 @@ export default function Leagues() {
 
                     if (roomError) throw roomError;
                     roomStats = normalizeLeagueEntries(roomLeaderboard || []);
+                } else if (ownStat) {
+                    const { data: fallbackLeaderboard, error: fallbackError } = await supabase
+                        .from('weekly_league_stats')
+                        .select(`
+                            user_id,
+                            xp_earned,
+                            room_id,
+                            room_number,
+                            league_name,
+                            profiles(full_name, avatar_url, selected_area_id)
+                        `)
+                        .eq('week_start_date', weekStart)
+                        .eq('league_name', currentLeagueName)
+                        .order('xp_earned', { ascending: false });
+
+                    if (fallbackError) throw fallbackError;
+                    roomStats = normalizeLeagueEntries(
+                        (fallbackLeaderboard && fallbackLeaderboard.length > 0)
+                            ? fallbackLeaderboard
+                            : [{ ...ownStat, profiles: null }]
+                    );
                 }
 
                 let nextAdminRooms: LeagueRoomSummary[] = [];
@@ -183,9 +203,9 @@ export default function Leagues() {
                 setCurrentRoom(
                     ownStat
                         ? {
-                            id: ownStat.room_id,
+                            id: ownStat.room_id || `league-fallback-${weekStart}-${currentLeagueName}`,
                             roomNumber: ownStat.room_number,
-                            leagueName: ownStat.league_name || freshProfile?.current_league || 'Bronze',
+                            leagueName: currentLeagueName,
                         }
                         : {
                             id: null,
@@ -216,9 +236,6 @@ export default function Leagues() {
     const userRank = stats.findIndex((entry) => entry.user_id === profile?.id) + 1;
     const currentLeague = currentRoom?.leagueName || profile?.current_league || 'Bronze';
     const userWeeklyXp = userRank > 0 ? stats[userRank - 1]?.xp_earned || 0 : 0;
-    const roomSize = stats.length;
-    const promotionSlots = getLeaguePromotionSlots(roomSize);
-    const demotionSlots = getLeagueDemotionSlots(currentLeague, roomSize);
 
     const handleAcknowledgeResult = async () => {
         if (!pendingResult) return;
@@ -240,7 +257,7 @@ export default function Leagues() {
             return (
                 <div className="p-20 text-center">
                     <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
-                    <p className="mt-4 font-bold text-slate-400">Carregando a tua sala...</p>
+                    <p className="mt-4 font-bold text-slate-400">Carregando a tua classificacao...</p>
                 </div>
             );
         }
@@ -259,9 +276,9 @@ export default function Leagues() {
                     <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-slate-400">
                         <Shield className="h-8 w-8" />
                     </div>
-                    <h3 className="mt-5 text-xl font-black text-slate-900">Ainda nao entraste numa sala esta semana</h3>
+                    <h3 className="mt-5 text-xl font-black text-slate-900">Ainda nao tens classificacao esta semana</h3>
                     <p className="mt-2 text-sm font-medium leading-6 text-slate-500">
-                        Assim que ganhares XP, o sistema coloca-te automaticamente numa sala da tua liga com ate 15 participantes.
+                        Assim que ganhares XP, a tua liga comeca a aparecer aqui automaticamente.
                     </p>
                 </div>
             );
@@ -271,8 +288,6 @@ export default function Leagues() {
             <div className="divide-y divide-slate-50">
                 {stats.map((entry, index) => {
                     const isUser = entry.user_id === profile?.id;
-                    const isPromoted = index < promotionSlots;
-                    const isRelegated = demotionSlots > 0 && index >= stats.length - demotionSlots;
                     const placement = index + 1;
 
                     return (
@@ -296,9 +311,6 @@ export default function Leagues() {
                                         entry.profiles?.full_name?.charAt(0) || '?'
                                     )}
                                 </div>
-                                {(isPromoted || isRelegated) && (
-                                    <div className={`absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-white ${isPromoted ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                                )}
                             </div>
 
                             <div className="min-w-0 flex-1">
@@ -385,9 +397,6 @@ export default function Leagues() {
                                     <TrendingUp className="h-4 w-4" />
                                     Termina em <span className="underline decoration-2 underline-offset-4">{timeLeft}</span>
                                 </span>
-                                <span className="rounded-full border border-white/20 bg-white/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em]">
-                                    Sala {currentRoom?.roomNumber || '--'}
-                                </span>
                             </div>
                         </div>
                     </div>
@@ -401,72 +410,12 @@ export default function Leagues() {
                             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/70">XP</p>
                             <p className="mt-1 text-2xl font-black leading-none">{userRank > 0 ? userWeeklyXp : '--'}</p>
                         </div>
-                        <div className="rounded-2xl border border-white/20 bg-white/15 px-3 py-2 backdrop-blur-sm">
-                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/70">Participantes</p>
-                            <p className="mt-1 text-2xl font-black leading-none">{roomSize || 0}/15</p>
-                        </div>
                     </div>
-                </div>
-            </div>
-
-            <div className="mb-5 grid gap-4 md:grid-cols-3">
-                <div className="rounded-[1.8rem] border border-emerald-100 bg-emerald-50 p-4">
-                    <div className="flex items-center gap-2 text-emerald-700">
-                        <TrendingUp className="h-5 w-5" />
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em]">Promocao</p>
-                    </div>
-                    <p className="mt-3 text-xl font-black text-emerald-900">Top {promotionSlots || '--'}</p>
-                    <p className="mt-1 text-sm font-medium text-emerald-700">Nas salas cheias, os melhores sobem automaticamente.</p>
-                </div>
-
-                <div className="rounded-[1.8rem] border border-sky-100 bg-sky-50 p-4">
-                    <div className="flex items-center gap-2 text-sky-700">
-                        <Users className="h-5 w-5" />
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em]">Salas dinamicas</p>
-                    </div>
-                    <p className="mt-3 text-xl font-black text-sky-900">Ate 15 alunos</p>
-                    <p className="mt-1 text-sm font-medium text-sky-700">Quando uma sala enche, outra abre so para os novos participantes.</p>
-                </div>
-
-                <div className="rounded-[1.8rem] border border-rose-100 bg-rose-50 p-4">
-                    <div className="flex items-center gap-2 text-rose-700">
-                        <TrendingDown className="h-5 w-5" />
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em]">Rebaixamento</p>
-                    </div>
-                    <p className="mt-3 text-xl font-black text-rose-900">{demotionSlots > 0 ? `Ultimos ${demotionSlots}` : 'Sem risco'}</p>
-                    <p className="mt-1 text-sm font-medium text-rose-700">
-                        Bronze nao rebaixa. Nas ligas acima, o ajuste acontece no fecho semanal.
-                    </p>
                 </div>
             </div>
 
             <div className="overflow-hidden rounded-[2.4rem] border-2 border-slate-100 bg-white shadow-xl">
                 {renderLeaderboard()}
-            </div>
-
-            <div className="mt-8 rounded-[2rem] bg-slate-900 p-6 text-sm text-white">
-                <div className="mb-4 flex items-center gap-3">
-                    <Info className="h-6 w-6 text-indigo-400" />
-                    <h3 className="text-lg font-bold">Como funcionam as ligas agora?</h3>
-                </div>
-                <ul className="space-y-3 font-medium opacity-85">
-                    <li className="flex gap-2">
-                        <div className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-400" />
-                        Ganhar XP coloca-te automaticamente numa sala da tua liga atual.
-                    </li>
-                    <li className="flex gap-2">
-                        <div className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-400" />
-                        Cada sala acomoda ate 15 estudantes; quando lota, o sistema abre uma nova sala.
-                    </li>
-                    <li className="flex gap-2">
-                        <div className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-400" />
-                        O fecho semanal cria um resultado individual, envia notificacao e atualiza a tua divisao.
-                    </li>
-                    <li className="flex gap-2">
-                        <div className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-400" />
-                        Os primeiros lugares recebem destaque no feed e um ecrã de gamificacao ao abrir esta pagina.
-                    </li>
-                </ul>
             </div>
 
             {profile?.role === 'admin' && adminRooms.length > 0 && (
@@ -552,13 +501,8 @@ export default function Leagues() {
 
             {pendingResult && (
                 <div className="mt-8 rounded-[2rem] border border-amber-200 bg-amber-50 p-5 text-amber-900">
-                    <div className="flex items-center gap-3">
-                        <Sparkles className="h-5 w-5" />
-                        <p className="font-black">Tens um resultado semanal por confirmar.</p>
-                    </div>
-                    <p className="mt-2 text-sm font-medium">
-                        Se fechaste ou reabriste esta pagina, o resumo continua disponivel ate tocares em continuar.
-                    </p>
+                    <p className="font-black">Tens um resultado semanal por confirmar.</p>
+                    <p className="mt-2 text-sm font-medium">O resumo continua disponivel ate tocares em continuar.</p>
                 </div>
             )}
         </div>

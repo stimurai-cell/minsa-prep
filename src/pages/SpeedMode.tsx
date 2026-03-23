@@ -42,6 +42,7 @@ export default function SpeedMode() {
     const [currentQIndex, setCurrentQIndex] = useState(0);
     const [timeLeft, setTimeLeft] = useState(TIMER_SECONDS);
     const [score, setScore] = useState(0);
+    const [earnedXp, setEarnedXp] = useState(0);
     const [isGameOver, setIsGameOver] = useState(false);
     const [isAnswering, setIsAnswering] = useState(false);
     const [showIntro, setShowIntro] = useState(true);
@@ -189,6 +190,7 @@ export default function SpeedMode() {
         setShowIntro(false);
         setIsGameOver(false);
         setScore(0);
+        setEarnedXp(0);
         setCurrentQIndex(0);
         setTimeLeft(TIMER_SECONDS);
         setDifficulty('easy');
@@ -242,8 +244,10 @@ export default function SpeedMode() {
             setBestStreak(score);
         }
 
+        const xpAmount = Math.max(score * 2, 0);
+        setEarnedXp(xpAmount);
+
         if (profile?.id && score > 0) {
-            const xpAmount = score * 2;
             const logPayload = {
                 user_id: profile.id,
                 activity_type: 'completed_speed_mode',
@@ -416,6 +420,10 @@ export default function SpeedMode() {
                         <div className="rounded-2xl bg-white/5 p-4">
                             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Melhor Streak</p>
                             <p className="text-4xl font-black text-emerald-400">{bestStreak || score}</p>
+                        </div>
+                        <div className="col-span-2 rounded-2xl bg-white/5 p-4">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">XP Obtido</p>
+                            <p className="text-3xl font-black text-cyan-400">{earnedXp} XP</p>
                         </div>
                     </div>
 

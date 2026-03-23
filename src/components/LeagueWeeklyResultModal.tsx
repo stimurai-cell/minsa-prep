@@ -1,4 +1,4 @@
-import { ArrowRight, Shield, Sparkles, Trophy, TrendingUp } from 'lucide-react';
+import { ArrowRight, Shield, Trophy, TrendingUp } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { LEAGUE_COLORS, LEAGUE_ICONS } from '../lib/leagues';
 
@@ -25,7 +25,7 @@ function getResultCopy(result: LeagueWeeklyResult) {
     return {
       eyebrow: 'Subida Confirmada',
       title: `Parabens! Agora estas na ${result.new_league}`,
-      body: `Fechaste a semana em #${result.final_rank} na Sala ${result.room_number || 1} com ${result.xp_earned} XP e ganhaste a promocao para a proxima liga.`,
+      body: `Fechaste a semana em #${result.final_rank} com ${result.xp_earned} XP e garantiste a subida para a ${result.new_league}.`,
       accent: 'text-emerald-700',
       badge: 'bg-emerald-100 text-emerald-700 border-emerald-200',
       ring: 'from-emerald-400 to-lime-500',
@@ -36,7 +36,7 @@ function getResultCopy(result: LeagueWeeklyResult) {
     return {
       eyebrow: 'Nova Rodada',
       title: `Vais recomecar na ${result.new_league}`,
-      body: `Terminaste a semana em #${result.final_rank} na Sala ${result.room_number || 1} com ${result.xp_earned} XP. A nova semana abre uma chance limpa para voltares a subir.`,
+      body: `Terminaste a semana em #${result.final_rank} com ${result.xp_earned} XP. A nova semana abre uma nova chance para subires outra vez.`,
       accent: 'text-rose-700',
       badge: 'bg-rose-100 text-rose-700 border-rose-200',
       ring: 'from-rose-400 to-orange-500',
@@ -46,7 +46,7 @@ function getResultCopy(result: LeagueWeeklyResult) {
   return {
     eyebrow: 'Liga Encerrada',
     title: `Mantiveste a ${result.new_league}`,
-    body: `Terminaste a semana em #${result.final_rank} na Sala ${result.room_number || 1} com ${result.xp_earned} XP e segues na mesma divisao para a nova rodada.`,
+    body: `Terminaste a semana em #${result.final_rank} com ${result.xp_earned} XP e continuas na ${result.new_league} nesta nova rodada.`,
     accent: 'text-sky-700',
     badge: 'bg-sky-100 text-sky-700 border-sky-200',
     ring: 'from-sky-400 to-indigo-500',
@@ -63,7 +63,7 @@ export default function LeagueWeeklyResultModal({
   const sameLeague = result.previous_league === result.new_league;
   const podiumLabel = result.podium_position
     ? `${result.podium_position}o lugar no podio`
-    : `#${result.final_rank} entre ${result.room_size}`;
+    : `Posicao #${result.final_rank}`;
 
   return (
     <AnimatePresence>
@@ -132,7 +132,7 @@ export default function LeagueWeeklyResultModal({
               </motion.div>
             </div>
 
-            <div className="mt-8 grid gap-3 md:grid-cols-3">
+            <div className="mt-8 grid gap-3 md:grid-cols-2">
               <div className="rounded-[1.8rem] border border-slate-200 bg-white/90 p-4 shadow-sm">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Trophy className="h-4 w-4" />
@@ -147,16 +147,6 @@ export default function LeagueWeeklyResultModal({
                   <p className="text-[10px] font-black uppercase tracking-[0.18em]">XP Semanal</p>
                 </div>
                 <p className="mt-3 text-lg font-black text-slate-900">{result.xp_earned} XP</p>
-              </div>
-
-              <div className="rounded-[1.8rem] border border-slate-200 bg-white/90 p-4 shadow-sm">
-                <div className="flex items-center gap-2 text-slate-400">
-                  <Sparkles className="h-4 w-4" />
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em]">Sala</p>
-                </div>
-                <p className="mt-3 text-lg font-black text-slate-900">
-                  {result.room_number || 1} de {result.room_size}
-                </p>
               </div>
             </div>
 

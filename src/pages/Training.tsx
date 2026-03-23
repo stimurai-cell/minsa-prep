@@ -81,9 +81,11 @@ export default function Training() {
   const [exportingTopic, setExportingTopic] = useState<null | 'pdf' | 'docx'>(null);
   const [topicAssignmentNote, setTopicAssignmentNote] = useState(AUTO_TOPIC_LOADING_NOTE);
   const [assigningTopic, setAssigningTopic] = useState(false);
+  const [guidedOverrideEnabled, setGuidedOverrideEnabled] = useState(false);
 
   const hasPremiumAccess = ['premium', 'elite', 'admin'].includes(profile?.role || '');
   const hasBasicAccess = ['basic', 'premium', 'elite', 'admin'].includes(profile?.role || '');
+  const canTemporarilyCustomizeGuidedTraining = ['elite', 'admin'].includes(profile?.role || '');
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -103,8 +105,9 @@ export default function Training() {
   const isFreeUser = profile?.role === 'free';
   const manualModeRequested = searchParams.get('mode') === 'manual';
   const guidedTrainingEnabled = hasGuidedTraining && !manualModeRequested;
-  const autoTopicEnabled = guidedTrainingEnabled;
-  const trainingBasePath = autoTopicEnabled ? '/training' : '/training?mode=manual';
+  const guidedCustomizationEnabled = guidedTrainingEnabled && canTemporarilyCustomizeGuidedTraining && guidedOverrideEnabled;
+  const autoTopicEnabled = guidedTrainingEnabled && !guidedCustomizationEnabled;
+  const trainingBasePath = guidedTrainingEnabled ? '/training' : '/training?mode=manual';
   const offlineQuestions = hasOfflinePackage ? downloadedQuestions : [];
   const availableOfflineQuestionCount = hasOfflinePackage ? questionCount : 0;
   // Allow all difficulties for non-premium except 'hard' (difícil) which remains premium-only
@@ -184,6 +187,12 @@ export default function Training() {
   }, [sessionTopicId]);
 
   useEffect(() => {
+    if (!guidedTrainingEnabled && guidedOverrideEnabled) {
+      setGuidedOverrideEnabled(false);
+    }
+  }, [guidedOverrideEnabled, guidedTrainingEnabled]);
+
+  useEffect(() => {
     if (!autoTopicEnabled || sessionActive || sessionTopicId || orderedTopics.length === 0) {
       return;
     }
@@ -224,8 +233,14 @@ export default function Training() {
   }, [autoTopicEnabled, isReviewMode, navigate, selectedTopic, sessionActive, sessionTopicId, trainingBasePath]);
 
   useEffect(() => {
-    setTopicAssignmentNote(autoTopicEnabled ? AUTO_TOPIC_LOADING_NOTE : 'Escolha o topico para montar o seu treino.');
-  }, [autoTopicEnabled, profile?.selected_area_id]);
+    setTopicAssignmentNote(
+      guidedCustomizationEnabled
+        ? 'Controle temporario ativo. Escolha topico e nivel apenas nesta entrada.'
+        : autoTopicEnabled
+          ? AUTO_TOPIC_LOADING_NOTE
+          : 'Escolha o topico para montar o seu treino.'
+    );
+  }, [autoTopicEnabled, guidedCustomizationEnabled, profile?.selected_area_id]);
 
   const selectedAreaName = useMemo(
     () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Área não definida',
@@ -234,6 +249,28 @@ export default function Training() {
 
   const selectedTopicName =
     topics.find((topic) => topic.id === selectedTopic)?.name || (autoTopicEnabled ? orderedTopics[0]?.name || 'Foco a ser definido' : 'Selecione um topico');
+
+  const resetGuidedCustomization = () => {
+    if (!guidedTrainingEnabled) return;
+
+    setGuidedOverrideEnabled(false);
+    setSelectedTopic('');
+    setSelectedDifficulty('mixed');
+    setTopicAssignmentNote(AUTO_TOPIC_LOADING_NOTE);
+  };
+
+  const toggleGuidedCustomization = () => {
+    if (!canTemporarilyCustomizeGuidedTraining || !guidedTrainingEnabled) return;
+
+    if (guidedCustomizationEnabled) {
+      resetGuidedCustomization();
+      return;
+    }
+
+    setGuidedOverrideEnabled(true);
+    setSelectedTopic('');
+    setSelectedDifficulty('mixed');
+  };
 
   const currentQ = questions[currentQIndex];
   const currentExplanation =
@@ -267,7 +304,7 @@ export default function Training() {
       return;
     }
     if (!selectedTopic) {
-      alert('Ainda estamos a preparar o treino.');
+      alert(autoTopicEnabled ? 'Ainda estamos a preparar o treino.' : 'Escolha um topico antes de exportar.');
       return;
     }
     try {
@@ -386,7 +423,8 @@ export default function Training() {
   const buildOfflineTopicSessionQuestions = (
     topicId: string,
     difficulty: DifficultyPreference,
-    recentQuestionIds: string[]
+    recentQuestionIds: string[],
+    options: { strictDifficulty?: boolean } = {}
   ) => {
     const validTopicQuestions = filterPlayableQuestions(
       offlineQuestions.filter((question) => question.topic_id === topicId)
@@ -399,7 +437,8 @@ export default function Training() {
     const sessionPool = pickQuestionsForSession(
       validTopicQuestions,
       Math.min(validTopicQuestions.length, 24),
-      difficulty
+      difficulty,
+      options
     );
 
     return prioritizeUnseenQuestions(sessionPool, recentQuestionIds).slice(0, TRAINING_TARGET_QUESTIONS);
@@ -407,7 +446,8 @@ export default function Training() {
   const buildOnlineTopicSessionQuestions = async (
     topicId: string,
     difficulty: DifficultyPreference,
-    recentQuestionIds: string[]
+    recentQuestionIds: string[],
+    options: { strictDifficulty?: boolean } = {}
   ) => {
     const { data: idData, error: idError } = await supabase
       .from('questions')
@@ -454,7 +494,8 @@ export default function Training() {
     const sessionPool = pickQuestionsForSession(
       orderedValidQuestions,
       Math.min(orderedValidQuestions.length, 24),
-      difficulty
+      difficulty,
+      options
     );
 
     return prioritizeUnseenQuestions(sessionPool, recentQuestionIds).slice(0, TRAINING_TARGET_QUESTIONS);
@@ -525,19 +566,29 @@ export default function Training() {
     const historyScope = getQuestionHistoryScope(topicId);
     const recentQuestionIds = getRecentQuestionIds(historyScope);
     const safeDifficulty = !hasPremiumAccess && difficulty === 'hard' ? 'medium' : difficulty;
+    const strictDifficulty = guidedCustomizationEnabled && safeDifficulty !== 'mixed';
+    const strictDifficultyMessage = `Este topico ainda nao tem questoes suficientes no nivel ${getDifficultyLabel(safeDifficulty)}. Escolha outro nivel ou outro topico.`;
 
     if (shouldUseOfflineContent) {
-      const offlineSessionQuestions = buildOfflineTopicSessionQuestions(topicId, safeDifficulty, recentQuestionIds);
+      const offlineSessionQuestions = buildOfflineTopicSessionQuestions(topicId, safeDifficulty, recentQuestionIds, {
+        strictDifficulty,
+      });
 
       if (buildTrainingSession(topicId, offlineSessionQuestions)) {
         return;
       }
 
-      if (guidedTrainingEnabled) {
+      if (autoTopicEnabled) {
         const fallbackSession = await findFallbackTopicSession(topicId, safeDifficulty);
         if (fallbackSession && buildTrainingSession(fallbackSession.topicId, fallbackSession.questions, fallbackSession.note)) {
           return;
         }
+      }
+
+      if (strictDifficulty) {
+        alert(strictDifficultyMessage);
+        navigate(trainingBasePath, { replace: true });
+        return;
       }
 
       alert('O pacote local ainda nao tem questoes suficientes para este foco. Conecte-se para atualizar o conteudo offline.');
@@ -548,7 +599,9 @@ export default function Training() {
     setLoading(true);
 
     try {
-      const onlineSessionQuestions = await buildOnlineTopicSessionQuestions(topicId, safeDifficulty, recentQuestionIds);
+      const onlineSessionQuestions = await buildOnlineTopicSessionQuestions(topicId, safeDifficulty, recentQuestionIds, {
+        strictDifficulty,
+      });
 
       if (buildTrainingSession(topicId, onlineSessionQuestions)) {
         await logTrainingStart(topicId);
@@ -563,9 +616,13 @@ export default function Training() {
         }
       }
 
-      alert(autoTopicEnabled
-        ? 'Nao foi possivel preparar o treino desta vez.'
-        : 'Este topico ainda nao tem questoes validas para treino. Escolha outro topico.');
+      if (strictDifficulty) {
+        alert(strictDifficultyMessage);
+      } else {
+        alert(autoTopicEnabled
+          ? 'Nao foi possivel preparar o treino desta vez.'
+          : 'Este topico ainda nao tem questoes validas para treino. Escolha outro topico.');
+      }
       navigate(trainingBasePath, { replace: true });
     } catch (error) {
       console.error('Error starting training:', error);
@@ -678,6 +735,7 @@ export default function Training() {
   const leaveTrainingSession = () => {
     if (window.confirm('Deseja sair deste treino agora? O progresso desta sessão será perdido.')) {
       resetTrainingSession();
+      resetGuidedCustomization();
       navigate(trainingBasePath, { replace: true });
     }
   };
@@ -787,14 +845,16 @@ export default function Training() {
           primaryActionLabel="Voltar ao treino"
           onPrimaryAction={() => {
             resetTrainingSession();
+            resetGuidedCustomization();
             setSessionSummary(null);
             navigate(trainingBasePath, { replace: true });
           }}
           secondaryActionLabel="Gerar novo treino"
           onSecondaryAction={() => {
             resetTrainingSession();
+            resetGuidedCustomization();
             setSelectedTopic('');
-            setTopicAssignmentNote(autoTopicEnabled ? AUTO_TOPIC_LOADING_NOTE : 'Escolha o topico para montar o seu treino.');
+            setTopicAssignmentNote(guidedTrainingEnabled ? AUTO_TOPIC_LOADING_NOTE : 'Escolha o topico para montar o seu treino.');
             setSessionSummary(null);
             navigate(trainingBasePath, { replace: true });
           }}
@@ -1113,14 +1173,16 @@ export default function Training() {
         <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.35)] md:p-6">
           <h2 className="text-2xl font-black text-slate-900">
             {guidedTrainingEnabled
-              ? 'Treino guiado pelo sistema'
+              ? (guidedCustomizationEnabled ? 'Treino guiado com controlo temporario' : 'Treino guiado pelo sistema')
               : isFreeUser
                 ? 'Treino diario'
                 : 'Monte o seu treino'}
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             {guidedTrainingEnabled
-              ? 'Seu proximo treino ja esta pronto.'
+              ? (guidedCustomizationEnabled
+                ? 'Escolha topico e nivel apenas nesta entrada. Ao sair, o sistema retoma o foco automatico.'
+                : 'Seu proximo treino ja esta pronto.')
               : isFreeUser
                 ? 'Escolha o topico e o nivel para praticar hoje.'
                 : 'Escolha o topico e o nivel para comecar.'}
@@ -1131,6 +1193,32 @@ export default function Training() {
               <p className="text-sm font-semibold text-slate-500">Area</p>
               <p className="mt-1 text-lg font-black text-slate-900">{selectedAreaName}</p>
             </div>
+
+            {guidedTrainingEnabled && canTemporarilyCustomizeGuidedTraining && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-800">Controle temporario do Elite</p>
+                    <p className="mt-1 text-sm leading-6 text-emerald-900">
+                      {guidedCustomizationEnabled
+                        ? 'Topico e nivel estao livres apenas nesta entrada. Quando sair, o sistema volta ao modo automatico.'
+                        : 'Ative para escolher manualmente o topico e o nivel apenas nesta entrada.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={toggleGuidedCustomization}
+                    className={`inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                      guidedCustomizationEnabled
+                        ? 'bg-white text-emerald-900 shadow-sm'
+                        : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                    }`}
+                  >
+                    {guidedCustomizationEnabled ? 'Voltar ao automatico' : 'Ativar agora'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {autoTopicEnabled ? (
               <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,#f8fffb_0%,#ffffff_100%)] px-4 py-4">
@@ -1163,7 +1251,11 @@ export default function Training() {
                   ))}
                 </select>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
-                  {isFreeUser ? 'Escolha o foco desta sessao.' : 'Escolha o foco desta sessao manualmente.'}
+                  {guidedCustomizationEnabled
+                    ? 'Controle temporario ativo: este topico so vale para esta entrada.'
+                    : isFreeUser
+                      ? 'Escolha o foco desta sessao.'
+                      : 'Escolha o foco desta sessao manualmente.'}
                 </p>
               </div>
             )}
@@ -1204,7 +1296,9 @@ export default function Training() {
               </div>
               {hasPremiumAccess ? (
                 <p className="mt-2 text-xs text-slate-500">
-                  Em modo misto, o treino mistura questoes faceis, medias e dificeis.
+                  {guidedCustomizationEnabled
+                    ? 'Neste controlo temporario, o nivel escolhido e respeitado na sessao. Em modo misto, o treino mistura questoes faceis, medias e dificeis.'
+                    : 'Em modo misto, o treino mistura questoes faceis, medias e dificeis.'}
                 </p>
               ) : (
                 <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
@@ -1273,7 +1367,11 @@ export default function Training() {
               className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {guidedTrainingEnabled
-                ? (assigningTopic ? 'A definir foco...' : 'Iniciar treino guiado')
+                ? (assigningTopic
+                  ? 'A definir foco...'
+                  : guidedCustomizationEnabled
+                    ? 'Iniciar treino personalizado'
+                    : 'Iniciar treino guiado')
                 : isFreeUser
                   ? (assigningTopic ? 'A preparar treino...' : 'Comecar treino')
                   : 'Iniciar treino'}

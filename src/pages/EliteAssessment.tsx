@@ -681,8 +681,8 @@ export default function EliteAssessment() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {[
                   { value: 'BEGINNER', label: 'Nunca participei' },
-                  { value: 'INTERMEDIATE', label: 'Já participei algumas vezes' },
-                  { value: 'EXPERIENCED', label: 'Já participei várias vezes' }
+                  { value: 'INTERMEDIATE', label: 'Já participei uma vez' },
+                  { value: 'EXPERIENCED', label: 'Já participei mais de uma vez' }
                 ].map((option) => (
                   <button
                     key={option.value}

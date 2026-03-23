@@ -10,3 +10,4 @@ coverage/
 .env*.local
 firebase-adminsdk-*.json
 *-firebase-adminsdk-*.json
+tools/

@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { sendPushNotification } from './pushNotifications';
 import { registerDailyStreak } from './streak';
+import { getLeagueWeekStart } from './leagues';
 
 export interface XpAwardResult {
     success: boolean;
@@ -62,13 +63,9 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
                 }
             });
 
-        const now = new Date();
-        const day = now.getDay();
-        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-        const mondayDate = new Date(now.getFullYear(), now.getMonth(), diff);
-        const monday = `${mondayDate.getFullYear()}-${String(mondayDate.getMonth() + 1).padStart(2, '0')}-${String(mondayDate.getDate()).padStart(2, '0')}`;
+        const weekStart = getLeagueWeekStart();
 
-        console.log(`[XP] Syncing league for user ${userId}. Week: ${monday}, XP: ${xpAmount}`);
+        console.log(`[XP] Syncing league for user ${userId}. Week: ${weekStart}, XP: ${xpAmount}`);
 
         const { data: profileData } = await supabase
             .from('profiles')
@@ -81,7 +78,7 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
         const { error: leagueError } = await supabase.rpc('increment_weekly_xp', {
             p_user_id: userId,
             p_league_name: leagueName,
-            p_week_start: monday,
+            p_week_start: weekStart,
             p_xp: xpAmount
         });
 

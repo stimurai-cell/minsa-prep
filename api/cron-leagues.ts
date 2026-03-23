@@ -50,12 +50,10 @@ function buildPushPayload(result: {
     previous_league: string;
     new_league: string;
 }) {
-    const roomNumber = result.room_number || 1;
-
     if (result.outcome === 'promoted') {
         return {
             title: `Subiste para ${result.new_league}!`,
-            body: `Fechaste a semana em #${result.final_rank} na Sala ${roomNumber} com ${result.xp_earned} XP. Abre a liga e ve a tua celebracao.`,
+            body: `Fechaste a semana em #${result.final_rank} com ${result.xp_earned} XP. Abre a liga e ve a tua celebracao.`,
             tag: `league-result-${result.id}`,
         };
     }
@@ -70,7 +68,7 @@ function buildPushPayload(result: {
 
     return {
         title: 'Liga encerrada',
-        body: `Terminaste em #${result.final_rank} na Sala ${roomNumber} com ${result.xp_earned} XP e permaneces na ${result.new_league}.`,
+        body: `Terminaste em #${result.final_rank} com ${result.xp_earned} XP e permaneces na ${result.new_league}.`,
         tag: `league-result-${result.id}`,
     };
 }
