@@ -42,7 +42,7 @@ export default function News() {
     const { profile } = useAuthStore();
     const [feed, setFeed] = useState<FeedItem[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'all' | 'news' | 'achievements'>('all');
+    const [activeTab, setActiveTab] = useState<'all' | 'news' | 'achievements'>('news');
 
     useEffect(() => {
         fetchFeed();
@@ -149,8 +149,8 @@ export default function News() {
         <div className="max-w-2xl mx-auto space-y-6 pb-20">
             {/* Header */}
             <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-slate-100">
-                <h1 className="text-3xl font-black text-slate-900 tracking-tight">Novidades</h1>
-                <p className="text-slate-500 font-medium">Veja o que está a acontecer na comunidade.</p>
+                <h1 className="text-3xl font-black text-slate-900 tracking-tight">Avisos e conquistas</h1>
+                <p className="text-slate-500 font-medium">Aqui ficam os avisos do app e os destaques gerais. A atividade dos seus amigos fica em Comunidade.</p>
 
                 {/* Tabs */}
                 <div className="flex gap-2 mt-6">

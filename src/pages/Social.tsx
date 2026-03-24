@@ -184,6 +184,14 @@ export default function Social() {
 
     return (
         <div className="mx-auto max-w-2xl pb-24 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="mb-6 rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">Comunidade</p>
+                <h1 className="mt-2 text-2xl font-black text-slate-900">Pessoas e atividade dos seus amigos</h1>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                    Use esta area para encontrar colegas, acompanhar a atividade da sua rede e trazer mais gente para estudar consigo.
+                    Avisos gerais do app e conquistas amplas ficam na area de avisos.
+                </p>
+            </div>
 
             {/* Header */}
             <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md pt-4 pb-4 border-b-2 border-slate-100 flex gap-4 -mx-4 px-4 mb-6">
@@ -203,7 +211,7 @@ export default function Social() {
                         : 'text-slate-400 hover:bg-slate-50'
                         }`}
                 >
-                    Novidades
+                    Atividade
                 </button>
             </div>
 
@@ -331,7 +339,7 @@ export default function Social() {
                                     {!loadingSuggestions && (
                                         <>
                                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                                {areaNameById(user?.selected_area_id)} ??? {user?.total_xp || 0} XP
+                                                {areaNameById(user?.selected_area_id)} • {user?.total_xp || 0} XP
                                             </p>
                                             <button
                                                 onClick={() => handleFollow(user.id)}
@@ -434,8 +442,8 @@ export default function Social() {
                             <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-6">
                                 <Award className="w-12 h-12 text-slate-300" />
                             </div>
-                            <h2 className="text-xl font-bold text-slate-700 mb-2">Feed Silencioso</h2>
-                            <p className="text-slate-500 font-medium">As conquistas dos seus amigos aparecerão aqui!</p>
+                            <h2 className="text-xl font-bold text-slate-700 mb-2">Sem atividade ainda</h2>
+                            <p className="text-slate-500 font-medium">As acoes e conquistas dos seus amigos aparecerao aqui.</p>
                         </div>
                     ) : (
                         activities.map(act => (

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Home,
@@ -99,35 +99,31 @@ export default function Layout() {
     { to: '/admin?tab=users', label: 'Utilizadores', icon: Users, key: 'users' },
   ];
 
-  const studentLinks = [
-    { to: '/dashboard', label: 'Início', icon: Home, activeColor: 'text-emerald-500', activeBg: 'bg-emerald-100', activeBorder: 'border-emerald-200' },
-    { to: '/practice', label: 'Pratique', icon: Dumbbell, activeColor: 'text-sky-500', activeBg: 'bg-sky-100', activeBorder: 'border-sky-200' },
-    { to: '/social', label: 'Amigos', icon: UsersRound, activeColor: 'text-rose-500', activeBg: 'bg-rose-100', activeBorder: 'border-rose-200' },
+  const studentPrimaryLinks = [
+    { to: '/dashboard', label: 'Hoje', icon: Home, activeColor: 'text-emerald-500', activeBg: 'bg-emerald-100', activeBorder: 'border-emerald-200' },
+    { to: '/practice', label: 'Estudar', icon: Dumbbell, activeColor: 'text-sky-500', activeBg: 'bg-sky-100', activeBorder: 'border-sky-200' },
+    { to: '/social', label: 'Comunidade', icon: UsersRound, activeColor: 'text-rose-500', activeBg: 'bg-rose-100', activeBorder: 'border-rose-200' },
+    { to: '/ranking', label: 'Ranking', icon: Award, activeColor: 'text-indigo-500', activeBg: 'bg-indigo-100', activeBorder: 'border-indigo-200' },
+  ];
+
+  const studentSecondaryLinks = [
     { to: '/leagues', label: 'Ligas', icon: ShieldCheck, activeColor: 'text-indigo-500', activeBg: 'bg-indigo-100', activeBorder: 'border-indigo-200' },
-    { to: '/news', label: 'Novidades', icon: Megaphone, activeColor: 'text-blue-500', activeBg: 'bg-blue-100', activeBorder: 'border-blue-200' },
-    { to: '/premium', label: 'Loja', icon: Crown, activeColor: 'text-yellow-500', activeBg: 'bg-yellow-100', activeBorder: 'border-yellow-200', isExtra: true },
-    { to: '/profile', label: 'Perfil', icon: UserRound, activeColor: 'text-teal-500', activeBg: 'bg-teal-100', activeBorder: 'border-teal-200', isExtra: true },
+    { to: '/news', label: 'Avisos', icon: Megaphone, activeColor: 'text-blue-500', activeBg: 'bg-blue-100', activeBorder: 'border-blue-200' },
+    { to: '/premium', label: 'Loja', icon: Crown, activeColor: 'text-yellow-500', activeBg: 'bg-yellow-100', activeBorder: 'border-yellow-200' },
+    { to: '/profile', label: 'Perfil', icon: UserRound, activeColor: 'text-teal-500', activeBg: 'bg-teal-100', activeBorder: 'border-teal-200' },
   ];
 
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const links = profile?.role === 'admin' ? adminLinks : studentLinks;
 
-  const visibleLinks = useMemo(() => {
-    if (profile?.role === 'admin') return adminLinks;
-    // On mobile, if we have limited space, filter "isExtra" items for the "More" menu
-    return studentLinks.filter(l => !l.isExtra);
-  }, [profile?.role]);
-
-  const extraLinks = useMemo(() => {
-    return studentLinks.filter(l => l.isExtra);
-  }, []);
+  const visibleLinks = profile?.role === 'admin' ? adminLinks : studentPrimaryLinks;
+  const extraLinks = studentSecondaryLinks;
 
   const currentAdminTab = new URLSearchParams(location.search).get('tab') || 'dashboard';
   const isImmersiveSession =
     (location.pathname === '/training' || location.pathname === '/simulation' || location.pathname === '/speed-mode') &&
     (searchParams.get('session') === '1' || location.pathname === '/speed-mode');
 
-  const getLinkActive = (link: (typeof links)[number]) => {
+  const getLinkActive = (link: any) => {
     if (profile?.role === 'admin' && 'key' in link) {
       return location.pathname === '/admin' && currentAdminTab === link.key;
     }
@@ -165,20 +161,58 @@ export default function Layout() {
           </div>
 
           <nav className="space-y-2 px-5 py-6">
-            {links.map((link) => {
-              const Icon = link.icon;
-              const isActive = getLinkActive(link);
+            {profile?.role === 'admin' ? (
+              adminLinks.map((link) => {
+                const Icon = link.icon;
+                const isActive = getLinkActive(link);
 
-              return (
-                <NavLink key={link.to} to={link.to} className={navClass(isActive, profile?.role === 'admin' ? 'admin' : 'student', link)}>
-                  <Icon
-                    className={`h-6 w-6 ${isActive && profile?.role !== 'admin' ? (link as any).activeColor : ''}`}
-                    fill={isActive ? "currentColor" : "none"}
-                  />
-                  <span>{link.label}</span>
-                </NavLink>
-              );
-            })}
+                return (
+                  <NavLink key={link.to} to={link.to} className={navClass(isActive, 'admin', link)}>
+                    <Icon className="h-6 w-6" fill={isActive ? 'currentColor' : 'none'} />
+                    <span>{link.label}</span>
+                  </NavLink>
+                );
+              })
+            ) : (
+              <>
+                {studentPrimaryLinks.map((link) => {
+                  const Icon = link.icon;
+                  const isActive = getLinkActive(link);
+
+                  return (
+                    <NavLink key={link.to} to={link.to} className={navClass(isActive, 'student', link)}>
+                      <Icon
+                        className={`h-6 w-6 ${isActive ? link.activeColor : ''}`}
+                        fill={isActive ? 'currentColor' : 'none'}
+                      />
+                      <span>{link.label}</span>
+                    </NavLink>
+                  );
+                })}
+
+                <div className="pt-4">
+                  <p className="px-5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                    Mais
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {studentSecondaryLinks.map((link) => {
+                      const Icon = link.icon;
+                      const isActive = getLinkActive(link);
+
+                      return (
+                        <NavLink key={link.to} to={link.to} className={navClass(isActive, 'student', link)}>
+                          <Icon
+                            className={`h-6 w-6 ${isActive ? link.activeColor : ''}`}
+                            fill={isActive ? 'currentColor' : 'none'}
+                          />
+                          <span>{link.label}</span>
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
 
             {deferredPrompt && (
               <button
@@ -329,7 +363,7 @@ export default function Layout() {
       </div>
 
       <nav className={`fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur xl:hidden ${isImmersiveSession ? 'hidden' : ''}`}>
-        <div className={`mx-auto grid max-w-xl gap-2 ${profile?.role === 'admin' ? 'grid-cols-4' : 'grid-cols-6'}`}>
+        <div className={`mx-auto grid max-w-xl gap-2 ${profile?.role === 'admin' ? 'grid-cols-4' : 'grid-cols-5'}`}>
           {visibleLinks.map((link) => {
             const Icon = link.icon;
             const isActive = getLinkActive(link);

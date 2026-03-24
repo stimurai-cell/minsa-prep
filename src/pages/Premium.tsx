@@ -1,33 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Crown, Lock, Rocket, ShieldCheck, Star, Upload, Wallet, Copy } from 'lucide-react';
+import { CheckCircle2, Copy, Crown, Upload, Wallet } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { premiumPlans, extraPackages, PlanPeriod } from '../lib/premium';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 
-const premiumComparisons = [
-  {
-    title: 'Gratuito forte para entrar',
-    description:
-      'O gratuito deve provar valor rapidamente: treino base, prova base e progresso essencial. Serve para gerar habito e confianca.',
-  },
-  {
-    title: 'Premium Focus como plano principal',
-    description:
-      'Este deve ser o plano mais promovido no app. Entrega o que mais pesa na decisao de compra: filtros, ranking, revisao e historico de desempenho.',
-  },
-  {
-    title: 'Premium Intensivo para upsell',
-    description:
-      'Pacote voltado para reta final, estudantes mais comprometidos ou campanhas sazonais de exames e concursos.',
-  },
-];
-
 const premiumPerks = [
   'Escolha livre de nivel no treino e na prova',
   'Ranking completo da area',
   'Leitura mais profunda do historico de desempenho',
-  'Relatórios e filtros avançados para revisão',
+  'Relatorios e filtros avancados para revisao',
   'Treino diario e Modo Relampago offline incluidos nos planos principais',
 ];
 
@@ -37,7 +19,6 @@ const paymentMethods = [
   { bank: 'Atlantico', value: '0055-0000-1903-4290-1018-7' },
   { bank: 'BIC', value: '0051-0000-4332-6097-1014-5' },
   { bank: 'SOL', value: '0044-0000-3489-7416-1018-5' },
-  // IBAN example (incluir caso precise pagamento internacional)
   { bank: 'IBAN (EUR)', value: 'AO06 0000 0000 0000 0000 0000 0' },
 ];
 
@@ -55,15 +36,8 @@ export default function Premium() {
   const isAdmin = profile?.role === 'admin';
   const paidPlans = useMemo(() => premiumPlans.filter((plan) => plan.id !== 'free'), []);
   const selectedPeriod: PlanPeriod = 'monthly';
-  const [selectedPlanId, setSelectedPlanId] = useState(paidPlans.find(p => p.id === 'premium')?.id || paidPlans[0]?.id || 'premium');
-
-  const selectPlanAndScroll = (planId: string) => {
-    setSelectedPlanId(planId);
-    setTimeout(() => {
-      const el = document.getElementById('payment-section');
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 200);
-  };
+  const [selectedPlanId, setSelectedPlanId] = useState(paidPlans.find((plan) => plan.id === 'premium')?.id || paidPlans[0]?.id || 'premium');
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [payerName, setPayerName] = useState(profile?.full_name || '');
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentNote, setPaymentNote] = useState('');
@@ -73,31 +47,45 @@ export default function Premium() {
   const [latestRequest, setLatestRequest] = useState<PaymentRequest | null>(null);
   const [copiedBank, setCopiedBank] = useState<string | null>(null);
   const [prepTime, setPrepTime] = useState('3');
+  const [searchParams] = useSearchParams();
+
+  const selectPlanAndScroll = (planId: string) => {
+    setSelectedPlanId(planId);
+    setCheckoutOpen(true);
+    setTimeout(() => {
+      const el = document.getElementById('payment-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 200);
+  };
+
   const copyToClipboard = async (val: string) => {
     try {
       await navigator.clipboard.writeText(val);
       setCopiedBank(val);
       setTimeout(() => setCopiedBank(null), 2500);
     } catch (err) {
-      alert('Não foi possível copiar para a área de transferência.');
+      alert('Nao foi possivel copiar para a area de transferencia.');
     }
   };
-  const [searchParams] = useSearchParams();
 
   const selectedPlan = useMemo(() => {
     const all = [...premiumPlans, ...extraPackages];
     return (all.find((plan) => plan.id === selectedPlanId) || premiumPlans[1]) as any;
   }, [selectedPlanId]);
 
+  const selectedPlanPriceLabel =
+    (selectedPlan as any)?.priceLabel ||
+    (selectedPlan as any)?.prices?.[selectedPeriod]?.label ||
+    '';
+
   useEffect(() => {
     setPayerName(profile?.full_name || '');
   }, [profile?.full_name]);
 
   useEffect(() => {
-    // If someone links to /premium?plan=focus, preselect and scroll to payment
     const planFromQuery = searchParams.get('plan');
     if (planFromQuery) {
-      // small delay to allow DOM to render
+      setCheckoutOpen(true);
       setTimeout(() => selectPlanAndScroll(planFromQuery), 200);
     }
   }, [searchParams]);
@@ -124,7 +112,7 @@ export default function Premium() {
 
   const handleSubmitPaymentRequest = async () => {
     if (!profile?.id || !selectedPlan || !payerName.trim() || !paymentReference.trim() || !proofFile) {
-      alert('Preencha o nome, a referência e anexe o comprovativo.');
+      alert('Preencha o nome, a referencia e anexe o comprovativo.');
       return;
     }
 
@@ -150,11 +138,7 @@ export default function Premium() {
         : selectedPlan.id === 'elite'
           ? `${selectedPlan.name} (vitalicio)`
           : `${selectedPlan.name} (mensal)`;
-      const durationMonths = isExtraPackage
-        ? null
-        : selectedPlan.id === 'elite'
-          ? 0 // 0 = vitalicio/pagamento unico
-          : 1;
+      const durationMonths = isExtraPackage ? null : selectedPlan.id === 'elite' ? 0 : 1;
 
       const { error: requestError } = await supabase.from('payment_requests').insert({
         user_id: profile.id,
@@ -176,7 +160,7 @@ export default function Premium() {
       setPaymentNote('');
       setProofFile(null);
       setSuccessMessage(
-        'Comprovativo enviado. O pedido será revisto o mais rápido possível e, logo em seguida, o plano escolhido será ativado.'
+        'Comprovativo enviado. O pedido sera revisto o mais rapido possivel e, logo em seguida, o plano escolhido sera ativado.'
       );
     } catch (error: any) {
       alert(error?.message || 'Erro ao enviar comprovativo.');
@@ -195,42 +179,30 @@ export default function Premium() {
               Premium MINSA Prep
             </div>
             <h1 className="mt-4 text-3xl font-black tracking-tight md:text-5xl">
-              Benefícios do Premium para acelerar seu estudo
+              Beneficios do Premium para acelerar seu estudo
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-200 md:text-base">
-              O Premium entrega funcionalidades pensadas para otimizar seu tempo e resultado: escolha
-              livre de nível (Fácil, Normal, Difícil e Misto) para personalizar suas sessões, ranking
-              completo para acompanhar sua posição, relatórios de desempenho detalhados e filtros de
-              revisão avançados. Tudo para você estudar com mais foco e ver progresso real.
+              Agora o fluxo ficou em duas etapas: primeiro voce escolhe o plano, depois faz o pagamento.
+              A ideia e deixar a decisao mais clara e o formulario mais leve.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-3 items-center">
               <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm">
                 Perfil atual: <span className="font-black">{isPremium ? 'Premium' : 'Gratuito'}</span>
               </div>
-              <div className="rounded-2xl bg-emerald-400/15 px-4 py-3 text-sm text-emerald-100 flex items-center gap-3">
-                <span>{isPremium ? 'Recursos premium ativos' : 'Alguns recursos premium ainda estao bloqueados'}</span>
-                {isPremium && (
-                  <span className="inline-flex items-center rounded-full bg-amber-200/30 px-2 py-0.5 text-xs font-semibold text-amber-900">
-                    Premium
-                  </span>
-                )}
+              <div className="rounded-2xl bg-emerald-400/15 px-4 py-3 text-sm text-emerald-100">
+                {checkoutOpen ? 'Etapa 2: pagamento e comprovativo' : 'Etapa 1: escolha do plano'}
               </div>
             </div>
           </div>
 
           <div className="rounded-[1.8rem] border border-white/10 bg-white/10 p-5 backdrop-blur">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">Principais benefícios</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">Principais beneficios</p>
             <div className="mt-4 space-y-3">
               {premiumPerks.map((perk) => (
                 <div key={perk} className="flex items-start gap-3 rounded-2xl bg-white/10 px-4 py-3 text-sm text-slate-100">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
-                  <div className="flex w-full items-center justify-between">
-                    <span>{perk}</span>
-                    <span className="ml-3 inline-flex items-center rounded-full bg-amber-200/30 px-2 py-0.5 text-xs font-semibold text-amber-900">
-                      Incluído
-                    </span>
-                  </div>
+                  <span>{perk}</span>
                 </div>
               ))}
             </div>
@@ -238,15 +210,13 @@ export default function Premium() {
         </div>
       </section>
 
-      {/* Seção removida: informações internas de estratégia comercial
-          Mantemos apenas benefícios, planos, formas de pagamento e suporte para os clientes */}
-
       <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.35)] md:p-6">
         <div className="flex flex-col gap-3 border-b border-slate-100 pb-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">Planos</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">Passo 1</p>
             <h2 className="mt-2 text-2xl font-black text-slate-900">Escolha o seu ciclo de estudo</h2>
           </div>
+          <p className="text-sm text-slate-500">Escolha primeiro. O pagamento abre no passo seguinte.</p>
         </div>
 
         <div className="mt-6 grid gap-4 xl:grid-cols-3">
@@ -270,7 +240,7 @@ export default function Premium() {
               <h3 className="mt-4 text-2xl font-black text-slate-900">{plan.name}</h3>
               <p className="mt-1 text-2xl font-black text-slate-900">{plan.prices[selectedPeriod].label}</p>
               <p className="mt-1 text-sm font-semibold text-emerald-700">
-                {plan.id === 'elite' ? 'Acesso vitalício (pagamento único)' : 'por mês'}
+                {plan.id === 'elite' ? 'Acesso vitalicio (pagamento unico)' : 'por mes'}
               </p>
               <p className="mt-4 text-sm font-semibold text-slate-800">{plan.headline}</p>
               <p className="mt-3 text-sm leading-6 text-slate-600">{plan.description}</p>
@@ -292,16 +262,33 @@ export default function Premium() {
                   : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
                   } disabled:cursor-not-allowed disabled:opacity-50`}
               >
-                {isAdmin ? 'Bloqueado para admin' : 'Pedir ativação deste plano'}
+                {isAdmin ? 'Bloqueado para admin' : 'Escolher e continuar'}
               </button>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-6 mt-8">
-        <h2 className="text-2xl font-black text-slate-900 mb-2">Pacotes Extras Intensivos</h2>
-        <p className="text-sm text-slate-600 mb-6">Se você já é Premium ou Elite mas precisa daquele foco final, adicione ao seu plano.</p>
+      {!checkoutOpen && (
+        <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Passo 2</p>
+              <h2 className="mt-2 text-xl font-black text-slate-900">Pagamento so aparece depois da escolha</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Primeiro escolha um plano. So depois mostramos comprovativo, dados bancarios e envio.
+              </p>
+            </div>
+            <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
+              Fluxo mais curto, menos ruido
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+        <h2 className="text-2xl font-black text-slate-900 mb-2">Pacotes extras intensivos</h2>
+        <p className="text-sm text-slate-600 mb-6">Se voce ja e Premium ou Elite mas precisa de foco final, adicione um pacote.</p>
         <div className="grid gap-4 md:grid-cols-3">
           {extraPackages.map((pkg) => (
             <div key={pkg.id} className="rounded-2xl border border-sky-200 bg-sky-50/50 p-5">
@@ -321,57 +308,48 @@ export default function Premium() {
                 disabled={isAdmin}
                 className="w-full rounded-xl bg-white border border-sky-200 py-2 text-sm font-bold text-sky-700 hover:bg-sky-100 transition disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isAdmin ? 'Bloqueado para admin' : 'Solicitar Pacote'}
+                {isAdmin ? 'Bloqueado para admin' : 'Escolher pacote'}
               </button>
             </div>
           ))}
         </div>
       </section>
 
-      {selectedPlan && (
+      {checkoutOpen && selectedPlan && (
         <section id="payment-section" className="grid gap-5 xl:grid-cols-[1fr_0.95fr]">
           <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.35)] md:p-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600">
-                <Wallet className="h-6 w-6" />
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600">
+                  <Wallet className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Passo 2</p>
+                  <h2 className="text-2xl font-black text-slate-900">Transferencia e envio do comprovativo</h2>
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Pagamento simples</p>
-                <h2 className="text-2xl font-black text-slate-900">Transferencia e envio do comprovativo</h2>
-              </div>
+              <button
+                type="button"
+                onClick={() => setCheckoutOpen(false)}
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Voltar aos planos
+              </button>
             </div>
 
-            <div className="mt-5 rounded-[1.6rem] border border-amber-200 bg-amber-50 p-4">
-              <p className="text-sm font-semibold text-amber-900">
-                Depois de fazer o pagamento, envie o comprovativo aqui. O pedido será revisto o mais rápido possível e, logo em seguida, o plano escolhido será ativado.
-              </p>
-              <p className="mt-3 text-sm text-amber-900">
-                Dica: Escolha o plano acima e clique em "Pedir ativação Premium" para ir diretamente a este formulário.
-              </p>
-            </div>
-
-            <div className="mt-4 rounded-[1.6rem] border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-700">Formas de pagamento</p>
-              <p className="mt-2 text-sm text-slate-600">Transferência bancária (copie o número / IBAN desejado e cole no seu app bancário).</p>
-              <div className="mt-3 space-y-2">
-                {paymentMethods.map((m) => (
-                  <div key={m.bank} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
-                    <div>
-                      <div className="text-sm font-semibold text-slate-800">{m.bank}</div>
-                      <div className="text-xs text-slate-600">{m.value}</div>
-                    </div>
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(m.value)}
-                        className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white"
-                      >
-                        <Copy className="h-3 w-3" />
-                        {copiedBank === m.value ? 'Copiado' : 'Copiar'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
+            <div className="mt-5 rounded-[1.6rem] border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Plano selecionado</p>
+              <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h3 className="text-xl font-black text-slate-900">{selectedPlan.name}</h3>
+                  <p className="mt-1 text-sm font-semibold text-emerald-700">{selectedPlanPriceLabel}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-700">
+                    {(selectedPlan as any).headline || selectedPlan.description}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-slate-900">
+                  {selectedPlan.id === 'elite' ? 'Pagamento unico' : 'Ativacao solicitada'}
+                </div>
               </div>
             </div>
 
@@ -396,24 +374,6 @@ export default function Premium() {
               </div>
             )}
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              {paidPlans.map((plan) => (
-                <button
-                  key={plan.id}
-                  type="button"
-                  onClick={() => setSelectedPlanId(plan.id)}
-                  className={`rounded-[1.4rem] border px-4 py-4 text-left transition ${selectedPlanId === plan.id
-                    ? 'border-emerald-500 bg-emerald-50'
-                    : 'border-slate-200 bg-slate-50'
-                    }`}
-                >
-                  <p className="text-lg font-black text-slate-900">{plan.name}</p>
-                  <p className="mt-1 text-sm font-semibold text-emerald-700">{plan.prices[selectedPeriod].label}</p>
-                  <p className="mt-2 text-sm text-slate-600">{plan.headline}</p>
-                </button>
-              ))}
-            </div>
-
             <div className="mt-5 space-y-4">
               <div>
                 <label className="mb-2 block text-sm font-semibold text-slate-700">Nome de quem pagou</label>
@@ -425,12 +385,12 @@ export default function Premium() {
                 />
               </div>
               <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">Referência da transferência</label>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">Referencia da transferencia</label>
                 <input
                   type="text"
                   value={paymentReference}
                   onChange={(e) => setPaymentReference(e.target.value)}
-                  placeholder="Ex.: referência, terminal ou número da operação"
+                  placeholder="Ex.: referencia, terminal ou numero da operacao"
                   className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
                 />
               </div>
@@ -446,17 +406,18 @@ export default function Premium() {
                     className="hidden"
                   />
                 </label>
+                <p className="mt-2 text-xs text-slate-500">Os dados bancarios ficam na coluna da direita para o formulario ficar mais limpo.</p>
               </div>
 
               {selectedPlanId === 'pacote_concurso' && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">Tempo de preparação desejado</label>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">Tempo de preparacao desejado</label>
                   <select
                     value={prepTime}
                     onChange={(e) => setPrepTime(e.target.value)}
                     className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500 bg-slate-50 font-bold"
                   >
-                    <option value="1">1 Mês (Intensivo)</option>
+                    <option value="1">1 Mes (Intensivo)</option>
                     <option value="3">3 Meses (Recomendado)</option>
                     <option value="6">6 Meses (Completo)</option>
                   </select>
@@ -464,7 +425,7 @@ export default function Premium() {
               )}
 
               <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">Observação opcional</label>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">Observacao opcional</label>
                 <textarea
                   rows={3}
                   value={paymentNote}
@@ -473,15 +434,16 @@ export default function Premium() {
                   className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500"
                 />
               </div>
-                <button
-                  type="button"
-                  onClick={handleSubmitPaymentRequest}
-                  disabled={submitting || isAdmin}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white disabled:opacity-50"
-                >
-                  <Upload className="h-4 w-4" />
-                  {isAdmin ? 'Bloqueado para admin' : submitting ? 'A enviar comprovativo...' : `Enviar pedido para ${selectedPlan.name}`}
-                </button>
+
+              <button
+                type="button"
+                onClick={handleSubmitPaymentRequest}
+                disabled={submitting || isAdmin}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white disabled:opacity-50"
+              >
+                <Upload className="h-4 w-4" />
+                {isAdmin ? 'Bloqueado para admin' : submitting ? 'A enviar comprovativo...' : `Enviar pedido para ${selectedPlan.name}`}
+              </button>
               {successMessage && (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-semibold text-emerald-800">
                   {successMessage}
@@ -491,6 +453,21 @@ export default function Premium() {
           </div>
 
           <div className="space-y-5">
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Como funciona</p>
+              <div className="mt-4 space-y-3">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  1. Escolha o plano que melhor encaixa no seu ciclo de estudo.
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  2. Faca a transferencia usando um dos dados bancarios abaixo.
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  3. Envie referencia e comprovativo para o pedido seguir para revisao.
+                </div>
+              </div>
+            </div>
+
             <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.35)] md:p-6">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Dados para transferencia</p>
               <p className="mt-3 text-lg font-black text-slate-900">Titular: JOSE SIMAO PEDRO</p>
@@ -502,20 +479,11 @@ export default function Premium() {
                       <p className="break-all text-sm font-bold text-slate-900">{method.value}</p>
                       <button
                         type="button"
-                        onClick={() => {
-                          try {
-                            navigator.clipboard.writeText(method.value);
-                            setCopiedBank(method.bank);
-                            setTimeout(() => setCopiedBank(null), 2500);
-                          } catch (e) {
-                            // fallback alert
-                            alert('Copiar nao funciona no seu navegador. Copie manualmente: ' + method.value);
-                          }
-                        }}
+                        onClick={() => copyToClipboard(method.value)}
                         className="ml-2 inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
                       >
                         <Copy className="h-4 w-4" />
-                        {copiedBank === method.bank ? 'Copiado' : 'Copiar'}
+                        {copiedBank === method.value ? 'Copiado' : 'Copiar'}
                       </button>
                     </div>
                   </div>
@@ -527,7 +495,7 @@ export default function Premium() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Suporte</p>
               <p className="mt-2 text-lg font-black text-slate-900">WhatsApp: 244936793706</p>
               <p className="mt-3 text-sm leading-6 text-slate-700">
-                Se o comprovativo demorar a carregar ou se a internet estiver fraca, o estudante pode pedir apoio por WhatsApp enquanto o pedido continua registado no sistema para revisão do admin.
+                Se o comprovativo demorar a carregar ou se a internet estiver fraca, o estudante pode pedir apoio por WhatsApp enquanto o pedido continua registado no sistema para revisao do admin.
               </p>
             </div>
           </div>
@@ -538,7 +506,7 @@ export default function Premium() {
         <div className="rounded-[1.8rem] border border-emerald-200 bg-emerald-50 p-5">
           <h2 className="text-xl font-black text-slate-900">Precisa de ajuda?</h2>
           <p className="mt-3 text-sm leading-6 text-slate-700">
-            Dúvidas sobre planos ou pagamentos? Fale com o suporte pelo WhatsApp: <span className="font-black">+244936793706</span>.
+            Duvidas sobre planos ou pagamentos? Fale com o suporte pelo WhatsApp: <span className="font-black">+244936793706</span>.
           </p>
         </div>
 
