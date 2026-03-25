@@ -20,7 +20,7 @@ export default function EliteWelcome() {
         .from('elite_onboarding')
         .select('completed')
         .eq('user_id', profile.id)
-        .single();
+        .maybeSingle();
       
       if (data?.completed) {
         navigate('/dashboard');

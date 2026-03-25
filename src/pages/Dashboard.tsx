@@ -36,6 +36,7 @@ export default function Dashboard() {
   const { profile } = useAuthStore();
   const { areas, fetchAreas } = useAppStore();
   const perms = usePermissions();
+  const isEliteUser = profile?.role === 'elite';
   const isPaidUser = perms.canAccessSimulation;
   const isFreeUser = profile?.role === 'free';
   const trainingUsesAutomaticTopic = perms.hasGuidedTraining;
@@ -46,7 +47,7 @@ export default function Dashboard() {
     dueQuestions: 0,
   });
   const [topicProgress, setTopicProgress] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [missingGoal, setMissingGoal] = useState('');
   const [savingGoal, setSavingGoal] = useState(false);
   const [freezingStreak, setFreezingStreak] = useState(false);
@@ -54,8 +55,8 @@ export default function Dashboard() {
   const [streakWeek, setStreakWeek] = useState<{ label: string; completed: boolean; date: string }[]>([]);
   const [streakLoading, setStreakLoading] = useState(false);
   const [displayStreakCount, setDisplayStreakCount] = useState(profile?.streak_count || 0);
-  const [showEliteWelcome, setShowEliteWelcome] = useState(false);
   const [currentStrategy, setCurrentStrategy] = useState<any>(null);
+  const [eliteGateResolved, setEliteGateResolved] = useState(false);
   const trainingPath = trainingUsesAutomaticTopic ? '/training' : '/training?mode=manual';
   const trainingEyebrow = perms.hasGuidedTraining ? 'Plano do dia' : 'Treino';
   const trainingTitle = perms.hasGuidedTraining ? 'Abrir treino guiado' : 'Escolher treino';
@@ -68,47 +69,52 @@ export default function Dashboard() {
   }, [profile?.streak_count]);
 
   useEffect(() => {
-    fetchAreas();
-  }, [fetchAreas]);
-
-  useEffect(() => {
-    if (showEliteWelcome) {
-      navigate('/elite-welcome');
+    if (areas.length === 0) {
+      void fetchAreas();
     }
-  }, [showEliteWelcome, navigate]);
+  }, [areas.length, fetchAreas]);
 
   useEffect(() => {
-    const checkEliteOnboarding = async () => {
-      if (!profile?.id || profile?.role !== 'elite') return;
+    let active = true;
+
+    const prepareDashboardFlow = async () => {
+      if (!profile?.id) {
+        if (active) {
+          setCurrentStrategy(null);
+          setEliteGateResolved(false);
+        }
+        return;
+      }
+
+      if (!isEliteUser) {
+        if (active) {
+          setCurrentStrategy(null);
+          setEliteGateResolved(true);
+        }
+        return;
+      }
+
+      setEliteGateResolved(false);
 
       try {
-        if (profile?.role === 'elite') {
-          const { data: onboarding } = await supabase
+        const [{ data: onboarding }, strategy] = await Promise.all([
+          supabase
             .from('elite_onboarding')
-            .select('completed, completed_at')
+            .select('completed')
             .eq('user_id', profile.id)
-            .single();
+            .maybeSingle(),
+          EliteStrategyManager.getCurrentWeekStrategy(profile.id),
+        ]);
 
-          if (!onboarding?.completed) {
-            setShowEliteWelcome(true);
-            return;
-          }
+        if (!active) return;
 
-          if (onboarding.completed_at) {
-            const onboardingDate = new Date(onboarding.completed_at);
-            const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-
-            if (onboardingDate < oneWeekAgo) {
-              setShowEliteWelcome(true);
-              return;
-            }
-          }
+        if (!onboarding?.completed) {
+          navigate('/elite-welcome', { replace: true });
+          return;
         }
 
-        const strategy = await EliteStrategyManager.getCurrentWeekStrategy(profile.id);
-        if (strategy) {
-          setCurrentStrategy(strategy);
-        } else {
+        let resolvedStrategy = strategy;
+        if (!resolvedStrategy) {
           const { data: legacyPlan } = await supabase
             .from('study_plans')
             .select('plan_json')
@@ -116,81 +122,115 @@ export default function Dashboard() {
             .order('generated_at', { ascending: false })
             .limit(1)
             .maybeSingle();
-          setCurrentStrategy(legacyPlan?.plan_json || null);
+
+          if (!active) return;
+          resolvedStrategy = legacyPlan?.plan_json || null;
         }
 
+        setCurrentStrategy(resolvedStrategy || null);
+        setEliteGateResolved(true);
+
         const needsReassessment = await EliteStrategyManager.checkWeekCompletion(profile.id);
-        if (needsReassessment) {
-          await EliteStrategyManager.completeWeekAndReassess(profile.id);
-          const newStrategy = await EliteStrategyManager.getCurrentWeekStrategy(profile.id);
-          setCurrentStrategy(newStrategy);
+        if (!active || !needsReassessment) return;
+
+        await EliteStrategyManager.completeWeekAndReassess(profile.id);
+        if (!active) return;
+
+        const refreshedStrategy = await EliteStrategyManager.getCurrentWeekStrategy(profile.id);
+        if (!active) return;
+
+        if (refreshedStrategy) {
+          setCurrentStrategy(refreshedStrategy);
         }
       } catch (error) {
         console.error('Error checking elite onboarding:', error);
+        if (active) {
+          setEliteGateResolved(true);
+        }
       }
     };
 
-    checkEliteOnboarding();
-  }, [profile]);
+    void prepareDashboardFlow();
+
+    return () => {
+      active = false;
+    };
+  }, [isEliteUser, navigate, profile?.id]);
+
+  const canLoadDashboardData = Boolean(profile?.id) && (!isEliteUser || eliteGateResolved);
 
   useEffect(() => {
     const fetchStats = async () => {
-      if (!profile?.id) {
-        setLoading(false);
+      if (!profile?.id || !profile.selected_area_id || !canLoadDashboardData) {
         return;
       }
 
+      setStatsLoading(true);
+
       try {
-        const { data: progressData } = await supabase
-          .from('user_topic_progress')
-          .select('questions_answered, correct_answers, domain_score, topics!inner(name, area_id)')
-          .eq('user_id', profile.id)
-          .eq('topics.area_id', profile.selected_area_id);
+        const [progressResult, simResult, dueResult] = await Promise.all([
+          supabase
+            .from('user_topic_progress')
+            .select('questions_answered, correct_answers, domain_score, topics!inner(name, area_id)')
+            .eq('user_id', profile.id)
+            .eq('topics.area_id', profile.selected_area_id),
+          supabase
+            .from('quiz_attempts')
+            .select('score')
+            .eq('user_id', profile.id)
+            .eq('is_completed', true)
+            .order('completed_at', { ascending: false })
+            .limit(1),
+          supabase
+            .from('user_question_srs')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', profile.id)
+            .lte('next_review', new Date().toISOString()),
+        ]);
 
         let totalQ = 0;
         let totalC = 0;
+        const progressData = progressResult.data || [];
 
-        if (progressData) {
+        if (progressData.length > 0) {
           totalQ = progressData.reduce((acc, p) => acc + (p.questions_answered || 0), 0);
           totalC = progressData.reduce((acc, p) => acc + (p.correct_answers || 0), 0);
           setTopicProgress(progressData);
+        } else {
+          setTopicProgress([]);
         }
 
         const avg = totalQ > 0 ? Math.round((totalC / totalQ) * 100) : 0;
-
-        const { data: simData } = await supabase
-          .from('quiz_attempts')
-          .select('score')
-          .eq('user_id', profile.id)
-          .eq('is_completed', true)
-          .order('completed_at', { ascending: false })
-          .limit(1);
+        const simData = simResult.data || [];
 
         const lastSim = simData && simData.length > 0 ? simData[0].score : 0;
-
-        const { count: dueCount } = await supabase
-          .from('user_question_srs')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', profile.id)
-          .lte('next_review', new Date().toISOString());
+        const dueCount = dueResult.count || 0;
 
         setStats({
           totalQuestions: totalQ,
           avgScore: avg,
           lastSimScore: lastSim,
-          dueQuestions: dueCount || 0,
+          dueQuestions: dueCount,
         });
       } catch (error) {
         console.error('Error fetching stats:', error);
-        setLoading(false);
+        setTopicProgress([]);
+        setStats({
+          totalQuestions: 0,
+          avgScore: 0,
+          lastSimScore: 0,
+          dueQuestions: 0,
+        });
       } finally {
-        setLoading(false);
+        setStatsLoading(false);
       }
     };
 
-    fetchStats();
+    void fetchStats();
+  }, [canLoadDashboardData, profile?.id, profile?.selected_area_id]);
 
-    if (profile?.id) {
+  useEffect(() => {
+    if (profile?.id && profile?.selected_area_id && profile?.role !== 'elite' && canLoadDashboardData) {
       void (async () => {
         try {
           const { data: existing } = await supabase.from('study_plans').select('id').eq('user_id', profile.id).maybeSingle();
@@ -202,10 +242,10 @@ export default function Dashboard() {
         }
       })();
     }
-  }, [profile?.id]);
+  }, [canLoadDashboardData, profile, profile?.id, profile?.role, profile?.selected_area_id]);
 
   useEffect(() => {
-    if (!profile?.id) return;
+    if (!profile?.id || !canLoadDashboardData) return;
 
     const fetchStreakWeek = async () => {
       setStreakLoading(true);
@@ -221,11 +261,11 @@ export default function Dashboard() {
       }
     };
 
-    fetchStreakWeek();
-  }, [profile?.id, profile?.streak_count]);
+    void fetchStreakWeek();
+  }, [canLoadDashboardData, profile?.id, profile?.streak_count]);
 
   useEffect(() => {
-    if (!profile?.id) return;
+    if (!profile?.id || !canLoadDashboardData) return;
 
     const monitorTasks = async () => {
       const { getDailyTasksProgress } = await import('../lib/dailyTasks');
@@ -243,10 +283,10 @@ export default function Dashboard() {
       setLastTaskCount(completedNow);
     };
 
-    monitorTasks();
+    void monitorTasks();
     const interval = setInterval(monitorTasks, 30000);
     return () => clearInterval(interval);
-  }, [profile?.id, lastTaskCount]);
+  }, [canLoadDashboardData, profile?.id, lastTaskCount]);
 
   const areaName = useMemo(
     () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Area ainda nao definida',
@@ -260,18 +300,6 @@ export default function Dashboard() {
         title="Conclua o seu perfil de estudante"
         description="Escolha a area principal para desbloquear o painel, o treino e a simulacao de prova."
       />
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-emerald-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-amber-200 border-t-amber-600"></div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2 mt-4">Carregando seu painel</h2>
-          <p className="text-slate-600">Preparando tudo para voce...</p>
-        </div>
-      </div>
     );
   }
 
@@ -328,8 +356,8 @@ export default function Dashboard() {
     },
     {
       to: '/ranking',
-      title: 'Ver ranking',
-      description: 'Compare sua evolucao com os estudantes da sua area.',
+      title: 'Ranking da area',
+      description: 'Consulte sua posicao local sem tirar Ligas do menu principal.',
       icon: BarChart2,
       tone: 'sky',
     },
@@ -469,16 +497,19 @@ export default function Dashboard() {
                     <p className="mt-2 text-sm text-slate-600">
                       {currentStrategy
                         ? 'O seu plano atual esta ativo. Recalibre apenas quando a semana pedir ajuste.'
-                        : 'Crie o plano e deixe o sistema organizar o foco das proximas sessoes.'}
+                        : eliteGateResolved
+                        ? 'Crie o plano e deixe o sistema organizar o foco das proximas sessoes.'
+                        : 'Validando o seu fluxo Elite para evitar reabrir a criacao de plano sem necessidade.'}
                     </p>
                   </div>
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <button
                       onClick={() => navigate('/elite-assessment')}
-                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-500 px-5 py-3 text-sm font-black uppercase tracking-[0.12em] text-white transition hover:bg-amber-600"
+                      disabled={!eliteGateResolved}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-500 px-5 py-3 text-sm font-black uppercase tracking-[0.12em] text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <Target className="h-4 w-4" />
-                      {currentStrategy ? 'Atualizar plano' : 'Criar plano'}
+                      {!eliteGateResolved ? 'A verificar...' : currentStrategy ? 'Atualizar plano' : 'Criar plano'}
                     </button>
                     {currentStrategy && (
                       <button
@@ -548,27 +579,31 @@ export default function Dashboard() {
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-sky-200">Ultimo simulado</p>
                 <p className="mt-2 flex items-center gap-2 text-2xl font-black text-white">
                   <Clock3 className="h-6 w-6 text-sky-300" />
-                  {stats.lastSimScore}%
+                  {statsLoading ? '...' : `${stats.lastSimScore}%`}
                 </p>
-                <p className="mt-3 text-xs text-slate-400">Resultado mais recente em prova completa.</p>
+                <p className="mt-3 text-xs text-slate-400">
+                  {statsLoading ? 'Atualizando o historico mais recente.' : 'Resultado mais recente em prova completa.'}
+                </p>
               </div>
 
               <div className="rounded-[1.4rem] bg-white/5 p-4">
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200">Revisoes</p>
                 <p className="mt-2 flex items-center gap-2 text-2xl font-black text-white">
                   <CheckCircle className="h-6 w-6 text-emerald-300" />
-                  {stats.dueQuestions}
+                  {statsLoading ? '...' : stats.dueQuestions}
                 </p>
-                <p className="mt-3 text-xs text-slate-400">Itens prontos para retomar hoje.</p>
+                <p className="mt-3 text-xs text-slate-400">
+                  {statsLoading ? 'Sincronizando revisoes do dia.' : 'Itens prontos para retomar hoje.'}
+                </p>
               </div>
             </div>
 
             <div className="mt-6">
               <Link
-                to="/ranking"
+                to="/leagues"
                 className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-200 transition hover:text-white"
               >
-                Ver ranking da area
+                Abrir ligas
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </div>

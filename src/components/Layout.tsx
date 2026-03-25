@@ -103,11 +103,11 @@ export default function Layout() {
     { to: '/dashboard', label: 'Hoje', icon: Home, activeColor: 'text-emerald-500', activeBg: 'bg-emerald-100', activeBorder: 'border-emerald-200' },
     { to: '/practice', label: 'Estudar', icon: Dumbbell, activeColor: 'text-sky-500', activeBg: 'bg-sky-100', activeBorder: 'border-sky-200' },
     { to: '/social', label: 'Comunidade', icon: UsersRound, activeColor: 'text-rose-500', activeBg: 'bg-rose-100', activeBorder: 'border-rose-200' },
-    { to: '/ranking', label: 'Ranking', icon: Award, activeColor: 'text-indigo-500', activeBg: 'bg-indigo-100', activeBorder: 'border-indigo-200' },
+    { to: '/leagues', label: 'Ligas', icon: ShieldCheck, activeColor: 'text-indigo-500', activeBg: 'bg-indigo-100', activeBorder: 'border-indigo-200' },
   ];
 
   const studentSecondaryLinks = [
-    { to: '/leagues', label: 'Ligas', icon: ShieldCheck, activeColor: 'text-indigo-500', activeBg: 'bg-indigo-100', activeBorder: 'border-indigo-200' },
+    { to: '/ranking', label: 'Ranking da area', icon: Award, activeColor: 'text-indigo-500', activeBg: 'bg-indigo-100', activeBorder: 'border-indigo-200' },
     { to: '/news', label: 'Avisos', icon: Megaphone, activeColor: 'text-blue-500', activeBg: 'bg-blue-100', activeBorder: 'border-blue-200' },
     { to: '/premium', label: 'Loja', icon: Crown, activeColor: 'text-yellow-500', activeBg: 'bg-yellow-100', activeBorder: 'border-yellow-200' },
     { to: '/profile', label: 'Perfil', icon: UserRound, activeColor: 'text-teal-500', activeBg: 'bg-teal-100', activeBorder: 'border-teal-200' },
