@@ -106,6 +106,7 @@ export default function Simulation() {
     [areas, profile?.selected_area_id]
   );
 
+  const hasSelectedOfficialArea = areas.some((area) => area.id === profile?.selected_area_id);
   const currentQ = questions[currentQIndex];
   const currentExplanation =
     (Array.isArray(currentQ?.question_explanations) ? currentQ?.question_explanations?.[0]?.content : (currentQ?.question_explanations as any)?.content) ||
@@ -530,7 +531,7 @@ export default function Simulation() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  if (!profile?.selected_area_id) {
+  if (!profile?.selected_area_id || (areas.length > 0 && !hasSelectedOfficialArea)) {
     return <AreaLockCard areas={areas} />;
   }
 
@@ -843,7 +844,7 @@ export default function Simulation() {
       <section className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.35)] md:p-6">
           <h2 className="text-2xl font-black text-slate-900">Pronto para a simulação?</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Prova de 30 questões no modo focado.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Prova de 100 questoes no modo focado.</p>
 
           <button
             type="button"
@@ -854,7 +855,7 @@ export default function Simulation() {
           </button>
 
           <p className="mt-4 text-sm leading-6 text-slate-600">
-            As 30 questoes ja saem equilibradas automaticamente para refletir melhor a prova real.
+            As 100 questoes ja saem equilibradas automaticamente para refletir melhor a prova real.
           </p>
 
           <div className="hidden">

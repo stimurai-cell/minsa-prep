@@ -22,7 +22,7 @@ export default function TermsOfUse() {
                     <section>
                         <h2 className="text-xl font-black text-slate-800 mb-3 uppercase tracking-wide text-sm">1. Aceitação dos Termos</h2>
                         <p>
-                            Ao utilizar o MINSA Prep, você concorda em cumprir e vincular-se a estes Termos de Uso. Esta plataforma é destinada à preparação educacional para exames de saúde e concursos públicos.
+                            Ao utilizar o MINSA Prep, você concorda em cumprir e vincular-se a estes Termos de Uso. A plataforma apoia estudo continuo, reciclagem profissional, exames de saude e concursos publicos, com foco comercial atual reforcado no Concurso Publico da Saude.
                         </p>
                     </section>
 
@@ -36,7 +36,7 @@ export default function TermsOfUse() {
                     <section>
                         <h2 className="text-xl font-black text-slate-800 mb-3 uppercase tracking-wide text-sm">3. Isenção de Responsabilidade</h2>
                         <p>
-                            Embora nos esforcemos para fornecer dados atualizados e precisos baseados na legislação angolana e padrões internacionais de saúde, o MINSA Prep não garante a aprovação em exames. O sucesso depende do esforço individual do estudante.
+                            Embora nos esforcemos para fornecer dados atualizados e precisos baseados na legislacao angolana e em boas praticas da saude, o MINSA Prep nao garante aprovacao em exames ou concursos. O resultado final depende do esforco individual, da constancia e da aplicacao pratica do estudante.
                         </p>
                     </section>
 

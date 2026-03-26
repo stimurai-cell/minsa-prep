@@ -3,8 +3,8 @@
  *
  * Roles:
  *  - free    : treino livre, 30 questoes/dia, 1 simulacao/semana, ranking basico
- *  - basic   : simulacoes ilimitadas, treino sem limite (exceto dificil), ranking completo
- *  - premium : tudo do basic + dificil + banco completo + offline incluido
+ *  - basic   : alias legado interno; hoje equivale ao nucleo do Premium
+ *  - premium : simulacoes ilimitadas, treino sem limite, banco completo e offline
  *  - elite   : tudo do premium + radar, simulacao nacional, PDF e batalha
  *  - admin   : acesso total
  *
@@ -46,19 +46,19 @@ export function getPermissions(
   const isAdmin = resolvedRole === 'admin';
   const isElite = isAdmin || resolvedRole === 'elite';
   const isPremium = isElite || resolvedRole === 'premium';
-  const isBasic = isPremium || resolvedRole === 'basic';
+  const hasPremiumCoreAccess = isPremium || resolvedRole === 'basic';
 
   const hasPackage = (id: string) => activePackages.includes(id);
 
   return {
     hasGuidedTraining: isElite,
     canAccessHardDifficulty: isPremium,
-    dailyQuestionLimit: isBasic ? null : 30,
+    dailyQuestionLimit: hasPremiumCoreAccess ? null : 30,
     canAccessFullQuestionBank: isPremium,
-    simulationsPerWeek: isBasic ? null : 1,
-    canAccessSimulation: isBasic,
-    hasFullRanking: isBasic,
-    hasHistorico: isBasic,
+    simulationsPerWeek: hasPremiumCoreAccess ? null : 1,
+    canAccessSimulation: hasPremiumCoreAccess,
+    hasFullRanking: hasPremiumCoreAccess,
+    hasHistorico: hasPremiumCoreAccess,
     hasWeaknessRadar: isElite,
     hasStatisticsPDF: isElite,
     hasNationalSimulation: isElite,

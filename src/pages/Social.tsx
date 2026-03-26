@@ -359,7 +359,7 @@ export default function Social() {
                         <p className="text-sm text-slate-500 mb-4">A melhor forma de crescer é estudando acompanhado.</p>
                         <button
                             onClick={() => {
-                                const message = encodeURIComponent("Vem treinar comigo no MINSA Prep! A melhor plataforma para nos prepararmos para o Concurso Público da Saúde. 🚀\nCria a tua conta em: " + window.location.origin);
+                                const message = encodeURIComponent("Vem estudar comigo no MINSA Prep. E uma plataforma de estudo inteligente para profissionais da saude, com foco especial no Concurso Publico da Saude neste momento.\nCria a tua conta em: " + window.location.origin);
                                 window.open(`https://wa.me/?text=${message}`, '_blank');
                             }}
                             className="w-full flex items-center justify-center gap-3 bg-[#25D366] hover:bg-[#128C7E] text-white p-4 rounded-2xl font-bold shadow-[0_4px_0_0_#128c7e] active:shadow-none active:translate-y-1 transition-all"

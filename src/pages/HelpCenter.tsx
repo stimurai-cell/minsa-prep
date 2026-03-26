@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
+import { HEALTH_AREAS, PRODUCT_CONTEXT } from '../lib/productContext';
 
 interface FAQItemData {
   question: string;
@@ -79,6 +80,14 @@ export default function HelpCenter() {
               'mantenha consistencia diaria para ganhar XP, alimentar a ofensiva e aparecer nas ligas',
             ],
             'Depois disso, o painel inicial passa a mostrar atalho de treino, ofensiva, XP, revisoes, notificacoes e recomendacoes do sistema.'
+          ),
+        },
+        {
+          question: 'Para quem o app foi criado e qual e o foco atual?',
+          answer: listAnswer(
+            `${PRODUCT_CONTEXT.name} nasceu para ajudar voce a estudar muito conteudo de forma facil, inteligente e descontraida. Ele foi pensado para profissionais e estudantes da saude usarem em varios momentos da formacao e da carreira, mesmo quando o objetivo nao e concurso.`,
+            HEALTH_AREAS.map((area) => area.name),
+            'Hoje, o foco principal do produto esta no Concurso Publico da Saude. Por isso, a comunicacao, os simulados e os reforcos comerciais estao mais orientados para essa janela, sem deixar de lado o uso continuo para estudo e reciclagem.'
           ),
         },
         {
@@ -166,7 +175,7 @@ export default function HelpCenter() {
         {
           question: 'Como funciona a Simulacao de prova?',
           answer: paragraphs(
-            'A simulacao monta uma prova completa e equilibrada com questoes da sua area, temporizador visivel, progresso da sessao e nota final.',
+            'A simulacao monta uma prova completa e equilibrada com 100 questoes da sua area, temporizador visivel, progresso da sessao e nota final.',
             'No fim, o app regista a tentativa, calcula o aproveitamento, soma XP e alimenta o historico usado pelo painel, pela revisao e pela analise do seu desempenho.',
             'No plano gratuito, a simulacao e limitada. Nos planos pagos, ela entra no estudo de forma bem mais livre e constante.'
           ),
@@ -257,7 +266,7 @@ export default function HelpCenter() {
               'ranking basico',
               'simulacao com uso limitado',
             ],
-            'Recursos mais profundos, como banco completo, modo Dificil, leitura completa de ranking, estudo offline, radar de fraquezas, exportacoes e batalha, ficam para as camadas pagas.'
+            'Recursos mais profundos, como revisao inteligente, banco completo, modo Dificil, leitura completa de ranking, estudo offline, radar de fraquezas, exportacoes e batalha, ficam para as camadas pagas.'
           ),
         },
         {

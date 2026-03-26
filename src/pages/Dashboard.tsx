@@ -28,6 +28,7 @@ import AIMentor from '../components/AIMentor';
 import NotificationCenter from '../components/NotificationCenter';
 import { APP_ICON_SRC } from '../lib/brand';
 import { usePermissions } from '../lib/permissions';
+import { STUDY_GOALS } from '../lib/productContext';
 import { EliteStrategyManager } from '../lib/eliteStrategy';
 import { fetchStreakSnapshot } from '../lib/streak';
 
@@ -65,8 +66,8 @@ export default function Dashboard() {
     : perms.hasGuidedTraining
       ? 'Plano do dia'
       : 'Treino';
-  const trainingTitle = shouldStartWithReview
-    ? 'Abrir revisao guiada'
+const trainingTitle = shouldStartWithReview
+    ? 'Abrir revisao inteligente'
     : perms.hasGuidedTraining
       ? 'Abrir treino guiado'
       : 'Escolher treino';
@@ -304,8 +305,9 @@ export default function Dashboard() {
     () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Area ainda nao definida',
     [areas, profile?.selected_area_id]
   );
+  const hasSelectedOfficialArea = areas.some((area) => area.id === profile?.selected_area_id);
 
-  if (!profile?.selected_area_id) {
+  if (!profile?.selected_area_id || (areas.length > 0 && !hasSelectedOfficialArea)) {
     return (
       <AreaLockCard
         areas={areas}
@@ -423,10 +425,9 @@ export default function Dashboard() {
             className="w-full max-w-sm rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-orange-400 mb-4"
           >
             <option value="" disabled>Selecione o seu objetivo principal</option>
-            <option value="Aprender e rever conceitos">Aprender e rever conceitos</option>
-            <option value="Passar no concurso publico">Passar no concurso publico</option>
-            <option value="Descontrair e treinar">Descontrair e treinar</option>
-            <option value="Testar minhas habilidades">Testar as minhas habilidades</option>
+            {STUDY_GOALS.map((studyGoal) => (
+              <option key={studyGoal} value={studyGoal}>{studyGoal}</option>
+            ))}
           </select>
 
           <button
@@ -626,42 +627,6 @@ export default function Dashboard() {
           </div>
         </div>
       </section>
-
-      {stats.dueQuestions > 0 && isPaidUser && (
-        <section className="rounded-[2rem] border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-[1.4rem] bg-white text-emerald-600 shadow-sm">
-                <Clock3 className="h-7 w-7" />
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Atencao agora</p>
-                <h2 className="mt-1 text-xl font-black text-slate-900">Revisoes prontas para hoje</h2>
-                <p className="mt-1 text-sm text-slate-700">
-                  Ha <span className="font-black text-emerald-700">{stats.dueQuestions} questoes</span> a pedir continuidade.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Link
-                to={reviewPath}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 text-sm font-black uppercase tracking-[0.12em] text-white transition hover:bg-emerald-700"
-              >
-                <PlayCircle className="h-5 w-5" />
-                Abrir revisao
-              </Link>
-              <Link
-                to="/practice"
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-600 bg-white px-6 py-4 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
-              >
-                <BookOpen className="h-5 w-5" />
-                Ver todos os modos
-              </Link>
-            </div>
-          </div>
-        </section>
-      )}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {quickLinks.map((item) => {

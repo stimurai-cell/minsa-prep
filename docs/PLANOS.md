@@ -1,64 +1,64 @@
-# Planos e funcionalidades — MINSA Prep
+# Planos e funcionalidades - MINSA Prep
 
 ## Visao geral
-- **Free (0 Kz / mes)**: porta de entrada para conhecer a plataforma.
-- **Premium (8.000 Kz / mes)**: pacote principal de preparacao completa.
-- **Elite (15.000 Kz / vitalicio, pagamento unico)**: pacote definitivo com ferramentas de alto impacto e radar completo.
-- **Pacotes extras avulsos**: complementos opcionais focados em conteudos ou modos especificos (concurso, intensivos, offline, simulacao extra).
+- **Free (0 Kz / mes)**: porta de entrada para conhecer o estudo inteligente do app.
+- **Premium (8.000 Kz / mes)**: plano principal para estudar com volume, revisao e desempenho.
+- **Elite (15.000 Kz / vitalicio, pagamento unico)**: camada mais forte de estrategia, acompanhamento e competicao.
+- **Pacotes extras avulsos**: complementos opcionais para momentos especificos de estudo.
+
+## Posicionamento atual
+- O MINSA Prep foi criado para profissionais e estudantes da saude estudarem com facilidade, inteligencia e leveza.
+- O foco academico e comercial atual esta reforcado no Concurso Publico da Saude.
+- As areas oficiais do app hoje sao:
+  Farmácia, Enfermagem, Carreira Médica, Psicologia Clínica, Análises Clínicas e Saúde Pública / Bio Análises Clínicas, Sistema de Nutrição / Nutrição e Dietética, Cardiopneumologia, Fisioterapia, Eletromedicina, Estomatologia, Radiologia / Imagiologia e Radiofísica Médica.
 
 ## Plano Free
-- Treino livre: Facil, Medio, Misto.
-- Limite diario: 30 questoes/dia.
+- Treino base na area.
+- Limite diario: 30 questoes por dia.
 - Simulacao de prova: 1 por semana.
-- Ranking: basico.
-- Acesso a banco de questoes: parcial (nao inclui full bank).
+- Ranking: entrada.
+- Banco de questoes: parcial.
 - Dificuldade Dificil: bloqueada.
-- Radar de fraquezas / estatisticas avançadas: indisponiveis.
+- Revisao inteligente, offline, radar e batalha: indisponiveis.
 
 ## Plano Premium (8.000 Kz / mes)
-- Simulacoes de prova: **ilimitadas**.
-- Treino diario: **ilimitado** em todos os niveis (inclui Dificil).
-- Banco de questoes: **completo** liberado.
-- Ranking: completo com comparacao ampla.
-- Historico de provas: disponivel.
-- Sistema de revisao inteligente: ativado.
-- Modo Dificil: desbloqueado.
-- Radar de fraquezas: **nao incluido** (apenas revisao guiada basica por IA).
-- Simulacao Nacional, Estatisticas em PDF, Batalha XP Plus: **exclusivos do Elite**.
+- Simulacoes de prova: ilimitadas.
+- Treino sem limites em todos os niveis, inclui Dificil.
+- Banco completo de questoes das areas ativas.
+- Ranking completo com historico.
+- Revisao inteligente ativada.
+- Mentor IA com leitura de desempenho.
+- Treino e Modo Relampago offline incluidos.
+- Nota tecnica: a role `basic` e apenas um alias legado interno do nucleo do Premium.
 
 ## Plano Elite (15.000 Kz / vitalicio)
-- Inclui **tudo do Premium**.
-- Radar de Fraquezas (Insights Inteligentes) completo.
-- Simulacao Nacional (prova de evento) com ranking dedicado.
-- Estatisticas profundas exportaveis em PDF.
-- Modo Batalha XP Plus.
-- Pagamento unico, acesso vitalicio; sem cobranca recorrente.
+- Inclui tudo do Premium.
+- Treino guiado automatico.
+- Plano semanal personalizado.
+- Radar de fraquezas.
+- Exportacoes em PDF e DOCX.
+- Simulacao Nacional.
+- Modo Batalha XP.
 
-## Pacotes extras avulsos (podem ser adicionados a qualquer plano)
-- **Modulo Concurso Publico (5.000 Kz, acesso vitalicio)**  
-  - Simulados focados no edital do MINSA (Legislacao e Etica).  
-  - Cronometro e ambiente de prova real.  
-  - Destaques do edital atualizado.
-- **Pacote Offline (900 Kz)**  
-  - Download de questoes para uso offline.  
-  - Sincronizacao automatica ao reconectar.  
-  - Acesso ilimitado ao treino diario offline.
-- **Intensivo Farmacia (3.000 Kz)**  
-  - +500 questoes de farmacologia.  
-  - Simulacoes especificas de alto nivel.
-- **Intensivo Enfermagem (3.000 Kz)**  
-  - +500 questoes de saude publica e anatomia.  
-  - Simulacoes especificas de alto nivel.
-- **Simulacao Oficial Extra (1.000 Kz)**  
-  - Prova especial oficial exclusiva com ranking proprio.
+## Pacotes extras
+- **Modulo Concurso Publico (5.000 Kz, acesso vitalicio)**
+  Simulados focados nas areas do concurso, cronometro e ambiente de prova real.
+- **Pacote Offline (legado)**
+  Mantido apenas por compatibilidade com contas antigas.
+- **Intensivo Farmacia (3.000 Kz)**
+  Questoes e simulacoes extras para reforco especifico da area.
+- **Intensivo Enfermagem (3.000 Kz)**
+  Questoes e simulacoes extras para reforco especifico da area.
+- **Simulacao Oficial Extra (1.000 Kz)**
+  Prova adicional com ranking proprio.
 
-## Regras de permissao (resumo tecnico)
-- **Free**: 30 questoes/dia; 1 simulacao/semana; sem banco completo; sem hard; sem radar.
-- **Premium**: sem limites diarios/semanais; hard liberado; banco completo; radar **nao**; estatisticas avancadas **nao**; nacional/batalha **nao**.
-- **Elite**: tudo liberado, inclui radar, nacional, batalhas e PDF de estatisticas.
-- Pacotes extras: adicionam apenas as funcoes descritas no item correspondente; nao alteram o role (premium/elite).
+## Regras de permissao
+- **Free**: 30 questoes por dia; 1 simulacao por semana; sem banco completo; sem Dificil; sem revisao inteligente.
+- **Premium**: sem limites diarios/semanais; Dificil liberado; banco completo; revisao inteligente e offline ativos.
+- **Elite**: tudo do Premium + plano guiado, radar, simulacao nacional, batalha e exportacoes.
+- Pacotes extras: adicionam apenas as funcoes descritas no item correspondente; nao substituem Premium ou Elite.
 
 ## Rotulo nos pedidos de pagamento
 - Premium: "mensal".
-- Elite: "vitalicio" (duration_months = 0).
+- Elite: "vitalicio" (`duration_months = 0`).
 - Extras: usam o nome do pacote; duracao nao se aplica.

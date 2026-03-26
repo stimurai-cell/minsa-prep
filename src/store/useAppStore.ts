@@ -1,5 +1,10 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
+import {
+  getCanonicalHealthAreaName,
+  isOfficialHealthArea,
+  sortAreasByCatalog,
+} from '../lib/productContext';
 
 interface Area {
   id: string;
@@ -24,41 +29,25 @@ interface AppState {
   setDeferredPrompt: (prompt: any) => void;
 }
 
-const canonicalAreaNames: Record<string, string> = {
-  farmacia: 'Farmácia',
-  enfermagem: 'Enfermagem',
-};
-
-const toAreaKey = (value: string) =>
-  value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z]/g, '')
-    .toLowerCase();
-
-const normalizeArea = (area: Area): Area => {
-  const key = toAreaKey(area.name || '');
-
-  return {
-    ...area,
-    id: String(area.id),
-    name: canonicalAreaNames[key] || area.name,
-  };
-};
+const normalizeArea = (area: Area): Area => ({
+  ...area,
+  id: String(area.id),
+  name: getCanonicalHealthAreaName(area.name || ''),
+});
 
 const dedupeAreas = (areas: Area[]) => {
   const unique = new Map<string, Area>();
 
   areas.forEach((area) => {
     const normalized = normalizeArea(area);
-    const key = toAreaKey(normalized.name || normalized.id);
+    const key = normalized.name || normalized.id;
 
     if (!unique.has(key)) {
       unique.set(key, normalized);
     }
   });
 
-  return [...unique.values()];
+  return sortAreasByCatalog([...unique.values()]);
 };
 
 export const useAppStore = create<AppState>((set) => ({
@@ -72,7 +61,9 @@ export const useAppStore = create<AppState>((set) => ({
     try {
       const { data, error } = await supabase.from('areas').select('*');
       if (error) throw error;
-      set({ areas: dedupeAreas(data || []) });
+
+      const officialAreas = (data || []).filter((area) => isOfficialHealthArea(area.name || ''));
+      set({ areas: dedupeAreas(officialAreas) });
     } catch (error) {
       console.error('Error fetching areas:', error);
     } finally {

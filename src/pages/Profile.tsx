@@ -75,7 +75,7 @@ export default function Profile() {
     const selectedColorClass = profile?.avatar_style || AVATAR_COLORS[1];
     const roleLabels: Record<string, string> = {
         'free': 'Free',
-        'basic': 'Basic',
+        'basic': 'Premium',
         'premium': 'Premium',
         'elite': 'Elite',
         'admin': 'MAX'
@@ -128,8 +128,8 @@ export default function Profile() {
                     </div>
                 )}
                 {profile?.role === 'basic' && (
-                    <div className="absolute right-6 top-20 bg-emerald-500 text-white px-3 py-1 font-black text-sm rounded-lg uppercase tracking-widest z-10 shadow-[0_4px_0_0_#065f46]">
-                        BASIC
+                    <div className="absolute right-6 top-20 bg-yellow-400 text-yellow-900 px-3 py-1 font-black text-sm rounded-lg uppercase tracking-widest z-10 shadow-[0_4px_0_0_#ca8a04]">
+                        PREMIUM
                     </div>
                 )}
 

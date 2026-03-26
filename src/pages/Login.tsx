@@ -104,8 +104,12 @@ export default function Login() {
       {/* Elementos decorativos removidos para evitar tela embranquiçada */}
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md z-10">
-        <div className="flex justify-center">
+        <div className="flex items-center justify-center gap-4">
           <AppLogo className="h-20 w-20 rounded-[2rem] border border-white/20 bg-white p-2 shadow-xl" />
+          <div className="text-left">
+            <p className="text-xs font-black uppercase tracking-[0.28em] text-emerald-300">MINSA</p>
+            <p className="text-3xl font-black tracking-tight text-white">MINSA Prep</p>
+          </div>
         </div>
         <h2 className="mt-8 text-center text-3xl font-black tracking-tight text-white">
           Entrar na sua conta

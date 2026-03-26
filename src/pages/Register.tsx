@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Download, Eye, EyeOff } from 'lucide-react';
 import AppLogo from '../components/AppLogo';
 import { translateAuthError } from '../lib/authMessages';
+import { PRODUCT_CONTEXT, STUDY_GOALS } from '../lib/productContext';
 import { supabase } from '../lib/supabase';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -145,14 +146,18 @@ export default function Register() {
   return (
     <div className="relative flex min-h-screen flex-col justify-center overflow-hidden bg-minsa-gradient px-4 py-8 font-sans sm:px-6 lg:px-8">
       <div className="z-10 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center">
+        <div className="flex items-center justify-center gap-4">
           <AppLogo className="h-16 w-16 rounded-[1.5rem] border border-white/20 bg-white p-1.5 shadow-xl" />
+          <div className="text-left">
+            <p className="text-xs font-black uppercase tracking-[0.28em] text-emerald-300">MINSA</p>
+            <p className="text-3xl font-black tracking-tight text-white">MINSA Prep</p>
+          </div>
         </div>
         <h2 className="mt-6 text-center text-2xl font-black tracking-tight text-white">
           Crie a sua conta
         </h2>
         <p className="mt-2 text-center text-sm font-medium text-slate-400">
-          Acesse os melhores treinos de Angola.
+          {PRODUCT_CONTEXT.vision}
         </p>
 
         {!isStandalone && (
@@ -282,15 +287,11 @@ export default function Register() {
                   <option value="" disabled className="text-slate-900">
                     Selecione...
                   </option>
-                  <option value="Aprender e rever conceitos" className="text-slate-900">
-                    Aprender/Rever
-                  </option>
-                  <option value="Passar no concurso publico" className="text-slate-900">
-                    Passar no Concurso
-                  </option>
-                  <option value="Descontrair e treinar" className="text-slate-900">
-                    Descontrair/Treinar
-                  </option>
+                  {STUDY_GOALS.map((studyGoal) => (
+                    <option key={studyGoal} value={studyGoal} className="text-slate-900">
+                      {studyGoal}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>

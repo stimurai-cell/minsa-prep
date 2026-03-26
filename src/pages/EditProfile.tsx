@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { translateAuthError } from '../lib/authMessages';
+import { STUDY_GOALS } from '../lib/productContext';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Camera, ShieldAlert, ArrowLeft, Loader2 } from 'lucide-react';
@@ -185,10 +186,9 @@ export default function EditProfile() {
                                 className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-sky-400 focus:bg-white font-medium appearance-none"
                             >
                                 <option value="" disabled>Selecione um foco</option>
-                                <option value="Passar no concurso público">Passar no concurso público (MINSA)</option>
-                                <option value="Reciclagem de conhecimentos">Reciclagem de conhecimentos (Pós-graduação)</option>
-                                <option value="Aprender conceitos fundamentais">Aprender conceitos fundamentais (Estudante)</option>
-                                <option value="Outro">Outro</option>
+                                {STUDY_GOALS.map((studyGoal) => (
+                                    <option key={studyGoal} value={studyGoal}>{studyGoal}</option>
+                                ))}
                             </select>
                         </div>
 

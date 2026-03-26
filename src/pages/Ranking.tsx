@@ -111,11 +111,10 @@ export default function Ranking() {
                       </p>
                       {item.role && item.role !== 'admin' && (
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${item.role === 'elite' ? 'bg-purple-100 text-purple-700' :
-                          item.role === 'premium' ? 'bg-amber-100 text-amber-700' :
-                            item.role === 'basic' ? 'bg-sky-100 text-sky-700' :
-                              'bg-slate-100 text-slate-500'
+                          item.role === 'premium' || item.role === 'basic' ? 'bg-amber-100 text-amber-700' :
+                            'bg-slate-100 text-slate-500'
                           }`}>
-                          {item.role === 'free' ? 'Gratuito' : item.role}
+                          {item.role === 'free' ? 'Gratuito' : item.role === 'basic' ? 'Premium' : item.role}
                         </span>
                       )}
                     </div>

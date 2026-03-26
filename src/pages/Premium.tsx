@@ -6,11 +6,11 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 
 const premiumPerks = [
-  'Escolha livre de nivel no treino e na prova',
-  'Ranking completo da area',
-  'Leitura mais profunda do historico de desempenho',
-  'Relatorios e filtros avancados para revisao',
-  'Treino diario e Modo Relampago offline incluidos nos planos principais',
+  'Mais volume de estudo sem perder leveza no dia a dia',
+  'Ranking completo e historico de desempenho',
+  'Revisao inteligente e leitura mais profunda do progresso',
+  'Mentor IA e ferramentas mais fortes de acompanhamento',
+  'Treino e Modo Relampago offline incluidos nos planos principais',
 ];
 
 const paymentMethods = [
@@ -32,8 +32,9 @@ type PaymentRequest = {
 
 export default function Premium() {
   const { profile } = useAuthStore();
-  const isPremium = ['premium', 'elite', 'admin'].includes(profile?.role || '');
+  const isPremium = ['basic', 'premium', 'elite', 'admin'].includes(profile?.role || '');
   const isAdmin = profile?.role === 'admin';
+  const currentPlanLabel = profile?.role === 'elite' ? 'Elite' : isPremium ? 'Premium' : 'Gratuito';
   const paidPlans = useMemo(() => premiumPlans.filter((plan) => plan.id !== 'free'), []);
   const selectedPeriod: PlanPeriod = 'monthly';
   const [selectedPlanId, setSelectedPlanId] = useState(paidPlans.find((plan) => plan.id === 'premium')?.id || paidPlans[0]?.id || 'premium');
@@ -179,16 +180,16 @@ export default function Premium() {
               Premium MINSA Prep
             </div>
             <h1 className="mt-4 text-3xl font-black tracking-tight md:text-5xl">
-              Beneficios do Premium para acelerar seu estudo
+              Planos para estudar melhor, com mais foco e menos atrito
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-200 md:text-base">
-              Agora o fluxo ficou em duas etapas: primeiro voce escolhe o plano, depois faz o pagamento.
-              A ideia e deixar a decisao mais clara e o formulario mais leve.
+              O MINSA Prep foi feito para estudo inteligente em saude durante toda a jornada profissional.
+              Neste momento, reforcamos especialmente a preparacao para o Concurso Publico da Saude.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-3 items-center">
               <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm">
-                Perfil atual: <span className="font-black">{isPremium ? 'Premium' : 'Gratuito'}</span>
+                Perfil atual: <span className="font-black">{currentPlanLabel}</span>
               </div>
               <div className="rounded-2xl bg-emerald-400/15 px-4 py-3 text-sm text-emerald-100">
                 {checkoutOpen ? 'Etapa 2: pagamento e comprovativo' : 'Etapa 1: escolha do plano'}

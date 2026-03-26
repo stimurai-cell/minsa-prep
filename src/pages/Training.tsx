@@ -250,6 +250,7 @@ export default function Training() {
     () => areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Área não definida',
     [areas, profile?.selected_area_id]
   );
+  const hasSelectedOfficialArea = areas.some((area) => area.id === profile?.selected_area_id);
 
   const selectedTopicName =
     topics.find((topic) => topic.id === selectedTopic)?.name || (autoTopicEnabled ? orderedTopics[0]?.name || 'Foco a ser definido' : 'Selecione um topico');
@@ -539,6 +540,13 @@ export default function Training() {
 
   const bootReviewSession = async () => {
     if (!profile?.id) return;
+
+    if (!hasBasicAccess) {
+      alert('A revisao inteligente faz parte dos planos pagos. Faça upgrade para desbloquear este recurso.');
+      navigate('/premium', { replace: true });
+      return;
+    }
+
     setLoading(true);
     try {
       const { data: srsQuestions, error: srsError } = await supabase
@@ -852,7 +860,7 @@ export default function Training() {
     await finishTraining();
   };
 
-  if (!profile?.selected_area_id) {
+  if (!profile?.selected_area_id || (areas.length > 0 && !hasSelectedOfficialArea)) {
     return <AreaLockCard areas={areas} />;
   }
 

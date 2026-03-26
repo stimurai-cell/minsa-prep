@@ -22,7 +22,7 @@ export const getRoleLabel = (role?: string) => {
     case 'premium':
       return 'Premium (Preparação Real)';
     case 'basic':
-      return 'Basic (Estudante)';
+      return 'Premium (Legado)';
     case 'free':
       return 'Gratuito';
     default:

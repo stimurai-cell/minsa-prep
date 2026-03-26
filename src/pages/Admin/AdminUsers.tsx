@@ -163,7 +163,7 @@ export default function AdminUsers() {
                             }`}
                           >
                             <option value="free">Gratuito</option>
-                            <option value="basic">Basic (Estudante)</option>
+                            <option value="basic">Premium (Legado)</option>
                             <option value="premium">Premium (Assinante)</option>
                             <option value="elite">Elite (MAX)</option>
                             <option value="admin">Administrador</option>
