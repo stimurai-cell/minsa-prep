@@ -16,8 +16,8 @@ export default function Practice() {
             description: hasGuidedTraining
                 ? 'Seu proximo treino ja esta preparado.'
                 : isFreeUser
-                    ? 'Escolha o topico e comece a praticar.'
-                    : 'Escolha o topico e comece o treino.',
+                    ? 'O proximo topico ja vem pre-selecionado em ordem crescente.'
+                    : 'O proximo topico ja vem pre-selecionado e voce pode trocar se quiser.',
             icon: BookOpen,
             color: 'emerald',
             path: trainingUsesAutomaticTopic ? '/training' : '/training?mode=manual',

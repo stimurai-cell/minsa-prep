@@ -138,6 +138,22 @@ export default function Training() {
   const getAutoRotationStorageKey = () =>
     `${AUTO_TOPIC_ROTATION_STORAGE_KEY}:${profile?.id || 'anon'}:${profile?.selected_area_id || 'no-area'}`;
 
+  const buildSequentialTopicNote = (topicName: string, topicIndex: number, totalTopics: number) => {
+    if (guidedTrainingEnabled && !guidedCustomizationEnabled) {
+      return `Topico guiado ${topicIndex} de ${totalTopics}. O sistema avanca em ordem crescente sempre que voce entra nesta pagina.`;
+    }
+
+    if (guidedCustomizationEnabled) {
+      return `O sistema pre-selecionou ${topicName} (${topicIndex} de ${totalTopics}) em ordem crescente. Pode trocar se quiser antes de iniciar.`;
+    }
+
+    if (isFreeUser) {
+      return `O Treino Diario abriu com ${topicName} (${topicIndex} de ${totalTopics}). O app avanca em ordem crescente sempre que voce entra nesta pagina, mas voce pode trocar se quiser.`;
+    }
+
+    return `O sistema pre-selecionou ${topicName} (${topicIndex} de ${totalTopics}) em ordem crescente. Pode trocar se quiser antes de iniciar.`;
+  };
+
   const assignSystemTopic = async () => {
     if (!orderedTopics.length) return;
 
@@ -153,13 +169,13 @@ export default function Training() {
       if (!nextTopic) return;
 
       setSelectedTopic(nextTopic.id);
-      setTopicAssignmentNote(`Topico guiado ${nextTopicIndex + 1} de ${orderedTopics.length}. O sistema avanca em ordem crescente sempre que voce entra nesta pagina.`);
+      setTopicAssignmentNote(buildSequentialTopicNote(nextTopic.name, nextTopicIndex + 1, orderedTopics.length));
       localStorage.setItem(storageKey, nextTopic.id);
     } catch (error) {
       console.error('Erro ao atribuir topico automaticamente:', error);
       if (orderedTopics[0]) {
         setSelectedTopic(orderedTopics[0].id);
-        setTopicAssignmentNote('Topico guiado definido automaticamente para manter a sequencia da area.');
+        setTopicAssignmentNote('O sistema definiu automaticamente o proximo topico da sequencia para esta entrada.');
       }
     } finally {
       setAssigningTopic(false);
@@ -195,20 +211,12 @@ export default function Training() {
   }, [guidedOverrideEnabled, guidedTrainingEnabled]);
 
   useEffect(() => {
-    if (!autoTopicEnabled || sessionActive || sessionTopicId || orderedTopics.length === 0) {
+    if (isReviewMode || sessionActive || sessionTopicId || selectedTopic || orderedTopics.length === 0 || assigningTopic) {
       return;
     }
 
     void assignSystemTopic();
-  }, [autoTopicEnabled, orderedTopics, sessionActive, sessionTopicId, location.key]);
-
-  useEffect(() => {
-    if (!autoTopicEnabled || !sessionActive || sessionTopicId || selectedTopic || orderedTopics.length === 0 || assigningTopic) {
-      return;
-    }
-
-    void assignSystemTopic();
-  }, [assigningTopic, autoTopicEnabled, orderedTopics, selectedTopic, sessionActive, sessionTopicId, location.key]);
+  }, [assigningTopic, isReviewMode, location.key, orderedTopics, selectedTopic, sessionActive, sessionTopicId]);
 
   useEffect(() => {
     const nextDifficulty = hasPremiumAccess ? sessionDifficulty : (sessionDifficulty === 'hard' ? 'medium' : sessionDifficulty);
@@ -1220,8 +1228,8 @@ export default function Training() {
                 ? 'Escolha topico e nivel apenas nesta entrada. Ao sair, o sistema retoma o foco automatico.'
                 : 'Seu proximo treino ja esta pronto.')
               : isFreeUser
-                ? 'Escolha o topico e o nivel para praticar hoje.'
-                : 'Escolha o topico e o nivel para comecar.'}
+                ? 'O sistema ja pre-seleciona o proximo topico em ordem crescente, e voce ainda pode trocar antes de iniciar.'
+                : 'O sistema ja pre-seleciona o proximo topico em ordem crescente, mas voce pode trocar se quiser.'}
           </p>
 
           <div className="mt-6 space-y-5">
@@ -1288,10 +1296,10 @@ export default function Training() {
                 </select>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
                   {guidedCustomizationEnabled
-                    ? 'Controle temporario ativo: este topico so vale para esta entrada.'
+                    ? 'Controle temporario ativo: o proximo topico ja veio pre-selecionado, mas voce pode trocar se quiser.'
                     : isFreeUser
-                      ? 'Escolha o foco desta sessao.'
-                      : 'Escolha o foco desta sessao manualmente.'}
+                      ? 'O proximo topico do Treino Diario ja veio pre-selecionado em ordem crescente. Se quiser, pode trocar.'
+                      : 'O proximo topico ja veio pre-selecionado em ordem crescente. Se quiser, pode trocar antes de iniciar.'}
                 </p>
               </div>
             )}
@@ -1389,7 +1397,7 @@ export default function Training() {
             ) : (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs leading-5 text-emerald-900">
                 {isFreeUser
-                  ? 'Escolha o tema do treino e pratique no seu ritmo.'
+                  ? 'O sistema pre-seleciona o proximo topico do treino diario em ordem crescente, e voce ainda pode trocar se quiser.'
                   : 'Os recursos avancados desta pagina continuam disponiveis no plano Elite.'}
                 <Link to="/premium" className="ml-1 font-black underline">
                   Ver Elite
