@@ -1,14 +1,14 @@
-import { useState, FormEvent } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft, Mail, Send } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { Mail, ArrowLeft, Send } from 'lucide-react';
+import { translateAuthError } from '../lib/authMessages';
 
 export default function ForgotPassword() {
     const [email, setEmail] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
-    const navigate = useNavigate();
 
     const handleResetRequest = async (e: FormEvent) => {
         e.preventDefault();
@@ -17,14 +17,14 @@ export default function ForgotPassword() {
         setSuccess(false);
 
         try {
-            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
                 redirectTo: `${window.location.origin}/reset-password`,
             });
 
-            if (error) throw error;
+            if (resetError) throw resetError;
             setSuccess(true);
-        } catch (err: any) {
-            setError(err.message || 'Erro ao enviar email de recuperação');
+        } catch (err) {
+            setError(translateAuthError(err, 'Nao foi possivel enviar o email de recuperacao.'));
         } finally {
             setLoading(false);
         }
@@ -39,29 +39,29 @@ export default function ForgotPassword() {
                     </Link>
                 </div>
                 <h2 className="mt-6 text-center text-3xl font-extrabold tracking-tight text-slate-900">
-                    Recuperar Senha
+                    Recuperar senha
                 </h2>
                 <p className="mt-2 text-center text-sm text-slate-600">
-                    Enviaremos um link para o seu email para redefinir a sua senha.
+                    Enviaremos um link seguro para redefinir a senha da sua conta.
                 </p>
             </div>
 
             <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
                 <div className="rounded-[2rem] border border-white/80 bg-white p-6 shadow-[0_28px_90px_-52px_rgba(15,23,42,0.35)] sm:px-8">
                     {success ? (
-                        <div className="text-center space-y-4">
+                        <div className="space-y-4 text-center">
                             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
                                 <Send className="h-8 w-8" />
                             </div>
-                            <h3 className="text-xl font-bold text-slate-900">Email Enviado!</h3>
+                            <h3 className="text-xl font-bold text-slate-900">Email enviado</h3>
                             <p className="text-sm text-slate-600">
-                                Verifique a sua caixa de entrada (e a pasta de spam) para o link de recuperação.
+                                Verifique a sua caixa de entrada e a pasta de spam para continuar.
                             </p>
                             <Link
                                 to="/login"
                                 className="mt-4 block w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
                             >
-                                Voltar ao Login
+                                Voltar ao login
                             </Link>
                         </div>
                     ) : (
@@ -93,12 +93,12 @@ export default function ForgotPassword() {
                                 disabled={loading}
                                 className="flex w-full justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
                             >
-                                {loading ? 'Enviando...' : 'Enviar Link de Recuperação'}
+                                {loading ? 'Enviando...' : 'Enviar link de recuperacao'}
                             </button>
 
                             <div className="text-center">
                                 <Link to="/login" className="text-sm font-semibold text-emerald-600 hover:text-emerald-500">
-                                    Voltar para o Início de Sessão
+                                    Voltar ao inicio de sessao
                                 </Link>
                             </div>
                         </form>

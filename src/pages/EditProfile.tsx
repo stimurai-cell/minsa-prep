@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { translateAuthError } from '../lib/authMessages';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Camera, ShieldAlert, ArrowLeft, Loader2 } from 'lucide-react';
@@ -101,7 +102,7 @@ export default function EditProfile() {
             setPassword('');
         } catch (err: any) {
             console.error(err);
-            setMessage(err.message || 'Erro ao atualizar perfil.');
+            setMessage(translateAuthError(err, 'Erro ao atualizar perfil.'));
         } finally {
             setLoading(false);
             setTimeout(() => setMessage(''), 3000);

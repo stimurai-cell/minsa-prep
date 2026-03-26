@@ -1,12 +1,17 @@
-import { useState, useEffect, FormEvent } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { useAuthStore } from '../store/useAuthStore';
-import { useAppStore } from '../store/useAppStore';
-import { Activity, Eye, EyeOff, Download } from 'lucide-react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Download, Eye, EyeOff } from 'lucide-react';
 import AppLogo from '../components/AppLogo';
+import { translateAuthError } from '../lib/authMessages';
+import { supabase } from '../lib/supabase';
+import { useAppStore } from '../store/useAppStore';
+import { useAuthStore } from '../store/useAuthStore';
 
 export default function Register() {
+  const navigate = useNavigate();
+  const { checkSession } = useAuthStore();
+  const { areas, fetchAreas } = useAppStore();
+
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,29 +25,30 @@ export default function Register() {
   const [isStandalone, setIsStandalone] = useState(false);
   const [showInstallHelp, setShowInstallHelp] = useState(false);
 
-  const navigate = useNavigate();
-  const { checkSession } = useAuthStore();
-  const { areas, fetchAreas, loading: appLoading } = useAppStore();
-
   useEffect(() => {
     fetchAreas();
 
-    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) {
+    if (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true
+    ) {
       setIsStandalone(true);
     }
   }, [fetchAreas]);
 
   const handleInstallClick = async () => {
     const promptEvent = (window as any).deferredPrompt;
+
     if (promptEvent) {
       promptEvent.prompt();
       const { outcome } = await promptEvent.userChoice;
       if (outcome === 'accepted') {
         (window as any).deferredPrompt = null;
       }
-    } else {
-      setShowInstallHelp(true);
+      return;
     }
+
+    setShowInstallHelp(true);
   };
 
   const ensureProfile = async (userId: string) => {
@@ -128,35 +134,24 @@ export default function Register() {
       }
 
       await checkSession();
-      // Depois do registo, direcionar para um quiz rapido de onboarding
-      navigate('/onboarding-quiz');
-    } catch (err: any) {
-      const message = err?.message || 'Erro ao criar conta';
-
-      if (message.includes('Database error saving new user')) {
-        setError(
-          'O Supabase recusou criar o utilizador no trigger do banco. Execute o SQL atualizado de correção e tente novamente.'
-        );
-      } else {
-        setError(message);
-      }
+      navigate('/dashboard', { replace: true });
+    } catch (err) {
+      setError(translateAuthError(err, 'Nao foi possivel criar a conta agora. Tente novamente.'));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen flex-col justify-center bg-minsa-gradient px-4 py-8 font-sans sm:px-6 lg:px-8 relative overflow-hidden">
-      {/* Elementos decorativos removidos para evitar tela embranquiçada */}
-
-      <div className="sm:mx-auto sm:w-full sm:max-w-md z-10">
+    <div className="relative flex min-h-screen flex-col justify-center overflow-hidden bg-minsa-gradient px-4 py-8 font-sans sm:px-6 lg:px-8">
+      <div className="z-10 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
           <AppLogo className="h-16 w-16 rounded-[1.5rem] border border-white/20 bg-white p-1.5 shadow-xl" />
         </div>
         <h2 className="mt-6 text-center text-2xl font-black tracking-tight text-white">
           Crie a sua conta
         </h2>
-        <p className="mt-2 text-center text-sm text-slate-400 font-medium">
+        <p className="mt-2 text-center text-sm font-medium text-slate-400">
           Acesse os melhores treinos de Angola.
         </p>
 
@@ -165,24 +160,31 @@ export default function Register() {
             <button
               type="button"
               onClick={handleInstallClick}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-4 text-xs font-black text-slate-900 transition-all hover:bg-slate-100 uppercase tracking-widest shadow-xl"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-4 text-xs font-black uppercase tracking-widest text-slate-900 shadow-xl transition-all hover:bg-slate-100"
             >
               <Download className="h-4 w-4" />
               Baixar App (PWA)
             </button>
             {showInstallHelp && (
-              <div className="mt-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-4 text-xs text-emerald-100 text-left animate-in fade-in duration-300">
-                <p className="font-bold mb-2 uppercase tracking-tight text-center">Como instalar manualmente:</p>
-                <p className="mb-2"><strong>iOS (iPhone):</strong> Toque no ícone "Compartilhar" e selecione "Adicionar à Tela de Início".</p>
-                <p><strong>Android:</strong> Menu do navegador e selecione "Instalar aplicativo".</p>
+              <div className="mt-4 animate-in fade-in rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-4 text-left text-xs text-emerald-100 duration-300">
+                <p className="mb-2 text-center font-bold uppercase tracking-tight">
+                  Como instalar manualmente:
+                </p>
+                <p className="mb-2">
+                  <strong>iOS (iPhone):</strong> Toque no icone "Compartilhar" e selecione
+                  "Adicionar a Tela de Inicio".
+                </p>
+                <p>
+                  <strong>Android:</strong> Menu do navegador e selecione "Instalar aplicativo".
+                </p>
               </div>
             )}
           </div>
         )}
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-lg z-10">
-        <div className="rounded-[2.5rem] border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-2xl sm:px-10">
+      <div className="z-10 mt-8 sm:mx-auto sm:w-full sm:max-w-lg">
+        <div className="rounded-[2.5rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl sm:px-10">
           <form className="space-y-4" onSubmit={handleRegister}>
             {error && (
               <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
@@ -190,45 +192,45 @@ export default function Register() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-300 ml-1">Nome Completo</label>
+                <label className="ml-1 block text-xs font-bold text-slate-300">Nome Completo</label>
                 <input
                   type="text"
                   required
                   placeholder="Seu nome aqui"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="block w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-5 text-sm text-white outline-none transition focus:border-emerald-500 focus:bg-white/10"
+                  className="block w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-white outline-none transition focus:border-emerald-500 focus:bg-white/10"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-300 ml-1">Email</label>
+                <label className="ml-1 block text-xs font-bold text-slate-300">Email</label>
                 <input
                   type="email"
                   required
                   placeholder="exemplo@gmail.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-5 text-sm text-white outline-none transition focus:border-emerald-500 focus:bg-white/10"
+                  className="block w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-white outline-none transition focus:border-emerald-500 focus:bg-white/10"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-300 ml-1">Telefone</label>
+                <label className="ml-1 block text-xs font-bold text-slate-300">Telefone</label>
                 <input
                   type="tel"
                   required
                   placeholder="+244 9..."
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
-                  className="block w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-5 text-sm text-white outline-none transition focus:border-emerald-500 focus:bg-white/10"
+                  className="block w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-white outline-none transition focus:border-emerald-500 focus:bg-white/10"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-300 ml-1">Senha</label>
+                <label className="ml-1 block text-xs font-bold text-slate-300">Senha</label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
@@ -236,12 +238,12 @@ export default function Register() {
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-5 pr-14 text-sm text-white outline-none transition focus:border-emerald-500 focus:bg-white/10"
+                    className="block w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-4 pr-14 text-sm text-white outline-none transition focus:border-emerald-500 focus:bg-white/10"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 h-10 w-10 flex items-center justify-center rounded-xl text-slate-400 hover:bg-white/10"
+                    className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl text-slate-400 hover:bg-white/10"
                   >
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
@@ -249,34 +251,46 @@ export default function Register() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            <div className="grid grid-cols-1 gap-4 pt-2 md:grid-cols-2">
               <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-300 ml-1">Área de Estudo</label>
+                <label className="ml-1 block text-xs font-bold text-slate-300">Area de Estudo</label>
                 <select
                   required
                   value={areaId}
                   onChange={(e) => setAreaId(e.target.value)}
-                  className="block w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-5 text-sm text-white outline-none appearance-none transition focus:border-emerald-500 focus:bg-white/10"
+                  className="block w-full appearance-none rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-white outline-none transition focus:border-emerald-500 focus:bg-white/10"
                 >
-                  <option value="" disabled className="text-slate-900">Selecione...</option>
+                  <option value="" disabled className="text-slate-900">
+                    Selecione...
+                  </option>
                   {areas.map((area) => (
-                    <option key={area.id} value={area.id} className="text-slate-900">{area.name}</option>
+                    <option key={area.id} value={area.id} className="text-slate-900">
+                      {area.name}
+                    </option>
                   ))}
                 </select>
               </div>
 
               <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-300 ml-1">Seu Objetivo</label>
+                <label className="ml-1 block text-xs font-bold text-slate-300">Seu Objetivo</label>
                 <select
                   required
                   value={goal}
                   onChange={(e) => setGoal(e.target.value)}
-                  className="block w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-5 text-sm text-white outline-none appearance-none transition focus:border-emerald-500 focus:bg-white/10"
+                  className="block w-full appearance-none rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-white outline-none transition focus:border-emerald-500 focus:bg-white/10"
                 >
-                  <option value="" disabled className="text-slate-900">Selecione...</option>
-                  <option value="Aprender e rever conceitos" className="text-slate-900">Aprender/Rever</option>
-                  <option value="Passar no concurso publico" className="text-slate-900">Passar no Concurso</option>
-                  <option value="Descontrair e treinar" className="text-slate-900">Descontrair/Treinar</option>
+                  <option value="" disabled className="text-slate-900">
+                    Selecione...
+                  </option>
+                  <option value="Aprender e rever conceitos" className="text-slate-900">
+                    Aprender/Rever
+                  </option>
+                  <option value="Passar no concurso publico" className="text-slate-900">
+                    Passar no Concurso
+                  </option>
+                  <option value="Descontrair e treinar" className="text-slate-900">
+                    Descontrair/Treinar
+                  </option>
                 </select>
               </div>
             </div>
@@ -285,7 +299,7 @@ export default function Register() {
               <button
                 type="submit"
                 disabled={loading}
-                className="group flex w-full items-center justify-center gap-3 rounded-2xl bg-emerald-500 py-5 text-base font-black uppercase tracking-tight text-white shadow-xl shadow-emerald-500/20 hover:bg-emerald-400 disabled:opacity-50 transition-all hover:scale-[1.02]"
+                className="group flex w-full items-center justify-center gap-3 rounded-2xl bg-emerald-500 py-5 text-base font-black uppercase tracking-tight text-white shadow-xl shadow-emerald-500/20 transition-all hover:scale-[1.02] hover:bg-emerald-400 disabled:opacity-50"
               >
                 {loading ? 'Processando...' : 'Criar conta'}
               </button>
@@ -294,7 +308,7 @@ export default function Register() {
 
           <div className="mt-6 text-center">
             <p className="text-sm font-medium text-slate-400">
-              Já faz parte da nossa comunidade?{' '}
+              Ja faz parte da nossa comunidade?{' '}
               <Link to="/login" className="font-bold text-emerald-400 hover:text-emerald-300">
                 Fazer Login
               </Link>

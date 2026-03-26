@@ -40,6 +40,7 @@ export default function Dashboard() {
   const isPaidUser = perms.canAccessSimulation;
   const isFreeUser = profile?.role === 'free';
   const trainingUsesAutomaticTopic = perms.hasGuidedTraining;
+  const reviewPath = '/training?session=1&type=review';
   const [stats, setStats] = useState({
     totalQuestions: 0,
     avgScore: 0,
@@ -58,11 +59,22 @@ export default function Dashboard() {
   const [currentStrategy, setCurrentStrategy] = useState<any>(null);
   const [eliteGateResolved, setEliteGateResolved] = useState(false);
   const trainingPath = trainingUsesAutomaticTopic ? '/training' : '/training?mode=manual';
-  const trainingEyebrow = perms.hasGuidedTraining ? 'Plano do dia' : 'Treino';
-  const trainingTitle = perms.hasGuidedTraining ? 'Abrir treino guiado' : 'Escolher treino';
-  const trainingDescription = perms.hasGuidedTraining
-    ? 'Seu treino ja chega pronto para continuar.'
-    : 'Escolha o tema e comece a praticar.';
+  const shouldStartWithReview = isPaidUser && stats.dueQuestions > 0;
+  const trainingEyebrow = shouldStartWithReview
+    ? 'Revisao do dia'
+    : perms.hasGuidedTraining
+      ? 'Plano do dia'
+      : 'Treino';
+  const trainingTitle = shouldStartWithReview
+    ? 'Abrir revisao guiada'
+    : perms.hasGuidedTraining
+      ? 'Abrir treino guiado'
+      : 'Escolher treino';
+  const trainingDescription = shouldStartWithReview
+    ? `Voce tem ${stats.dueQuestions} revisoes prontas agora. Vamos abrir isso primeiro para a contagem descer corretamente.`
+    : perms.hasGuidedTraining
+      ? 'Seu treino ja chega pronto para continuar.'
+      : 'Escolha o tema e comece a praticar.';
 
   useEffect(() => {
     setDisplayStreakCount(profile?.streak_count || 0);
@@ -339,12 +351,16 @@ export default function Dashboard() {
     }
   };
 
-  const nextActionPath = isFreeUser ? '/practice' : trainingPath;
+  const nextActionPath = shouldStartWithReview ? reviewPath : isFreeUser ? '/practice' : trainingPath;
   const nextActionTitle = isFreeUser ? 'Escolha como quer estudar hoje' : trainingTitle;
   const nextActionDescription = isFreeUser
     ? 'Abra os modos de estudo e escolha a sessao certa para hoje.'
     : trainingDescription;
-  const nextActionLabel = isFreeUser ? 'Abrir modos de estudo' : 'Continuar estudo';
+  const nextActionLabel = isFreeUser
+    ? 'Abrir modos de estudo'
+    : shouldStartWithReview
+      ? 'Continuar revisao'
+      : 'Continuar estudo';
 
   const quickLinks = [
     {
@@ -629,7 +645,7 @@ export default function Dashboard() {
 
             <div className="grid gap-3 sm:grid-cols-2">
               <Link
-                to={trainingPath}
+                to={reviewPath}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 text-sm font-black uppercase tracking-[0.12em] text-white transition hover:bg-emerald-700"
               >
                 <PlayCircle className="h-5 w-5" />

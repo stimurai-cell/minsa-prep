@@ -115,7 +115,12 @@ export default function App() {
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY' && window.location.pathname !== '/reset-password') {
+        window.location.replace('/reset-password');
+        return;
+      }
+
       void checkSession();
     });
 

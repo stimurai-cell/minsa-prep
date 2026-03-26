@@ -1,5 +1,6 @@
 import { useEffect, useState, FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { translateAuthError } from '../lib/authMessages';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Activity, Eye, EyeOff, Mail, ShieldCheck, Download } from 'lucide-react';
@@ -92,7 +93,7 @@ export default function Login() {
         navigate('/dashboard');
       }
     } catch (err: any) {
-      setError(err.message || 'Erro ao fazer login');
+      setError(translateAuthError(err, 'Nao foi possivel entrar agora. Tente novamente.'));
     } finally {
       setLoading(false);
     }

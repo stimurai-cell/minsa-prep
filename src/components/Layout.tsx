@@ -100,7 +100,7 @@ export default function Layout() {
   ];
 
   const studentPrimaryLinks = [
-    { to: '/dashboard', label: 'Hoje', icon: Home, activeColor: 'text-emerald-500', activeBg: 'bg-emerald-100', activeBorder: 'border-emerald-200' },
+    { to: '/dashboard', label: 'Inicio', icon: Home, activeColor: 'text-emerald-500', activeBg: 'bg-emerald-100', activeBorder: 'border-emerald-200' },
     { to: '/practice', label: 'Estudar', icon: Dumbbell, activeColor: 'text-sky-500', activeBg: 'bg-sky-100', activeBorder: 'border-sky-200' },
     { to: '/social', label: 'Comunidade', icon: UsersRound, activeColor: 'text-rose-500', activeBg: 'bg-rose-100', activeBorder: 'border-rose-200' },
     { to: '/leagues', label: 'Ligas', icon: ShieldCheck, activeColor: 'text-indigo-500', activeBg: 'bg-indigo-100', activeBorder: 'border-indigo-200' },

@@ -253,6 +253,7 @@ export default function Training() {
 
   const selectedTopicName =
     topics.find((topic) => topic.id === selectedTopic)?.name || (autoTopicEnabled ? orderedTopics[0]?.name || 'Foco a ser definido' : 'Selecione um topico');
+  const sessionLabel = isReviewMode ? 'Revisao inteligente' : selectedTopicName;
 
   const resetGuidedCustomization = () => {
     if (!guidedTrainingEnabled) return;
@@ -545,7 +546,7 @@ export default function Training() {
         .select(`
           question_id,
           questions (
-            id, content, difficulty,
+            id, content, difficulty, topic_id,
             alternatives (id, content, is_correct),
             question_explanations (content)
           )
@@ -559,6 +560,7 @@ export default function Training() {
           srsQuestions.map((srs: any) => srs.questions).filter(Boolean)
         );
         resetTrainingSession();
+        setSelectedTopic('');
         setQuestions(prepareQuestionSet(formattedQuestions));
         setSessionStartedAt(Date.now());
         setShowIntro(true);
@@ -676,7 +678,7 @@ export default function Training() {
         activity_type: 'completed_training',
         activity_date: new Date().toISOString(),
         activity_metadata: {
-          topic_name: selectedTopicName,
+          topic_name: sessionLabel,
           correct: correctAnswers,
           total: totalQuestions,
           xp: xpEarned
@@ -770,54 +772,67 @@ export default function Training() {
     setResultHistory((prev) => [...prev, isCorrect]);
     await ensureDailyLessonCheckIn();
 
-    if (profile?.id && selectedTopic && navigator.onLine) {
+    if (profile?.id && currentQ?.id && navigator.onLine) {
       try {
-        const { data: progress } = await supabase
-          .from('user_topic_progress')
-          .select('*')
-          .eq('user_id', profile.id)
-          .eq('topic_id', selectedTopic)
-          .single();
+        const resolvedTopicId =
+          typeof currentQ?.topic_id === 'string' && currentQ.topic_id
+            ? currentQ.topic_id
+            : selectedTopic || null;
 
         // Spaced Repetition (SRS) Update
-        const { data: srsData } = await supabase
+        const { data: srsData, error: srsError } = await supabase
           .from('user_question_srs')
           .select('*')
           .eq('user_id', profile.id)
           .eq('question_id', currentQ.id)
-          .single();
+          .maybeSingle();
+
+        if (srsError) throw srsError;
 
         const quality = isCorrect ? 5 : 0;
         const nextSrs = calculateNextReview(quality, srsData || undefined);
 
-        await supabase.from('user_question_srs').upsert({
+        const { error: srsUpsertError } = await supabase.from('user_question_srs').upsert({
           user_id: profile.id,
           question_id: currentQ.id,
           ...nextSrs,
           last_reviewed_at: new Date().toISOString(),
         }, { onConflict: 'user_id,question_id' });
 
-        let newScore = progress ? Number(progress.domain_score) : 0;
-        newScore = isCorrect ? Math.min(100, newScore + 2) : Math.max(0, newScore - 1);
+        if (srsUpsertError) throw srsUpsertError;
 
-        if (progress) {
-          await supabase
+        if (resolvedTopicId) {
+          const { data: progress, error: progressError } = await supabase
             .from('user_topic_progress')
-            .update({
+            .select('*')
+            .eq('user_id', profile.id)
+            .eq('topic_id', resolvedTopicId)
+            .maybeSingle();
+
+          if (progressError) throw progressError;
+
+          let newScore = progress ? Number(progress.domain_score) : 0;
+          newScore = isCorrect ? Math.min(100, newScore + 2) : Math.max(0, newScore - 1);
+
+          if (progress) {
+            await supabase
+              .from('user_topic_progress')
+              .update({
+                domain_score: newScore,
+                questions_answered: progress.questions_answered + 1,
+                correct_answers: progress.correct_answers + (isCorrect ? 1 : 0),
+                last_reviewed_at: new Date().toISOString(),
+              })
+              .eq('id', progress.id);
+          } else {
+            await supabase.from('user_topic_progress').insert({
+              user_id: profile.id,
+              topic_id: resolvedTopicId,
               domain_score: newScore,
-              questions_answered: progress.questions_answered + 1,
-              correct_answers: progress.correct_answers + (isCorrect ? 1 : 0),
-              last_reviewed_at: new Date().toISOString(),
-            })
-            .eq('id', progress.id);
-        } else {
-          await supabase.from('user_topic_progress').insert({
-            user_id: profile.id,
-            topic_id: selectedTopic,
-            domain_score: newScore,
-            questions_answered: 1,
-            correct_answers: isCorrect ? 1 : 0,
-          });
+              questions_answered: 1,
+              correct_answers: isCorrect ? 1 : 0,
+            });
+          }
         }
       } catch (err) {
         console.error('Error updating progress:', err);
@@ -851,7 +866,7 @@ export default function Training() {
       <>
         <SessionCelebration
           title="Treino concluído!"
-          subtitle={`Você terminou ${selectedTopicName} com ${sessionSummary.correctAnswers} acertos. O seu XP já entrou no perfil.`}
+          subtitle={`Voce terminou ${sessionLabel} com ${sessionSummary.correctAnswers} acertos. O seu XP ja entrou no perfil.`}
           xpEarned={sessionSummary.xpEarned}
           accuracy={accuracy}
           durationSeconds={sessionSummary.durationSeconds}
