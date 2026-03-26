@@ -15,8 +15,8 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
-const CACHE_NAME = 'minsa-prep-v-1774547580899';
-const DATA_CACHE_NAME = 'minsa-prep-data-v-1774547580899';
+const CACHE_NAME = 'minsa-prep-v-1774549976084';
+const DATA_CACHE_NAME = 'minsa-prep-data-v-1774549976084';
 const APP_ICON = '/app-icon.png';
 const APP_BADGE = '/app-badge.png';
 

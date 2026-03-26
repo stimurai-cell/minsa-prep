@@ -11,6 +11,15 @@ export interface XpAwardResult {
     newStreak?: number;
 }
 
+export interface WeeklyLeagueSyncResult {
+    synced: boolean;
+    weekStart: string;
+    xpEarned?: number;
+    leagueName?: string;
+    roomNumber?: number | null;
+    reason?: string;
+}
+
 async function milestoneFeedAlreadyExists(userId: string, milestone: number) {
     const { data, error } = await supabase
         .from('feed_items')
@@ -84,6 +93,7 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
 
         if (leagueError) {
             console.error('[XP] Error syncing league via RPC:', leagueError);
+            await syncUserWeeklyLeagueXp(userId, weekStart);
         }
 
         const milestones = [50, 100, 250, 500, 750, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
@@ -172,5 +182,47 @@ export const awardXp = async (userId: string, xpAmount: number, currentTotalXp: 
     } catch (err) {
         console.error('Error awarding XP:', err);
         return { success: false, newTotalXp: currentTotalXp, xpEarned: 0 };
+    }
+};
+
+export const syncUserWeeklyLeagueXp = async (userId: string, weekStart = getLeagueWeekStart()): Promise<WeeklyLeagueSyncResult> => {
+    if (!userId) {
+        return {
+            synced: false,
+            weekStart,
+            reason: 'missing_user',
+        };
+    }
+
+    try {
+        const { data, error } = await supabase.rpc('sync_user_weekly_league_xp', {
+            p_user_id: userId,
+            p_week_start: weekStart,
+        });
+
+        if (error) {
+            console.error('[XP] Error running weekly league sync:', error);
+            return {
+                synced: false,
+                weekStart,
+                reason: error.message || 'rpc_error',
+            };
+        }
+
+        return {
+            synced: Boolean(data?.synced),
+            weekStart: String(data?.week_start || weekStart),
+            xpEarned: typeof data?.xp_earned === 'number' ? data.xp_earned : undefined,
+            leagueName: typeof data?.league_name === 'string' ? data.league_name : undefined,
+            roomNumber: typeof data?.room_number === 'number' ? data.room_number : null,
+            reason: typeof data?.reason === 'string' ? data.reason : undefined,
+        };
+    } catch (error) {
+        console.error('[XP] Unexpected weekly league sync failure:', error);
+        return {
+            synced: false,
+            weekStart,
+            reason: 'unexpected_error',
+        };
     }
 };

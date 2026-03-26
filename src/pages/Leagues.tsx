@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
 import LeagueWeeklyResultModal, { type LeagueWeeklyResult } from '../components/LeagueWeeklyResultModal';
+import { syncUserWeeklyLeagueXp } from '../lib/xp';
 import {
     LEAGUE_COLORS,
     LEAGUE_ICONS,
@@ -91,7 +92,7 @@ export default function Leagues() {
                 const weekStart = getLeagueWeekStart();
                 const freshProfile = (await refreshProfile(profile.id)) || profile;
 
-                const [{ data: ownStat, error: ownStatError }, { data: result, error: resultError }] = await Promise.all([
+                const [{ data: ownStatData, error: ownStatError }, { data: result, error: resultError }] = await Promise.all([
                     supabase
                         .from('weekly_league_stats')
                         .select('user_id, xp_earned, room_id, room_number, league_name')
@@ -110,6 +111,23 @@ export default function Leagues() {
 
                 if (ownStatError) throw ownStatError;
                 if (resultError) throw resultError;
+
+                let ownStat = ownStatData;
+                if (!ownStat?.room_id || !ownStat?.room_number) {
+                    const syncResult = await syncUserWeeklyLeagueXp(profile.id, weekStart);
+
+                    if (syncResult.synced) {
+                        const { data: repairedStat, error: repairedStatError } = await supabase
+                            .from('weekly_league_stats')
+                            .select('user_id, xp_earned, room_id, room_number, league_name')
+                            .eq('user_id', profile.id)
+                            .eq('week_start_date', weekStart)
+                            .maybeSingle();
+
+                        if (repairedStatError) throw repairedStatError;
+                        ownStat = repairedStat;
+                    }
+                }
 
                 let roomStats: LeagueEntry[] = [];
                 const currentLeagueName = ownStat?.league_name || freshProfile?.current_league || 'Bronze';

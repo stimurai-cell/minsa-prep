@@ -1,8 +1,3 @@
--- Fixes:
--- 1. get_or_create_league_room had ambiguous column references when creating a new room.
--- 2. league_results lacked an UPDATE policy for the owner to acknowledge the result.
--- 3. current-week weekly_league_stats can drift behind activity_logs when the room RPC fails.
-
 BEGIN;
 
 CREATE OR REPLACE FUNCTION public.get_or_create_league_room(
@@ -111,40 +106,130 @@ BEGIN
 END;
 $$;
 
-DROP POLICY IF EXISTS "Users can acknowledge own league results" ON public.league_results;
-
-CREATE POLICY "Users can acknowledge own league results"
-ON public.league_results
-FOR UPDATE
-USING (
-    auth.uid() = user_id
-    OR public.is_admin_user(auth.uid())
+CREATE OR REPLACE FUNCTION public.sync_user_weekly_league_xp(
+    p_user_id UUID,
+    p_week_start DATE DEFAULT public.get_league_week_start(NOW())
 )
-WITH CHECK (
-    auth.uid() = user_id
-    OR public.is_admin_user(auth.uid())
-);
-
-CREATE OR REPLACE FUNCTION public.acknowledge_league_result(p_result_id UUID)
-RETURNS BOOLEAN
+RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+    v_league_name TEXT;
+    v_total_xp INTEGER := 0;
+    v_first_xp_at TIMESTAMPTZ;
+    v_last_xp_at TIMESTAMPTZ;
+    v_room_id UUID;
+    v_room_number INTEGER;
+    v_room RECORD;
 BEGIN
-    UPDATE public.league_results
-    SET acknowledged_at = COALESCE(acknowledged_at, TIMEZONE('utc', NOW()))
-    WHERE id = p_result_id
-      AND (
-        user_id = auth.uid()
-        OR public.is_admin_user(auth.uid())
-      );
+    IF p_user_id IS NULL THEN
+        RETURN JSONB_BUILD_OBJECT(
+            'synced', FALSE,
+            'reason', 'missing_user'
+        );
+    END IF;
 
-    RETURN FOUND;
+    SELECT COALESCE(NULLIF(TRIM(p.current_league), ''), 'Bronze')
+    INTO v_league_name
+    FROM public.profiles p
+    WHERE p.id = p_user_id;
+
+    IF v_league_name IS NULL THEN
+        RETURN JSONB_BUILD_OBJECT(
+            'synced', FALSE,
+            'reason', 'missing_profile'
+        );
+    END IF;
+
+    SELECT
+        COALESCE(
+            SUM(
+                CASE
+                    WHEN COALESCE(al.activity_metadata ->> 'xp', '') ~ '^-?[0-9]+$'
+                        THEN (al.activity_metadata ->> 'xp')::INTEGER
+                    ELSE 0
+                END
+            ),
+            0
+        )::INTEGER,
+        MIN(COALESCE(al.created_at, al.activity_date)),
+        MAX(COALESCE(al.created_at, al.activity_date))
+    INTO v_total_xp, v_first_xp_at, v_last_xp_at
+    FROM public.activity_logs al
+    WHERE al.user_id = p_user_id
+      AND al.activity_type = 'xp_earned'
+      AND al.activity_date >= p_week_start
+      AND al.activity_date < p_week_start + 7;
+
+    IF COALESCE(v_total_xp, 0) <= 0 THEN
+        RETURN JSONB_BUILD_OBJECT(
+            'synced', FALSE,
+            'reason', 'no_weekly_xp'
+        );
+    END IF;
+
+    SELECT w.room_id, w.room_number
+    INTO v_room_id, v_room_number
+    FROM public.weekly_league_stats w
+    WHERE w.user_id = p_user_id
+      AND w.week_start_date = p_week_start
+    LIMIT 1;
+
+    IF v_room_id IS NULL THEN
+        SELECT *
+        INTO v_room
+        FROM public.get_or_create_league_room(
+            p_user_id,
+            v_league_name,
+            p_week_start
+        );
+
+        v_room_id := v_room.room_id;
+        v_room_number := v_room.room_number;
+    END IF;
+
+    INSERT INTO public.weekly_league_stats (
+        user_id,
+        league_name,
+        room_id,
+        room_number,
+        week_start_date,
+        xp_earned,
+        created_at,
+        updated_at
+    )
+    VALUES (
+        p_user_id,
+        v_league_name,
+        v_room_id,
+        v_room_number,
+        p_week_start,
+        v_total_xp,
+        COALESCE(v_first_xp_at, TIMEZONE('utc', NOW())),
+        COALESCE(v_last_xp_at, TIMEZONE('utc', NOW()))
+    )
+    ON CONFLICT (user_id, week_start_date)
+    DO UPDATE SET
+        league_name = EXCLUDED.league_name,
+        room_id = COALESCE(public.weekly_league_stats.room_id, EXCLUDED.room_id),
+        room_number = COALESCE(public.weekly_league_stats.room_number, EXCLUDED.room_number),
+        xp_earned = EXCLUDED.xp_earned,
+        created_at = COALESCE(public.weekly_league_stats.created_at, EXCLUDED.created_at),
+        updated_at = EXCLUDED.updated_at;
+
+    RETURN JSONB_BUILD_OBJECT(
+        'synced', TRUE,
+        'week_start', p_week_start,
+        'league_name', v_league_name,
+        'room_number', v_room_number,
+        'xp_earned', v_total_xp
+    );
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.acknowledge_league_result(UUID) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.sync_user_weekly_league_xp(UUID, DATE) TO anon, authenticated, service_role;
 
 WITH current_week AS (
     SELECT public.get_league_week_start(NOW()) AS week_start
@@ -192,6 +277,7 @@ ON CONFLICT (user_id, week_start_date)
 DO UPDATE SET
     league_name = EXCLUDED.league_name,
     xp_earned = EXCLUDED.xp_earned,
+    created_at = COALESCE(public.weekly_league_stats.created_at, EXCLUDED.created_at),
     updated_at = EXCLUDED.updated_at;
 
 SELECT public.rebuild_league_rooms(public.get_league_week_start(NOW()), TRUE);

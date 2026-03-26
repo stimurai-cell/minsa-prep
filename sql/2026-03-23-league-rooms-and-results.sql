@@ -436,10 +436,10 @@ BEGIN
     LIMIT 1;
 
     IF v_room_id IS NOT NULL THEN
-        SELECT participant_count
+        SELECT lr.participant_count
         INTO v_participant_count
-        FROM public.league_rooms
-        WHERE id = v_room_id;
+        FROM public.league_rooms lr
+        WHERE lr.id = v_room_id;
 
         RETURN QUERY
         SELECT v_room_id, COALESCE(v_room_number, 1), COALESCE(v_participant_count, 1);
@@ -456,10 +456,10 @@ BEGIN
     LIMIT 1;
 
     IF v_room_id IS NOT NULL THEN
-        SELECT participant_count
+        SELECT lr.participant_count
         INTO v_participant_count
-        FROM public.league_rooms
-        WHERE id = v_room_id;
+        FROM public.league_rooms lr
+        WHERE lr.id = v_room_id;
 
         RETURN QUERY
         SELECT v_room_id, COALESCE(v_room_number, 1), COALESCE(v_participant_count, 1);
@@ -477,11 +477,11 @@ BEGIN
     LIMIT 1;
 
     IF v_room_id IS NULL THEN
-        SELECT COALESCE(MAX(room_number), 0) + 1
+        SELECT COALESCE(MAX(lr.room_number), 0) + 1
         INTO v_room_number
-        FROM public.league_rooms
-        WHERE week_start_date = p_week_start
-          AND league_name = v_league_name;
+        FROM public.league_rooms lr
+        WHERE lr.week_start_date = p_week_start
+          AND lr.league_name = v_league_name;
 
         INSERT INTO public.league_rooms (
             week_start_date,
@@ -499,13 +499,13 @@ BEGIN
             1,
             'active'
         )
-        RETURNING id, participant_count
+        RETURNING public.league_rooms.id, public.league_rooms.participant_count
         INTO v_room_id, v_participant_count;
     ELSE
-        UPDATE public.league_rooms
-        SET participant_count = participant_count + 1
-        WHERE id = v_room_id
-        RETURNING participant_count
+        UPDATE public.league_rooms AS lr
+        SET participant_count = lr.participant_count + 1
+        WHERE lr.id = v_room_id
+        RETURNING lr.participant_count
         INTO v_participant_count;
     END IF;
 
