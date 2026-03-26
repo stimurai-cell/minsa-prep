@@ -59,7 +59,10 @@ export const useAppStore = create<AppState>((set) => ({
   fetchAreas: async () => {
     set({ loading: true });
     try {
-      const { data, error } = await supabase.from('areas').select('*');
+      const { data, error } = await supabase
+        .from('areas')
+        .select('*')
+        .order('created_at', { ascending: true });
       if (error) throw error;
 
       const officialAreas = (data || []).filter((area) => isOfficialHealthArea(area.name || ''));
