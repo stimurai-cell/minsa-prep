@@ -1,6 +1,11 @@
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
+import {
+  appendGovernanceReferences,
+  buildGovernanceReviewPrompt,
+  sanitizeGovernanceReferences,
+} from './_lib/questionGovernance';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -46,6 +51,18 @@ type GeneratedPayload = {
   validation_summary?: string;
   coverage_summary?: string[];
   questions?: IncomingQuestion[];
+};
+
+type GovernanceReviewQuestion = IncomingQuestion & {
+  approved?: boolean;
+  review_notes?: string[];
+  references?: string[];
+  rejection_reason?: string;
+};
+
+type GovernanceReviewPayload = {
+  reviewer_summary?: string;
+  questions?: GovernanceReviewQuestion[];
 };
 
 type PreparedGenerationSource = {
@@ -329,12 +346,14 @@ ${formatReferenceQuestions(existingQuestions)}
 REGRAS IMPORTANTES:
 - Use portugues de Angola correto
 - Crie perguntas realistas para concursos publicos de saude
+- A questao precisa pertencer de forma clara a AREA e ao TOPICO declarados
 - Esgote o tema ao longo do lote, cobrindo diferentes subtopicos sem repeticao
 - Gere exatamente ${count} perguntas neste lote, nem mais nem menos
 - A dificuldade precisa refletir claramente o nivel pedido
 - Gere exatamente 4 alternativas por pergunta (A, B, C, D)
 - Apenas uma alternativa deve estar correta
 - Inclua explicacoes claras para cada pergunta
+- Sempre feche a explicacao com uma base bibliografica curta e confiavel
 - Nao invente leis, datas, protocolos, valores de referencia ou orientacoes clinicas
 - Se a validacao web estiver ativa, confirme fatos sensiveis e privilegie informacao atualizada
 - Se o material fornecido estiver desatualizado ou entrar em conflito com fonte confiavel atual, corrija antes de gerar
@@ -715,6 +734,145 @@ const createResponseSchema = (Type: any, expectedCount: number) => ({
   },
   required: ['validation_summary', 'coverage_summary', 'questions'],
 });
+
+const createGovernanceReviewResponseSchema = (Type: any, expectedCount: number) => ({
+  type: Type.OBJECT,
+  properties: {
+    reviewer_summary: { type: Type.STRING },
+    questions: {
+      type: Type.ARRAY,
+      minItems: expectedCount,
+      maxItems: expectedCount,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          approved: { type: Type.BOOLEAN },
+          question: { type: Type.STRING },
+          alternatives: {
+            type: Type.ARRAY,
+            minItems: EXPECTED_ALTERNATIVES,
+            maxItems: EXPECTED_ALTERNATIVES,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                text: { type: Type.STRING },
+                isCorrect: { type: Type.BOOLEAN },
+              },
+              required: ['text', 'isCorrect'],
+            },
+          },
+          explanation: { type: Type.STRING },
+          difficulty: { type: Type.STRING },
+          review_notes: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+          },
+          references: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+          },
+          rejection_reason: { type: Type.STRING },
+        },
+        required: ['approved', 'question', 'alternatives', 'explanation', 'difficulty', 'review_notes', 'references', 'rejection_reason'],
+      },
+    },
+  },
+  required: ['reviewer_summary', 'questions'],
+});
+
+const reviewGeneratedBatch = async ({
+  ai,
+  Type,
+  model,
+  area,
+  topic,
+  sourceMode,
+  validateWithWeb,
+  questions,
+  referenceQuestions,
+}: {
+  ai: any;
+  Type: any;
+  model: string;
+  area: string;
+  topic: string;
+  sourceMode: SourceMode;
+  validateWithWeb: boolean;
+  questions: NormalizedQuestion[];
+  referenceQuestions: string[];
+}) => {
+  if (!questions.length) {
+    return {
+      approvedQuestions: [] as NormalizedQuestion[],
+      reviewerSummary: '',
+      rejectedReasons: [] as string[],
+    };
+  }
+
+  const prompt = buildGovernanceReviewPrompt({
+    area,
+    topic,
+    sourceMode,
+    validateWithWeb,
+    questions,
+  });
+
+  const response = await ai.models.generateContent({
+    model,
+    contents: prompt,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: createGovernanceReviewResponseSchema(Type, questions.length),
+      tools: validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
+    },
+  });
+
+  const rawText = extractResponseText(response);
+  const parsed = rawText ? (parseGeneratedPayload(rawText) as GovernanceReviewPayload) : null;
+  const reviewedQuestions = Array.isArray(parsed?.questions) ? parsed.questions : [];
+
+  if (reviewedQuestions.length !== questions.length) {
+    throw new Error('A revisao tecnica devolveu uma quantidade invalida de itens.');
+  }
+
+  const approvedPayload = reviewedQuestions
+    .filter((item) => Boolean(item?.approved))
+    .map((item) => ({
+      question: String(item.question || item.content || '').trim(),
+      alternatives: (item.alternatives || []).map((alternative) => ({
+        text: String(alternative.text || alternative.content || '').trim(),
+        isCorrect: typeof alternative.isCorrect === 'boolean' ? alternative.isCorrect : Boolean(alternative.is_correct),
+      })),
+      explanation: appendGovernanceReferences(
+        String(item.explanation || '').trim(),
+        sanitizeGovernanceReferences(item.references)
+      ),
+      difficulty: String(item.difficulty || '').trim(),
+    }));
+
+  const approvedQuestions = normalizeQuestions(approvedPayload);
+  const reviewValidationErrors = approvedQuestions.length
+    ? validateQuestions(approvedQuestions, EXPECTED_ALTERNATIVES, { referenceQuestions })
+    : [];
+
+  if (reviewValidationErrors.length) {
+    throw new Error(`A revisao tecnica devolveu perguntas invalidas: ${reviewValidationErrors.join('; ')}`);
+  }
+
+  const rejectedReasons = reviewedQuestions
+    .map((item, index) =>
+      item?.approved
+        ? ''
+        : `Q${index + 1}: ${String(item?.rejection_reason || 'A revisao tecnica reprovou esta questao.').trim()}`
+    )
+    .filter(Boolean);
+
+  return {
+    approvedQuestions,
+    reviewerSummary: String(parsed?.reviewer_summary || '').trim(),
+    rejectedReasons,
+  };
+};
 
 const mergeCoverageSummary = (current: string[], incoming: unknown) => {
   if (!Array.isArray(incoming)) return current;
@@ -1103,7 +1261,7 @@ export default async function handler(req: any, res: any) {
                 const uniqueBatch = filteredBatch.uniqueQuestions;
 
                 candidateValidationErrors = uniqueBatch.length
-                  ? validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES)
+                  ? validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES, { referenceQuestions })
                   : [
                     filteredBatch.skippedQuestions.length
                       ? 'A IA devolveu apenas perguntas repetidas nesta tentativa.'
@@ -1111,15 +1269,42 @@ export default async function handler(req: any, res: any) {
                   ];
 
                 if (!candidateValidationErrors.length) {
-                  candidateQuestions.push(...uniqueBatch);
+                  const reviewedBatch = await reviewGeneratedBatch({
+                    ai,
+                    Type,
+                    model: candidateModel,
+                    area: resolvedAreaName,
+                    topic: resolvedTheme,
+                    sourceMode: preparedSource.sourceMode,
+                    validateWithWeb: preparedSource.validateWithWeb,
+                    questions: uniqueBatch,
+                    referenceQuestions,
+                  });
+
+                  if (!reviewedBatch.approvedQuestions.length) {
+                    candidateValidationErrors = reviewedBatch.rejectedReasons.length
+                      ? reviewedBatch.rejectedReasons
+                      : ['A revisao tecnica reprovou todas as perguntas desta tentativa.'];
+                    continue;
+                  }
+
+                  candidateQuestions.push(...reviewedBatch.approvedQuestions);
                   candidateCoverageSummary = mergeCoverageSummary(candidateCoverageSummary, parsedBatch?.coverage_summary);
                   const validationSummary = String(parsedBatch?.validation_summary || '').trim();
                   if (validationSummary) {
                     candidateValidationSummaryParts.push(validationSummary);
                   }
+                  if (reviewedBatch.reviewerSummary) {
+                    candidateValidationSummaryParts.push(reviewedBatch.reviewerSummary);
+                  }
                   if (filteredBatch.skippedQuestions.length) {
                     candidateValidationSummaryParts.push(
                       `${filteredBatch.skippedQuestions.length} perguntas repetidas foram descartadas automaticamente nesta rodada.`
+                    );
+                  }
+                  if (reviewedBatch.rejectedReasons.length) {
+                    candidateValidationSummaryParts.push(
+                      `${reviewedBatch.rejectedReasons.length} perguntas foram bloqueadas pela revisao tecnica por risco de erro ou inadequacao area-topico.`
                     );
                   }
                   break;
@@ -1197,8 +1382,8 @@ export default async function handler(req: any, res: any) {
           validate_with_web: preparedSource.validateWithWeb,
           validation_summary: Array.from(new Set(validationSummaryParts.filter(Boolean))).join(' ')
             || (preparedSource.validateWithWeb
-              ? 'Conteudo consolidado com validacao web antes da montagem final das questoes.'
-              : 'Conteudo estruturado diretamente a partir do topico e das instrucoes fornecidas.'),
+              ? 'Conteudo consolidado com validacao web e revisao tecnica por area antes da montagem final das questoes.'
+              : 'Conteudo estruturado a partir do topico, seguido de revisao tecnica por area antes da aprovacao final.'),
           coverage_summary: coverageSummary.length ? coverageSummary : createCoverageSummary(normalized),
           questions: normalized,
         });

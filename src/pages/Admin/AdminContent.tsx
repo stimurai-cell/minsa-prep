@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useAppStore } from '../../store/useAppStore';
 import { FolderTree, Plus, Trash2, Sparkles, Loader2, Database, Zap, ShieldCheck } from 'lucide-react';
 import { getDifficultyLabel } from '../../lib/labels';
+import AdminQuestionReports from '../../components/AdminQuestionReports';
 
 type GeneratedQuestion = {
     question: string;
@@ -22,6 +23,27 @@ const ALLOWED_SOURCE_MIME_TYPES = [
 ];
 
 const getAlternativeBadge = (index: number) => String.fromCharCode(65 + index);
+const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim());
+const getRelationName = (value: any) => (Array.isArray(value) ? value[0]?.name : value?.name) || 'N/D';
+const normalizeQuestionSearchResult = (question: any) => ({
+    ...question,
+    alternatives: Array.isArray(question?.alternatives) ? question.alternatives : [],
+    question_explanations: Array.isArray(question?.question_explanations)
+        ? question.question_explanations
+        : question?.question_explanations
+            ? [question.question_explanations]
+            : [],
+});
+const mergeQuestionSearchResults = (...collections: any[][]) => {
+    const merged = new Map<string, any>();
+
+    collections.flat().forEach((question) => {
+        if (!question?.id) return;
+        merged.set(question.id, normalizeQuestionSearchResult(question));
+    });
+
+    return Array.from(merged.values());
+};
 
 const fileToBase64 = (file: File) =>
     new Promise<string>((resolve, reject) => {
@@ -47,6 +69,17 @@ export default function AdminContent() {
     const [newTopicName, setNewTopicName] = useState('');
     const [newTopicDescription, setNewTopicDescription] = useState('');
     const [savingContent, setSavingContent] = useState(false);
+    const [questionSearch, setQuestionSearch] = useState('');
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [searchLoading, setSearchLoading] = useState(false);
+    const [searchAttempted, setSearchAttempted] = useState(false);
+    const [editingQuestion, setEditingQuestion] = useState<any | null>(null);
+    const [editDraft, setEditDraft] = useState<{
+        content: string;
+        difficulty: string;
+        explanation: string;
+        alternatives: Array<{ id: string; content: string; is_correct: boolean }>;
+    } | null>(null);
 
     const [genArea, setGenArea] = useState('');
     const [genTopic, setGenTopic] = useState('');
@@ -199,6 +232,162 @@ export default function AdminContent() {
         setSavingContent(false);
     };
 
+    const buildEditDraft = (question: any) => ({
+        content: question.content || '',
+        difficulty: question.difficulty || 'medium',
+        explanation: question.question_explanations?.[0]?.content || '',
+        alternatives: (question.alternatives || []).map((alternative: any) => ({
+            id: alternative.id,
+            content: alternative.content || '',
+            is_correct: Boolean(alternative.is_correct),
+        })),
+    });
+
+    const handleQuestionSearch = async () => {
+        const term = questionSearch.trim();
+        if (!term) {
+            setSearchResults([]);
+            setSearchAttempted(false);
+            return;
+        }
+
+        setSearchLoading(true);
+        try {
+            const questionSelect = `
+                id, content, difficulty, exam_year,
+                area_id, topic_id,
+                areas (name),
+                topics (name),
+                alternatives (id, content, is_correct),
+                question_explanations (content)
+            `;
+
+            const questionQuery = isUuid(term)
+                ? supabase
+                    .from('questions')
+                    .select(questionSelect)
+                    .eq('id', term)
+                    .limit(50)
+                : supabase
+                    .from('questions')
+                    .select(questionSelect)
+                    .ilike('content', `%${term}%`)
+                    .order('created_at', { ascending: false })
+                    .limit(50);
+
+            const alternativeQuery = isUuid(term)
+                ? Promise.resolve({ data: [], error: null })
+                : supabase
+                    .from('alternatives')
+                    .select(`
+                        question_id,
+                        questions!inner (
+                            ${questionSelect}
+                        )
+                    `)
+                    .ilike('content', `%${term}%`)
+                    .limit(50);
+
+            const [{ data: questionMatches, error: questionError }, { data: alternativeMatches, error: alternativeError }] =
+                await Promise.all([questionQuery, alternativeQuery]);
+
+            if (questionError) throw questionError;
+            if (alternativeError) throw alternativeError;
+
+            const alternativeQuestions = (alternativeMatches || [])
+                .map((match: any) => {
+                    const nestedQuestion = match?.questions;
+                    return Array.isArray(nestedQuestion) ? nestedQuestion[0] : nestedQuestion;
+                })
+                .filter(Boolean);
+
+            setSearchResults(mergeQuestionSearchResults(questionMatches || [], alternativeQuestions));
+            setSearchAttempted(true);
+        } catch (error: any) {
+            alert(error?.message || 'Erro ao buscar questoes.');
+        } finally {
+            setSearchLoading(false);
+        }
+    };
+
+    const handleEditQuestion = (question: any) => {
+        setEditingQuestion(question);
+        setEditDraft(buildEditDraft(question));
+    };
+
+    const handleAlternativeContentChange = (index: number, value: string) => {
+        if (!editDraft) return;
+        const alternatives = [...editDraft.alternatives];
+        alternatives[index] = { ...alternatives[index], content: value };
+        setEditDraft({ ...editDraft, alternatives });
+    };
+
+    const handleMarkCorrectAlternative = (id: string) => {
+        if (!editDraft) return;
+        const alternatives = editDraft.alternatives.map((alt) => ({
+            ...alt,
+            is_correct: alt.id === id,
+        }));
+        setEditDraft({ ...editDraft, alternatives });
+    };
+
+    const handleSaveQuestionEdits = async () => {
+        if (!editingQuestion || !editDraft) return;
+        const correctCount = editDraft.alternatives.filter((alt) => alt.is_correct).length;
+        if (correctCount !== 1) {
+            alert('Defina exatamente uma alternativa correta.');
+            return;
+        }
+
+        setSavingContent(true);
+        try {
+            const { error: questionError } = await supabase
+                .from('questions')
+                .update({
+                    content: editDraft.content.trim(),
+                    difficulty: editDraft.difficulty,
+                })
+                .eq('id', editingQuestion.id);
+            if (questionError) throw questionError;
+
+            const { error: altError } = await supabase
+                .from('alternatives')
+                .upsert(editDraft.alternatives.map((alt) => ({
+                    id: alt.id,
+                    content: alt.content.trim(),
+                    is_correct: alt.is_correct,
+                })), { onConflict: 'id' });
+            if (altError) throw altError;
+
+            const { error: explanationError } = await supabase
+                .from('question_explanations')
+                .upsert({
+                    question_id: editingQuestion.id,
+                    content: editDraft.explanation.trim() || 'Explicacao atualizada pelo admin.',
+                }, { onConflict: 'question_id' });
+            if (explanationError) throw explanationError;
+
+            alert('Questão atualizada com sucesso.');
+            setEditingQuestion(null);
+            setEditDraft(null);
+            if (questionSearch.trim()) {
+                void handleQuestionSearch();
+            }
+            if (managementArea) {
+                void fetchManagementContent(managementArea);
+            }
+        } catch (error: any) {
+            alert(error?.message || 'Falha ao salvar as alterações.');
+        } finally {
+            setSavingContent(false);
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setEditingQuestion(null);
+        setEditDraft(null);
+    };
+
     const handleDeleteTopic = async (topicId: string) => {
         if (!window.confirm('ATENÇÃO: Apagar este tópico vai APAGAR TODAS as perguntas dentro dele. Tem certeza absoluta?')) return;
         setSavingContent(true);
@@ -216,7 +405,16 @@ export default function AdminContent() {
         setSavingContent(true);
         const { error } = await supabase.from('questions').delete().eq('id', questionId);
         if (error) alert(error.message);
-        else fetchManagementContent(managementArea);
+        else {
+            setSearchResults((current) => current.filter((question) => question.id !== questionId));
+            if (editingQuestion?.id === questionId) {
+                setEditingQuestion(null);
+                setEditDraft(null);
+            }
+            if (managementArea) {
+                void fetchManagementContent(managementArea);
+            }
+        }
         setSavingContent(false);
     };
 
@@ -515,7 +713,157 @@ export default function AdminContent() {
                                 <Loader2 className="h-8 w-8 animate-spin text-emerald-500 mb-4" />
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">A carregar estrutura...</p>
                             </div>
-                        ) : managementTopics.length === 0 ? (
+                        ) : (
+                            <>
+                                <div className="space-y-4 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 shadow-sm">
+                                    <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+                                        <input
+                                            type="text"
+                                            value={questionSearch}
+                                            onChange={(event) => setQuestionSearch(event.target.value)}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter' && questionSearch.trim()) {
+                                                    event.preventDefault();
+                                                    void handleQuestionSearch();
+                                                }
+                                            }}
+                                            placeholder="Pesquisar por enunciado, alternativa ou ID..."
+                                            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none shadow-sm"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => void handleQuestionSearch()}
+                                            disabled={!questionSearch.trim() || searchLoading}
+                                            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-slate-800 disabled:opacity-50"
+                                        >
+                                            {searchLoading ? 'Buscando...' : 'Buscar'}
+                                        </button>
+                                    </div>
+
+                                    <p className="text-[11px] font-semibold text-slate-500">
+                                        Busca global: encontra qualquer questao pelo enunciado, por texto de alternativa ou pelo ID completo.
+                                    </p>
+
+                                    {searchResults.length > 0 && (
+                                        <div className="space-y-3 pt-3">
+                                            {searchResults.map((result) => (
+                                                <div
+                                                    key={`search-${result.id}`}
+                                                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col gap-2"
+                                                >
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <p className="text-sm font-black text-slate-900">{result.content}</p>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleEditQuestion(result)}
+                                                            className="rounded-xl border border-slate-300 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 transition hover:border-slate-400"
+                                                        >
+                                                            Editar
+                                                        </button>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.18em]">
+                                                        <span>Area: {getRelationName(result.areas)}</span>
+                                                        <span>Topico: {getRelationName(result.topics)}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {searchAttempted && !searchLoading && searchResults.length === 0 && (
+                                        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-5 text-center text-sm font-semibold text-slate-500">
+                                            Nenhuma questao encontrada com esse termo.
+                                        </div>
+                                    )}
+
+                                    {editingQuestion && editDraft && (
+                                        <div className="space-y-4 rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
+                                            <div className="flex items-center justify-between">
+                                                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-700">
+                                                    Editando questão #{editingQuestion.id.slice(0, 8)}
+                                                </h3>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleCancelEdit}
+                                                    className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400"
+                                                >
+                                                    Cancelar
+                                                </button>
+                                            </div>
+                                            <textarea
+                                                value={editDraft.content}
+                                                onChange={(event) => setEditDraft({ ...editDraft, content: event.target.value })}
+                                                rows={3}
+                                                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-400 focus:bg-white"
+                                            />
+                                            <div className="grid gap-3 md:grid-cols-2">
+                                                <select
+                                                    value={editDraft.difficulty}
+                                                    onChange={(event) => setEditDraft({ ...editDraft, difficulty: event.target.value })}
+                                                    className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-400 focus:bg-white"
+                                                >
+                                                    <option value="easy">Fácil</option>
+                                                    <option value="medium">Média</option>
+                                                    <option value="hard">Difícil</option>
+                                                </select>
+                                                <textarea
+                                                    value={editDraft.explanation}
+                                                    onChange={(event) => setEditDraft({ ...editDraft, explanation: event.target.value })}
+                                                    rows={2}
+                                                    placeholder="Explicação oficial"
+                                                    className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-400 focus:bg-white"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                {editDraft.alternatives.map((alternative, index) => (
+                                                    <div key={alternative.id} className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                                                Alternativa {String.fromCharCode(65 + index)}
+                                                            </span>
+                                                            <label className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
+                                                                <input
+                                                                    type="radio"
+                                                                    name={`correct-${editingQuestion.id}`}
+                                                                    checked={alternative.is_correct}
+                                                                    onChange={() => handleMarkCorrectAlternative(alternative.id)}
+                                                                />
+                                                                Correta
+                                                            </label>
+                                                        </div>
+                                                        <input
+                                                            value={alternative.content}
+                                                            onChange={(event) => handleAlternativeContentChange(index, event.target.value)}
+                                                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-400"
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            <div className="flex flex-wrap gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleSaveQuestionEdits}
+                                                    disabled={savingContent}
+                                                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-emerald-500 disabled:opacity-50"
+                                                >
+                                                    Salvar mudanças
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleCancelEdit}
+                                                    disabled={savingContent}
+                                                    className="rounded-2xl border border-slate-200 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-600 transition hover:bg-slate-100 disabled:opacity-50"
+                                                >
+                                                    Cancelar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {managementTopics.length === 0 ? (
                             <div className="h-full rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center text-center p-8">
                                 <Database className="w-12 h-12 text-slate-300 mb-4 opacity-50" />
                                 <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Área Vazia</p>
@@ -601,7 +949,7 @@ export default function AdminContent() {
                                                                                     {getAlternativeBadge(altIndex)}
                                                                                 </span>
                                                                                 {alternative.content}
-                                                                                {alternative.is_correct && <span className="float-right font-black uppercase tracking-widest text-[9px] text-emerald-600 mt-0.5">Correcta</span>}
+                                                                                {alternative.is_correct && <span className="float-right font-black uppercase tracking-widest text-[9px] text-emerald-600 mt-0.5">Correta</span>}
                                                                             </div>
                                                                         ))}
                                                                     </div>
@@ -621,6 +969,13 @@ export default function AdminContent() {
                                                             <div className="flex lg:flex-col gap-2 shrink-0">
                                                                 <button
                                                                     type="button"
+                                                                    onClick={() => handleEditQuestion(question)}
+                                                                    className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:border-slate-400 transition-colors"
+                                                                >
+                                                                    Editar
+                                                                </button>
+                                                                <button
+                                                                    type="button"
                                                                     onClick={() => handleDeleteQuestion(question.id)}
                                                                     disabled={savingContent}
                                                                     className="inline-flex items-center gap-2 rounded-xl bg-rose-50 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-rose-600 hover:bg-rose-100 transition-colors disabled:opacity-50"
@@ -637,6 +992,8 @@ export default function AdminContent() {
                                     )}
                                 </div>
                             ))
+                        )}
+                            </>
                         )}
                     </div>
                 </div>
@@ -726,6 +1083,7 @@ export default function AdminContent() {
                                         <p className="font-black uppercase tracking-widest text-emerald-700">Regras Ativas</p>
                                         <p>Apenas 4 alternativas por questão.</p>
                                         <p>Texto e ficheiro passam por validação web antes do retorno.</p>
+                                        <p>Todo lote passa por revisão técnica da área antes de seguir.</p>
                                         <p>PDF e DOCX até 3.5 MB.</p>
                                     </div>
                                 </div>
@@ -954,6 +1312,8 @@ export default function AdminContent() {
                     </div>
                 </div>
             </div>
+
+            <AdminQuestionReports />
         </div>
     );
 }

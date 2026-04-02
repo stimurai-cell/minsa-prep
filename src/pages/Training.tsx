@@ -36,6 +36,7 @@ import BadgeNotification from '../components/BadgeNotification';
 import { exportQuestions } from '../lib/exportQuestions';
 import { getRecentQuestionIds, prioritizeUnseenQuestions, rememberQuestionIds } from '../lib/questionHistory';
 import { registerDailyStreak } from '../lib/streak';
+import QuestionIssueReporter from '../components/QuestionIssueReporter';
 
 type SessionSummary = {
   correctAnswers: number;
@@ -293,6 +294,9 @@ export default function Training() {
     currentQ?.explanation ||
     (Array.isArray(currentQ?.question_explanations) ? currentQ?.question_explanations?.[0]?.content : (currentQ?.question_explanations as any)?.content) ||
     'A resposta correta foi destacada para o seu estudo.';
+  const currentQuestionTopicName =
+    topics.find((topic) => topic.id === currentQ?.topic_id)?.name
+    || (isReviewMode ? 'Revisao inteligente' : selectedTopicName);
   const correctAnswers = resultHistory.filter(Boolean).length;
   const wrongAnswers = resultHistory.length - correctAnswers;
   const progressPercent =
@@ -1147,6 +1151,23 @@ export default function Training() {
                     <p className="mt-2 max-h-24 overflow-y-auto pr-1 text-sm leading-5 text-slate-700">{currentExplanation}</p>
                   </div>
                 </div>
+                <QuestionIssueReporter
+                  questionId={currentQ.id}
+                  reporterId={profile?.id}
+                  reporterName={profile?.full_name}
+                  areaId={profile?.selected_area_id}
+                  areaName={selectedAreaName}
+                  topicId={currentQ.topic_id}
+                  topicName={currentQuestionTopicName}
+                  questionContent={currentQ.content || ''}
+                  questionDifficulty={currentQ.difficulty}
+                  explanation={currentExplanation}
+                  alternatives={currentQ.alternatives.map((alt: any) => ({
+                    id: alt.id,
+                    content: alt.content || '',
+                    isCorrect: Boolean(alt.is_correct),
+                  }))}
+                />
                 <button
                   type="button"
                   onClick={nextQuestion}

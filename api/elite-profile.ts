@@ -1,10 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 import type { IncomingMessage, ServerResponse } from 'http';
 
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+let supabaseClient: ReturnType<typeof createClient> | null = null;
+
+const getSupabase = () => {
+  if (supabaseClient) return supabaseClient;
+
+  const supabaseUrl = String(process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
+  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error('Supabase env vars are missing for elite-profile API.');
+  }
+
+  supabaseClient = createClient(supabaseUrl, serviceRoleKey);
+  return supabaseClient;
+};
 
 type EliteProfilePayload = {
   userId?: string;
@@ -42,6 +53,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   try {
+    const supabase = getSupabase();
     const body = await readJsonBody(req);
     const userId = body.userId?.trim();
 
