@@ -182,6 +182,11 @@ export default function SpeedMode() {
     };
 
     const startSession = () => {
+        if (!profile?.selected_area_id) {
+            alert('Defina primeiro a sua area de estudo antes de iniciar o Modo Relampago.');
+            return;
+        }
+
         if (!navigator.onLine && !hasOfflineAccess) {
             alert('O Modo Relampago offline esta disponivel apenas nos planos Premium e Elite. Conecte-se para continuar.');
             return;
