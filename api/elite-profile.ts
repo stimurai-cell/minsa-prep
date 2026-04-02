@@ -53,7 +53,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   try {
-    const supabase = getSupabase();
+    const supabase = getSupabase() as any;
     const body = await readJsonBody(req);
     const userId = body.userId?.trim();
 
