@@ -100,6 +100,7 @@ export default function AdminContent() {
 
     const [geminiModel, setGeminiModel] = useState<string>('Buscando...');
     const [geminiMode, setGeminiMode] = useState<string>('Buscando...');
+    const managementAreaName = areas.find((area) => area.id === managementArea)?.name || 'N/D';
 
     useEffect(() => {
         fetchAreas();
@@ -311,8 +312,9 @@ export default function AdminContent() {
     };
 
     const handleEditQuestion = (question: any) => {
-        setEditingQuestion(question);
-        setEditDraft(buildEditDraft(question));
+        const normalizedQuestion = normalizeQuestionSearchResult(question);
+        setEditingQuestion(normalizedQuestion);
+        setEditDraft(buildEditDraft(normalizedQuestion));
     };
 
     const handleAlternativeContentChange = (index: number, value: string) => {
@@ -776,91 +778,6 @@ export default function AdminContent() {
                                         </div>
                                     )}
 
-                                    {editingQuestion && editDraft && (
-                                        <div className="space-y-4 rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
-                                            <div className="flex items-center justify-between">
-                                                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-700">
-                                                    Editando questão #{editingQuestion.id.slice(0, 8)}
-                                                </h3>
-                                                <button
-                                                    type="button"
-                                                    onClick={handleCancelEdit}
-                                                    className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400"
-                                                >
-                                                    Cancelar
-                                                </button>
-                                            </div>
-                                            <textarea
-                                                value={editDraft.content}
-                                                onChange={(event) => setEditDraft({ ...editDraft, content: event.target.value })}
-                                                rows={3}
-                                                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-400 focus:bg-white"
-                                            />
-                                            <div className="grid gap-3 md:grid-cols-2">
-                                                <select
-                                                    value={editDraft.difficulty}
-                                                    onChange={(event) => setEditDraft({ ...editDraft, difficulty: event.target.value })}
-                                                    className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-400 focus:bg-white"
-                                                >
-                                                    <option value="easy">Fácil</option>
-                                                    <option value="medium">Média</option>
-                                                    <option value="hard">Difícil</option>
-                                                </select>
-                                                <textarea
-                                                    value={editDraft.explanation}
-                                                    onChange={(event) => setEditDraft({ ...editDraft, explanation: event.target.value })}
-                                                    rows={2}
-                                                    placeholder="Explicação oficial"
-                                                    className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-400 focus:bg-white"
-                                                />
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                {editDraft.alternatives.map((alternative, index) => (
-                                                    <div key={alternative.id} className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                                                                Alternativa {String.fromCharCode(65 + index)}
-                                                            </span>
-                                                            <label className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
-                                                                <input
-                                                                    type="radio"
-                                                                    name={`correct-${editingQuestion.id}`}
-                                                                    checked={alternative.is_correct}
-                                                                    onChange={() => handleMarkCorrectAlternative(alternative.id)}
-                                                                />
-                                                                Correta
-                                                            </label>
-                                                        </div>
-                                                        <input
-                                                            value={alternative.content}
-                                                            onChange={(event) => handleAlternativeContentChange(index, event.target.value)}
-                                                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-400"
-                                                        />
-                                                    </div>
-                                                ))}
-                                            </div>
-
-                                            <div className="flex flex-wrap gap-3">
-                                                <button
-                                                    type="button"
-                                                    onClick={handleSaveQuestionEdits}
-                                                    disabled={savingContent}
-                                                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-emerald-500 disabled:opacity-50"
-                                                >
-                                                    Salvar mudanças
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={handleCancelEdit}
-                                                    disabled={savingContent}
-                                                    className="rounded-2xl border border-slate-200 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-600 transition hover:bg-slate-100 disabled:opacity-50"
-                                                >
-                                                    Cancelar
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
 
                                 {managementTopics.length === 0 ? (
@@ -1314,6 +1231,129 @@ export default function AdminContent() {
             </div>
 
             <AdminQuestionReports />
+
+            {editingQuestion && editDraft && (
+                <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+                    <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-[2rem] border border-emerald-200 bg-white shadow-2xl">
+                        <div className="border-b border-slate-100 px-6 py-5">
+                            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
+                                        Editor de Questao
+                                    </p>
+                                    <h3 className="mt-2 text-xl font-black text-slate-900">
+                                        Questao #{editingQuestion.id.slice(0, 8)}
+                                    </h3>
+                                    <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        <span>Area: {getRelationName(editingQuestion.areas) !== 'N/D' ? getRelationName(editingQuestion.areas) : managementAreaName}</span>
+                                        <span>Topico: {getRelationName(editingQuestion.topics)}</span>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleCancelEdit}
+                                    className="rounded-2xl border border-slate-200 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-500 transition hover:bg-slate-50"
+                                >
+                                    Fechar
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 space-y-5 overflow-y-auto bg-slate-50 px-6 py-6">
+                            <div>
+                                <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                    Enunciado
+                                </label>
+                                <textarea
+                                    value={editDraft.content}
+                                    onChange={(event) => setEditDraft({ ...editDraft, content: event.target.value })}
+                                    rows={5}
+                                    className="w-full rounded-[1.5rem] border border-slate-200 bg-white px-4 py-4 text-sm font-semibold leading-6 text-slate-800 outline-none focus:border-emerald-400"
+                                />
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-[220px_1fr]">
+                                <div>
+                                    <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        Dificuldade
+                                    </label>
+                                    <select
+                                        value={editDraft.difficulty}
+                                        onChange={(event) => setEditDraft({ ...editDraft, difficulty: event.target.value })}
+                                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-400"
+                                    >
+                                        <option value="easy">Facil</option>
+                                        <option value="medium">Media</option>
+                                        <option value="hard">Dificil</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        Explicacao oficial
+                                    </label>
+                                    <textarea
+                                        value={editDraft.explanation}
+                                        onChange={(event) => setEditDraft({ ...editDraft, explanation: event.target.value })}
+                                        rows={4}
+                                        placeholder="Explicacao oficial"
+                                        className="w-full rounded-[1.5rem] border border-slate-200 bg-white px-4 py-4 text-sm font-semibold leading-6 text-slate-800 outline-none focus:border-emerald-400"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                    Alternativas
+                                </p>
+                                {editDraft.alternatives.map((alternative, index) => (
+                                    <div key={alternative.id} className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
+                                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                                Alternativa {String.fromCharCode(65 + index)}
+                                            </span>
+                                            <label className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">
+                                                <input
+                                                    type="radio"
+                                                    name={`correct-${editingQuestion.id}`}
+                                                    checked={alternative.is_correct}
+                                                    onChange={() => handleMarkCorrectAlternative(alternative.id)}
+                                                />
+                                                Marcar como correta
+                                            </label>
+                                        </div>
+                                        <input
+                                            value={alternative.content}
+                                            onChange={(event) => handleAlternativeContentChange(index, event.target.value)}
+                                            className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-400 focus:bg-white"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="border-t border-slate-100 bg-white px-6 py-5">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                                <button
+                                    type="button"
+                                    onClick={handleCancelEdit}
+                                    disabled={savingContent}
+                                    className="rounded-2xl border border-slate-200 px-5 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-600 transition hover:bg-slate-100 disabled:opacity-50"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleSaveQuestionEdits}
+                                    disabled={savingContent}
+                                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-emerald-500 disabled:opacity-50"
+                                >
+                                    {savingContent ? 'A guardar...' : 'Salvar mudancas'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

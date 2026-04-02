@@ -27,6 +27,7 @@ import { sendPushNotification } from '../lib/pushNotifications';
 import { useOfflineStore } from '../store/useOfflineStore';
 import { savePendingLog, savePendingXp } from '../lib/offlineStore';
 import { registerDailyStreak } from '../lib/streak';
+import QuestionIssueReporter from '../components/QuestionIssueReporter';
 
 const TIMER_SECONDS = 45;
 
@@ -56,6 +57,8 @@ export default function SpeedMode() {
 
     const ttsRef = useRef<SpeechSynthesisUtterance | null>(null);
     const timerRef = useRef<number | null>(null);
+    const selectedAreaName =
+        areas.find((area) => area.id === profile?.selected_area_id)?.name || 'Area nao definida';
 
     useEffect(() => {
         fetchAreas();
@@ -95,8 +98,10 @@ export default function SpeedMode() {
         const { data, error } = await supabase
             .from('questions')
             .select(`
-          id, content, difficulty,
-          alternatives (id, content, is_correct)
+          id, content, difficulty, topic_id,
+          alternatives (id, content, is_correct),
+          question_explanations (content),
+          topics (name)
         `)
             .in('id', ids);
 
@@ -360,6 +365,18 @@ export default function SpeedMode() {
         }
     }, [currentQIndex, questions, showIntro, isGameOver, loading, speak, showLevelUp]);
 
+    const currentQ = questions[currentQIndex];
+    const currentExplanation =
+        currentQ?.explanation ||
+        (Array.isArray(currentQ?.question_explanations)
+            ? currentQ?.question_explanations?.[0]?.content
+            : currentQ?.question_explanations?.content) ||
+        null;
+    const currentTopicName =
+        currentQ?.topic_name ||
+        currentQ?.topics?.name ||
+        'Modo relampago';
+
     if (showIntro) {
         return (
             <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-[#0f172a] px-6 text-white">
@@ -441,13 +458,30 @@ export default function SpeedMode() {
                         >
                             Sair para o painel
                         </button>
+                        {currentQ && (
+                            <QuestionIssueReporter
+                                questionId={currentQ.id}
+                                reporterId={profile?.id}
+                                reporterName={profile?.full_name}
+                                areaId={profile?.selected_area_id}
+                                areaName={selectedAreaName}
+                                topicId={currentQ.topic_id}
+                                topicName={currentTopicName}
+                                questionContent={currentQ.content || ''}
+                                questionDifficulty={currentQ.difficulty}
+                                explanation={currentExplanation}
+                                alternatives={(currentQ.alternatives || []).map((alt: any) => ({
+                                    id: alt.id,
+                                    content: alt.content || '',
+                                    isCorrect: Boolean(alt.is_correct ?? alt.isCorrect),
+                                }))}
+                            />
+                        )}
                     </div>
                 </motion.div>
             </div>
         );
     }
-
-    const currentQ = questions[currentQIndex];
 
     return (
         <div className="flex min-h-[100dvh] flex-col bg-[#0f172a] text-white overflow-hidden relative">
