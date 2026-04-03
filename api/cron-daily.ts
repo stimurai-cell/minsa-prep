@@ -4,6 +4,7 @@ const APP_TIMEZONE = 'Africa/Luanda';
 const CRON_WINDOW_MINUTES = 8;
 const DEFAULT_STUDY_REMINDER_MINUTE = (18 * 60) - 10;
 const COMEBACK_REMINDER_MINUTE = 12 * 60 + 30;
+const DAILY_FALLBACK_REMINDER_MINUTE = 18 * 60;
 
 const studyReminderMessages = [
     (name: string) => ({
@@ -46,6 +47,17 @@ const streakGuardMessages = [
     }),
 ];
 
+const dailyFallbackMessages = [
+    (name: string) => ({
+        title: 'Ainda da tempo de estudar hoje',
+        body: `${name}, reserve alguns minutos agora e feche o dia com progresso real no MINSA Prep.`,
+    }),
+    (name: string) => ({
+        title: 'Seu lembrete do dia chegou',
+        body: `${name}, uma sessao curta hoje ja ajuda a manter consistencia e XP em movimento.`,
+    }),
+];
+
 type UserProfileRow = {
     id: string;
     full_name?: string | null;
@@ -64,7 +76,7 @@ type UserProfileRow = {
 };
 
 type ReminderIntent = {
-    kind: 'study' | 'comeback' | 'streak_guard';
+    kind: 'study' | 'comeback' | 'streak_guard' | 'daily_fallback';
     title: string;
     body: string;
     link: string;
@@ -370,6 +382,18 @@ function buildReminderIntent(profile: UserProfileRow, nowParts: ReturnType<typeo
             link: '/dashboard',
             type: 'marketing',
             dedupeKey: `study:${profile.id}:${nowParts.dateKey}`,
+        } satisfies ReminderIntent;
+    }
+
+    if (!activeToday && isWithinCronWindow(nowParts.minuteOfDay, DAILY_FALLBACK_REMINDER_MINUTE)) {
+        const message = pickMessage(dailyFallbackMessages, `${profile.id}:${nowParts.dateKey}:daily-fallback`)(firstName);
+        return {
+            kind: 'daily_fallback',
+            title: message.title,
+            body: message.body,
+            link: '/dashboard',
+            type: 'marketing',
+            dedupeKey: `daily-fallback:${profile.id}:${nowParts.dateKey}`,
         } satisfies ReminderIntent;
     }
 
