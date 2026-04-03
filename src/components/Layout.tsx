@@ -392,16 +392,25 @@ export default function Layout() {
 
           {profile?.role !== 'admin' && (
             <div className="relative">
+              {moreMenuOpen && (
+                <button
+                  type="button"
+                  aria-label="Fechar menu Mais"
+                  onClick={() => setMoreMenuOpen(false)}
+                  className="fixed inset-0 z-0 cursor-default"
+                />
+              )}
               <button
+                type="button"
                 onClick={() => setMoreMenuOpen(!moreMenuOpen)}
-                className={`flex w-full min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-bold transition border-2 ${moreMenuOpen ? 'bg-slate-100 border-slate-200 text-slate-900' : 'text-slate-400 border-transparent'}`}
+                className={`relative z-10 flex w-full min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-bold transition border-2 ${moreMenuOpen ? 'bg-slate-100 border-slate-200 text-slate-900' : 'text-slate-400 border-transparent'}`}
               >
                 <Menu className="h-6 w-6" />
                 <span>Mais</span>
               </button>
 
               {moreMenuOpen && (
-                <div className="absolute bottom-full right-0 mb-4 w-48 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white p-2 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
+                <div className="absolute bottom-full right-0 z-10 mb-4 w-48 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white p-2 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
                   {extraLinks.map((link) => {
                     const Icon = link.icon;
                     const isActive = getLinkActive(link);

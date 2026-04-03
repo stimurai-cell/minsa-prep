@@ -5,7 +5,7 @@ import {
   appendGovernanceReferences,
   buildGovernanceReviewPrompt,
   sanitizeGovernanceReferences,
-} from './_lib/questionGovernance';
+} from './_lib/questionGovernance.js';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -92,8 +92,10 @@ const EXPECTED_ALTERNATIVES = 4;
 const DEFAULT_GENERATION_COUNT = 5;
 const MAX_GENERATION_BATCH_SIZE = 10;
 const MAX_TOTAL_GENERATION_COUNT = 100;
-const MAX_GENERATION_ATTEMPTS = 3;
+const MAX_GENERATION_ATTEMPTS = 2;
 const MAX_SOURCE_FILE_BYTES = 3.5 * 1024 * 1024;
+const GEMINI_REQUEST_TIMEOUT_MS = 45000;
+const PG_CONNECTION_TIMEOUT_MS = 5000;
 const ALLOWED_SOURCE_MIME_TYPES = new Set([
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -303,7 +305,14 @@ const getSupabase = async () => {
 const getPgPool = async () => {
   if (!databaseUrl) return null;
   if (!pgPoolPromise) {
-    pgPoolPromise = import('pg').then(({ Pool }) => new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized: false }, max: 3 }));
+    pgPoolPromise = import('pg').then(({ Pool }) => new Pool({
+      connectionString: databaseUrl,
+      ssl: { rejectUnauthorized: false },
+      max: 3,
+      connectionTimeoutMillis: PG_CONNECTION_TIMEOUT_MS,
+      idleTimeoutMillis: 10000,
+      query_timeout: 30000,
+    }));
   }
   return pgPoolPromise;
 };
@@ -555,13 +564,20 @@ const fetchExistingTopicQuestions = async (
   const pool = await getPgPool();
 
   if (pool) {
-    const client = await pool.connect();
     try {
-      const resolvedTopicId = await findTopicIdWithPg(client, areaId, topicId, topicName, customTopicName);
-      if (!resolvedTopicId) return [];
-      return await fetchExistingTopicQuestionsWithPg(client, resolvedTopicId);
-    } finally {
-      client.release();
+      const client = await pool.connect();
+      try {
+        const resolvedTopicId = await findTopicIdWithPg(client, areaId, topicId, topicName, customTopicName);
+        if (!resolvedTopicId) return [];
+        return await fetchExistingTopicQuestionsWithPg(client, resolvedTopicId);
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      if (!shouldFallbackToSupabase(error)) {
+        throw error;
+      }
+      console.warn('[generate-questions] PostgreSQL indisponivel para leitura, usando Supabase service-role.', getErrorMessage(error));
     }
   }
 
@@ -602,6 +618,23 @@ const extractErrorInfo = (error: unknown) => {
   };
 };
 
+const shouldFallbackToSupabase = (error: unknown) => {
+  const { message, details, code } = extractErrorInfo(error);
+  const normalized = `${message} ${details} ${code}`.toLowerCase();
+
+  return (
+    normalized.includes('timeout') ||
+    normalized.includes('connect') ||
+    normalized.includes('connection terminated') ||
+    normalized.includes('econnreset') ||
+    normalized.includes('enotfound') ||
+    normalized.includes('etimedout') ||
+    normalized.includes('econnrefused') ||
+    normalized.includes('57p01') ||
+    normalized.includes('57p03')
+  );
+};
+
 const getErrorMessage = (error: unknown) => {
   const { message, details, hint, code } = extractErrorInfo(error);
   if (!message) return 'Falha desconhecida ao guardar ou comunicar com o servidor.';
@@ -633,7 +666,41 @@ const shouldRetryQuestionInsertWithoutArea = (error: unknown) => {
     );
 };
 
-const buildModelCandidates = (primaryModel: string) => Array.from(new Set([primaryModel, defaultGeminiModel, 'gemini-2.5-flash'].filter(Boolean)));
+const getModelPriority = (model: string) => {
+  const normalized = String(model || '').toLowerCase();
+  if (!normalized) return 99;
+  if (normalized.includes('flash-lite')) return 2;
+  if (normalized.includes('flash')) return 0;
+  return 1;
+};
+
+const buildModelCandidates = (primaryModel: string) =>
+  Array.from(new Set([primaryModel, defaultGeminiModel, 'gemini-2.5-flash'].filter(Boolean)))
+    .sort((left, right) => getModelPriority(left) - getModelPriority(right));
+
+const generateContentWithTimeout = async (
+  ai: any,
+  request: Record<string, unknown>,
+  label: string,
+  timeoutMs = GEMINI_REQUEST_TIMEOUT_MS,
+) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(new Error(`${label} excedeu ${Math.round(timeoutMs / 1000)}s.`)), timeoutMs);
+
+  try {
+    return await ai.models.generateContent({
+      ...request,
+      abortSignal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`${label} excedeu ${Math.round(timeoutMs / 1000)}s.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
 
 const extractResponseText = (response: any) => {
   if (!response) return '';
@@ -817,15 +884,19 @@ const reviewGeneratedBatch = async ({
     questions,
   });
 
-  const response = await ai.models.generateContent({
-    model,
-    contents: prompt,
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: createGovernanceReviewResponseSchema(Type, questions.length),
-      tools: validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
+  const response = await generateContentWithTimeout(
+    ai,
+    {
+      model,
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: createGovernanceReviewResponseSchema(Type, questions.length),
+        tools: validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
+      },
     },
-  });
+    `A revisao tecnica do modelo ${model}`,
+  );
 
   const rawText = extractResponseText(response);
   const parsed = rawText ? (parseGeneratedPayload(rawText) as GovernanceReviewPayload) : null;
@@ -1243,15 +1314,19 @@ export default async function handler(req: any, res: any) {
               candidateValidationErrors = [];
 
               for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt += 1) {
-                const response = await ai.models.generateContent({
-                  model: candidateModel,
-                  contents,
-                  config: {
-                    responseMimeType: 'application/json',
-                    responseSchema: createResponseSchema(Type, batchCount),
-                    tools: preparedSource.validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
+                const response = await generateContentWithTimeout(
+                  ai,
+                  {
+                    model: candidateModel,
+                    contents,
+                    config: {
+                      responseMimeType: 'application/json',
+                      responseSchema: createResponseSchema(Type, batchCount),
+                      tools: preparedSource.validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
+                    },
                   },
-                });
+                  `A geracao do modelo ${candidateModel}`,
+                );
                 const rawText = extractResponseText(response);
                 const parsedBatch = rawText ? parseGeneratedPayload(rawText) : null;
                 const normalizedBatch = normalizeQuestions(parsedBatch?.questions || []);
@@ -1412,14 +1487,29 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ error: 'Area e topico sao obrigatorios.' });
       }
 
-      const result = databaseUrl ? await persistWithPostgres(payload) : await persistWithSupabase(payload);
+      let result: PersistResult;
+
+      if (databaseUrl) {
+        try {
+          result = await persistWithPostgres(payload);
+        } catch (error) {
+          if (!hasSupabase || !shouldFallbackToSupabase(error)) {
+            throw error;
+          }
+          console.warn('[generate-questions] PostgreSQL indisponivel para escrita, usando Supabase service-role.', getErrorMessage(error));
+          result = await persistWithSupabase(payload);
+        }
+      } else {
+        result = await persistWithSupabase(payload);
+      }
+
       return res.status(200).json({
         success: true,
         topic_id: result.topicId,
         topic_created: result.topicCreated,
         saved_count: result.savedCount,
         skipped_count: result.skippedCount,
-        save_mode: databaseUrl ? 'database-url' : 'service-role',
+        save_mode: databaseUrl ? 'database-url-or-service-role' : 'service-role',
       });
     }
 

@@ -76,56 +76,12 @@ export default function AdminNews() {
                 if (!cancelled) {
                     setDeviceCount(Number(data.count || 0));
                 }
-                return;
             } catch (error) {
                 console.error('[Admin] Erro ao verificar dispositivos pela API:', error);
                 if (!cancelled) {
                     setDeviceCount(0);
                 }
-                return;
             }
-            console.log(`[Admin] A verificar dispositivos para usuário: ${selectedUser.id} (${selectedUser.full_name})`);
-            const { data, count, error } = await supabase
-                .from('push_subscriptions')
-                .select('endpoint, user_id, created_at, subscription')
-                .eq('user_id', selectedUser.id);
-            
-            console.log(`[Admin] Resultado da consulta:`, { data, count, error });
-            
-            if (error) {
-                console.error('[Admin] Erro ao buscar dispositivos:', error);
-                setDeviceCount(0);
-                return;
-            }
-            
-            // Filtrar apenas tokens FCM válidos (não começam com http)
-            const validFCMTokens = data?.filter(sub => 
-                sub.endpoint && 
-                typeof sub.endpoint === 'string' && 
-                !sub.endpoint.startsWith('http')
-            ) || [];
-            const registeredEndpoints = new Set(
-                (data || [])
-                    .filter((sub) => {
-                        if (!sub?.endpoint || typeof sub.endpoint !== 'string') {
-                            return false;
-                        }
-
-                        if (!sub.endpoint.startsWith('http')) {
-                            return true;
-                        }
-
-                        return Boolean(
-                            sub.subscription?.endpoint &&
-                            sub.subscription?.keys?.auth &&
-                            sub.subscription?.keys?.p256dh
-                        );
-                    })
-                    .map((sub) => sub.endpoint.trim())
-            );
-            
-            console.log(`[Admin] Tokens FCM válidos encontrados:`, validFCMTokens.length);
-            setDeviceCount(registeredEndpoints.size);
         };
         fetchDeviceCount();
         return () => {
@@ -154,11 +110,24 @@ export default function AdminNews() {
 
             if (error) throw error;
 
+            const notificationLink = newsLink.trim() || '/news';
+            const { error: notificationError } = await supabase
+                .from('user_notifications')
+                .insert({
+                    user_id: null,
+                    title: newsTitle,
+                    body: newsBody,
+                    type: newsType === 'update' ? 'system' : 'marketing',
+                    link: notificationLink
+                });
+
+            if (notificationError) throw notificationError;
+
             // Disparar push notification global para a nova novidade
             await sendPushNotification({
                 title: newsTitle,
                 body: newsBody,
-                url: '/news',
+                url: notificationLink,
                 tag: insertedNews?.id ? `feed-${insertedNews.id}` : undefined
             });
             setNewsTitle('');

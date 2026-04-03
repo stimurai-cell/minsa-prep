@@ -4,6 +4,11 @@ type PushSubscriptionRow = {
     endpoint: string;
     user_id?: string | null;
     subscription?: any;
+    device_id?: string | null;
+    channel?: string | null;
+    user_agent?: string | null;
+    updated_at?: string | null;
+    created_at?: string | null;
 };
 
 type PushPayload = {
@@ -163,6 +168,18 @@ function isWebPushSubscription(row: PushSubscriptionRow) {
     );
 }
 
+function getSubscriptionIdentity(row: PushSubscriptionRow) {
+    if (row.user_id && row.device_id) {
+        return `${row.user_id}:${row.device_id}`;
+    }
+
+    return row.endpoint.trim();
+}
+
+function getSubscriptionTimestamp(row: PushSubscriptionRow) {
+    return new Date(row.updated_at || row.created_at || 0).getTime() || 0;
+}
+
 async function cleanupSubscriptions(endpoints: string[]) {
     if (!endpoints.length) return;
 
@@ -182,45 +199,59 @@ function buildNotificationTag(payload: PushPayload) {
 }
 
 function preferCurrentSubscriptions(rows: PushSubscriptionRow[]) {
-    const rowsByUser = new Map<string, PushSubscriptionRow[]>();
-    const unscopedRows: PushSubscriptionRow[] = [];
+    const validRows = rows.filter((row) => isWebPushSubscription(row) || isFcmToken(row));
+    const grouped = new Map<string, PushSubscriptionRow[]>();
 
-    rows.forEach((row) => {
-        if (!row.user_id) {
-            unscopedRows.push(row);
-            return;
-        }
-
-        const currentRows = rowsByUser.get(row.user_id) || [];
-        currentRows.push(row);
-        rowsByUser.set(row.user_id, currentRows);
+    validRows.forEach((row) => {
+        const identity = getSubscriptionIdentity(row);
+        const bucket = grouped.get(identity) || [];
+        bucket.push(row);
+        grouped.set(identity, bucket);
     });
 
-    const preferredRows = [...unscopedRows];
-
-    rowsByUser.forEach((userRows) => {
-        const webPushRows = userRows.filter(isWebPushSubscription);
-        const fallbackRows = webPushRows.length ? webPushRows : userRows.filter(isFcmToken);
-        const uniqueRows = new Map(
-            fallbackRows.map((row) => [row.endpoint.trim(), row] as const)
-        );
-
-        preferredRows.push(...uniqueRows.values());
-    });
-
-    return preferredRows;
+    return Array.from(grouped.values()).map((bucket) =>
+        bucket
+            .slice()
+            .sort((left, right) => getSubscriptionTimestamp(right) - getSubscriptionTimestamp(left))[0]
+    );
 }
 
 export async function fetchPushSubscriptions(userId?: string) {
     let query = getSupabaseAdmin()
         .from('push_subscriptions')
-        .select('endpoint, user_id, subscription');
+        .select('endpoint, user_id, subscription, device_id, channel, user_agent, updated_at, created_at');
 
     if (userId) {
         query = query.eq('user_id', userId);
     }
 
-    const { data, error } = await query;
+    let { data, error } = await query;
+
+    if (error) {
+        const fallbackAllowed =
+            String(error.code || '') === '42703' ||
+            String(error.code || '') === 'PGRST204' ||
+            String(error.message || '').toLowerCase().includes('device_id') ||
+            String(error.message || '').toLowerCase().includes('channel') ||
+            String(error.message || '').toLowerCase().includes('user_agent') ||
+            String(error.message || '').toLowerCase().includes('last_seen_at');
+
+        if (!fallbackAllowed) {
+            throw error;
+        }
+
+        let fallbackQuery = getSupabaseAdmin()
+            .from('push_subscriptions')
+            .select('endpoint, user_id, subscription, updated_at, created_at');
+
+        if (userId) {
+            fallbackQuery = fallbackQuery.eq('user_id', userId);
+        }
+
+        const fallbackResult = await fallbackQuery;
+        data = fallbackResult.data;
+        error = fallbackResult.error;
+    }
 
     if (error) {
         throw error;
@@ -233,7 +264,7 @@ export function countRegisteredPushDevices(rows: PushSubscriptionRow[]) {
     return new Set(
         rows
             .filter((row) => isFcmToken(row) || isWebPushSubscription(row))
-            .map((row) => row.endpoint.trim())
+            .map((row) => getSubscriptionIdentity(row))
     ).size;
 }
 

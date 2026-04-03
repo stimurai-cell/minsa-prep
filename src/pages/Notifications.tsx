@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import {
     Bell,
@@ -15,22 +14,18 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-
-type Notification = {
-    id: string;
-    user_id: string | null;
-    title: string;
-    body: string;
-    type: 'marketing' | 'personal' | 'system';
-    link?: string;
-    is_read: boolean;
-    created_at: string;
-};
+import {
+    deleteOwnNotification,
+    fetchHydratedNotifications,
+    markNotificationAsRead,
+    markNotificationsAsRead,
+    type HydratedNotification,
+} from '../lib/notifications';
 
 export default function Notifications() {
     const { profile } = useAuthStore();
     const navigate = useNavigate();
-    const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [notifications, setNotifications] = useState<HydratedNotification[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
@@ -40,87 +35,64 @@ export default function Notifications() {
         }
     }, [profile?.id, filter]);
 
-    const markOwnNotificationsAsRead = async (items: Notification[]) => {
-        if (!profile?.id) return items;
-
-        const unreadOwnIds = items
-            .filter((notification) => !notification.is_read && notification.user_id === profile.id)
-            .map((notification) => notification.id);
-
-        if (!unreadOwnIds.length) {
-            return items;
-        }
-
-        const updatedItems = items.map((notification) => ({ ...notification, is_read: true }));
-        setNotifications(updatedItems);
-
-        const { error } = await supabase
-            .from('user_notifications')
-            .update({ is_read: true })
-            .in('id', unreadOwnIds);
-
-        if (error) {
-            console.error(error);
-            return items;
-        }
-
-        return updatedItems;
-    };
-
     const fetchNotifications = async () => {
         if (!profile?.id) return;
 
         setLoading(true);
-        let query = supabase
-            .from('user_notifications')
-            .select('id, user_id, title, body, type, link, is_read, created_at')
-            .or(`user_id.eq.${profile.id},user_id.is.null`)
-            .order('created_at', { ascending: false });
-
-        if (filter === 'unread') {
-            query = query.eq('is_read', false);
-        }
-
-        const { data, error } = await query;
-
-        if (error) console.error(error);
-        else {
-            const items = (data || []) as Notification[];
-            const hydratedItems = filter === 'all' ? await markOwnNotificationsAsRead(items) : items;
-            setNotifications(hydratedItems);
+        try {
+            const items = await fetchHydratedNotifications(profile.id, 200);
+            if (filter === 'all') {
+                const unreadItems = items.filter((notification) => !notification.is_read);
+                if (unreadItems.length) {
+                    await markNotificationsAsRead(profile.id, unreadItems);
+                }
+                setNotifications(items.map((notification) => ({ ...notification, is_read: true })));
+            } else {
+                setNotifications(items.filter((notification) => !notification.is_read));
+            }
+        } catch (error) {
+            console.error(error);
         }
         setLoading(false);
     };
 
     const markAsRead = async (id: string) => {
-        await supabase
-            .from('user_notifications')
-            .update({ is_read: true })
-            .eq('id', id);
+        if (!profile?.id) return;
+        const target = notifications.find((notification) => notification.id === id);
+        if (!target) return;
+
+        await markNotificationAsRead(profile.id, target);
         setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
     };
 
     const deleteNotification = async (id: string) => {
-        const { error } = await supabase.from('user_notifications').delete().eq('id', id);
-        if (!error) {
+        if (!profile?.id) return;
+        try {
+            await deleteOwnNotification(profile.id, id);
             setNotifications(prev => prev.filter(n => n.id !== id));
+        } catch (error) {
+            console.error(error);
         }
     };
 
     const markAllAsRead = async () => {
         if (!profile?.id) return;
-        await supabase
-            .from('user_notifications')
-            .update({ is_read: true })
-            .eq('user_id', profile.id)
-            .eq('is_read', false);
-        fetchNotifications();
+        const unreadItems = notifications.filter((notification) => !notification.is_read);
+        if (!unreadItems.length) return;
+
+        await markNotificationsAsRead(profile.id, unreadItems);
+        if (filter === 'unread') {
+            setNotifications([]);
+            return;
+        }
+        setNotifications((prev) => prev.map((notification) => ({ ...notification, is_read: true })));
     };
 
     const getIcon = (type: string) => {
         switch (type) {
             case 'marketing': return <Zap className="w-5 h-5 text-orange-500" />;
             case 'personal': return <Trophy className="w-5 h-5 text-emerald-500" />;
+            case 'achievement': return <Trophy className="w-5 h-5 text-emerald-500" />;
             default: return <Megaphone className="w-5 h-5 text-blue-500" />;
         }
     };
@@ -231,13 +203,15 @@ export default function Notifications() {
                                                                 <CheckCheck className="w-5 h-5" />
                                                             </button>
                                                         )}
-                                                        <button
-                                                            onClick={() => deleteNotification(n.id)}
-                                                            className="p-2 hover:bg-rose-100 text-rose-500 rounded-xl transition-colors"
-                                                            title="Eliminar"
-                                                        >
-                                                            <Trash2 className="w-5 h-5" />
-                                                        </button>
+                                                        {n.can_delete && (
+                                                            <button
+                                                                onClick={() => deleteNotification(n.id)}
+                                                                className="p-2 hover:bg-rose-100 text-rose-500 rounded-xl transition-colors"
+                                                                title="Eliminar"
+                                                            >
+                                                                <Trash2 className="w-5 h-5" />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
 
@@ -247,7 +221,13 @@ export default function Notifications() {
 
                                                 {n.link && (
                                                     <button
-                                                        onClick={() => navigate(n.link!)}
+                                                        onClick={() => {
+                                                            if (/^https?:\/\//i.test(n.link!)) {
+                                                                window.location.href = n.link!;
+                                                                return;
+                                                            }
+                                                            navigate(n.link!);
+                                                        }}
                                                         className="mt-6 px-6 py-3 bg-slate-900 text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95"
                                                     >
                                                         Ver Detalhes

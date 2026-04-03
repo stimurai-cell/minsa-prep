@@ -4,22 +4,13 @@ import { ArrowRight, Bell, BellOff, ExternalLink, Info, Megaphone, Trophy, X, Za
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { requestNotificationPermission, syncPushSubscriptionIfGranted } from '../lib/pushNotifications';
-
-type AppNotification = {
-    id: string;
-    user_id: string | null;
-    title: string;
-    body: string;
-    type: string;
-    link?: string | null;
-    is_read: boolean;
-    created_at: string;
-};
+import { fetchHydratedNotifications, markNotificationsAsRead, type HydratedNotification } from '../lib/notifications';
 
 export default function NotificationCenter() {
     const { profile } = useAuthStore();
-    const [notifications, setNotifications] = useState<AppNotification[]>([]);
+    const [notifications, setNotifications] = useState<HydratedNotification[]>([]);
     const [isOpen, setIsOpen] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
     const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>(
         'Notification' in window ? Notification.permission : 'denied'
     );
@@ -27,38 +18,27 @@ export default function NotificationCenter() {
     const fetchNotifications = async () => {
         if (!profile?.id) return;
 
-        const { data, error } = await supabase
-            .from('user_notifications')
-            .select('id, user_id, title, body, type, link, is_read, created_at')
-            .or(`user_id.eq.${profile.id},user_id.is.null`)
-            .order('created_at', { ascending: false })
-            .limit(10);
-
-        if (error) {
+        try {
+            const data = await fetchHydratedNotifications(profile.id, 100);
+            setNotifications(data.slice(0, 10));
+            setUnreadCount(data.filter((notification) => !notification.is_read).length);
+        } catch (error) {
             console.error(error);
             return;
         }
-
-        setNotifications((data || []) as AppNotification[]);
     };
 
-    const markVisibleNotificationsAsRead = async (items: AppNotification[]) => {
+    const markVisibleNotificationsAsRead = async (items: HydratedNotification[]) => {
         if (!profile?.id) return;
-
-        const unreadOwnIds = items
-            .filter((notification) => !notification.is_read && notification.user_id === profile.id)
-            .map((notification) => notification.id);
-
-        if (!unreadOwnIds.length) return;
+        const unreadVisible = items.filter((notification) => !notification.is_read);
+        if (!unreadVisible.length) return;
 
         setNotifications((prev) => prev.map((notification) => ({ ...notification, is_read: true })));
+        setUnreadCount((current) => Math.max(0, current - unreadVisible.length));
 
-        const { error } = await supabase
-            .from('user_notifications')
-            .update({ is_read: true })
-            .in('id', unreadOwnIds);
-
-        if (error) {
+        try {
+            await markNotificationsAsRead(profile.id, unreadVisible);
+        } catch (error) {
             console.error(error);
             await fetchNotifications();
         }
@@ -118,6 +98,11 @@ export default function NotificationCenter() {
                 className="relative p-2 rounded-xl bg-white border border-slate-100 shadow-sm transition-transform active:scale-95 group"
             >
                 <Bell className="w-6 h-6 text-slate-400 group-hover:text-emerald-600 transition-colors" />
+                {unreadCount > 0 && (
+                    <span className="absolute -right-1 -top-1 min-w-[1.2rem] rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-black leading-none text-white shadow-lg">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                )}
             </button>
 
             {isOpen && (
@@ -167,6 +152,9 @@ export default function NotificationCenter() {
                                                 </div>
                                             </div>
                                         </div>
+                                        {!notification.is_read && (
+                                            <span className="absolute right-4 top-4 h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                                        )}
                                     </div>
                                 ))
                             )}

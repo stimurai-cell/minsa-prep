@@ -89,6 +89,7 @@ const buildNotificationTag = (title, body, url, rawTag) => {
 
 const buildNotificationOptions = ({ body, url, clickAction, tag }) => ({
   body,
+  icon: APP_ICON,
   badge: APP_BADGE,
   vibrate: [200, 100, 200],
   requireInteraction: false,
@@ -103,6 +104,27 @@ const buildNotificationOptions = ({ body, url, clickAction, tag }) => ({
     { action: 'close', title: 'Fechar' }
   ]
 });
+
+const recentlyShownTags = new Map();
+
+const showAppNotification = async (title, options) => {
+  const tag = options?.tag;
+  if (tag) {
+    const lastShownAt = recentlyShownTags.get(tag) || 0;
+    if (Date.now() - lastShownAt < 15000) {
+      return null;
+    }
+
+    const existing = await self.registration.getNotifications({ tag });
+    if (existing.length > 0) {
+      return null;
+    }
+
+    recentlyShownTags.set(tag, Date.now());
+  }
+
+  return self.registration.showNotification(title, options);
+};
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -185,7 +207,7 @@ messaging.onBackgroundMessage((payload) => {
   const notificationBody = payload.data?.body || payload.notification?.body || 'Tens uma nova notificacao!';
   const notificationUrl = payload.data?.url || '/dashboard';
 
-  return self.registration.showNotification(
+  return showAppNotification(
     notificationTitle,
     buildNotificationOptions({
       body: notificationBody,
@@ -213,7 +235,7 @@ self.addEventListener('push', (event) => {
   }
 
   event.waitUntil(
-    self.registration.showNotification(
+    showAppNotification(
       data.title,
       buildNotificationOptions({
         body: data.body,

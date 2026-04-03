@@ -5,8 +5,8 @@ dotenv.config({ path: '.env.local', override: true });
 dotenv.config({ path: '.env' });
 
 const [{ default: handler }, { default: eliteProfileHandler }] = await Promise.all([
-  import('./generate-questions'),
-  import('./elite-profile'),
+  import('./generate-questions.js'),
+  import('./elite-profile.js'),
 ]);
 
 const app = express();

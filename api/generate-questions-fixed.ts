@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
-import { validateTemporalConcepts, getContextualPrompt } from '../src/lib/temporalValidation';
+import { validateTemporalConcepts, getContextualPrompt } from '../src/lib/temporalValidation.js';
 
 const defaultGeminiModel = 'gemini-2.5-flash';
 
