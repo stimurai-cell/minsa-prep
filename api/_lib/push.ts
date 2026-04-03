@@ -225,7 +225,9 @@ export async function fetchPushSubscriptions(userId?: string) {
         query = query.eq('user_id', userId);
     }
 
-    let { data, error } = await query;
+    const initialResult = await query;
+    let data = initialResult.data as PushSubscriptionRow[] | null;
+    let error = initialResult.error;
 
     if (error) {
         const fallbackAllowed =
@@ -249,7 +251,7 @@ export async function fetchPushSubscriptions(userId?: string) {
         }
 
         const fallbackResult = await fallbackQuery;
-        data = fallbackResult.data;
+        data = (fallbackResult.data || []) as PushSubscriptionRow[];
         error = fallbackResult.error;
     }
 
