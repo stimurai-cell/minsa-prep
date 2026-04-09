@@ -795,29 +795,33 @@ export default function Simulation() {
               </>
             ) : (
               <>
-                <p className={`text-xl font-black ${selectedAlt && currentQ.alternatives.find((alt: any) => alt.id === selectedAlt)?.is_correct ? 'text-lime-700' : 'text-rose-600'}`}>
-                  {selectedAlt && currentQ.alternatives.find((alt: any) => alt.id === selectedAlt)?.is_correct
-                    ? 'Resposta certa!'
-                    : 'Resposta corrigida'}
-                </p>
-                <p className="mt-2 max-h-24 overflow-y-auto pr-1 text-sm leading-5 text-slate-700">{currentExplanation}</p>
-                <QuestionIssueReporter
-                  questionId={currentQ.id}
-                  reporterId={profile?.id}
-                  reporterName={profile?.full_name}
-                  areaId={profile?.selected_area_id}
-                  areaName={selectedAreaName}
-                  topicId={currentQ.topic_id}
-                  topicName={currentTopicName}
-                  questionContent={currentQ.content || ''}
-                  questionDifficulty={currentQ.difficulty}
-                  explanation={currentExplanation}
-                  alternatives={currentQ.alternatives.map((alt: any) => ({
-                    id: alt.id,
-                    content: alt.content || '',
-                    isCorrect: Boolean(alt.is_correct),
-                  }))}
-                />
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className={`text-xl font-black ${selectedAlt && currentQ.alternatives.find((alt: any) => alt.id === selectedAlt)?.is_correct ? 'text-lime-700' : 'text-rose-600'}`}>
+                      {selectedAlt && currentQ.alternatives.find((alt: any) => alt.id === selectedAlt)?.is_correct
+                        ? 'Resposta certa!'
+                        : 'Resposta corrigida'}
+                    </p>
+                    <p className="mt-2 max-h-24 overflow-y-auto pr-1 text-sm leading-5 text-slate-700">{currentExplanation}</p>
+                  </div>
+                  <QuestionIssueReporter
+                    questionId={currentQ.id}
+                    reporterId={profile?.id}
+                    reporterName={profile?.full_name}
+                    areaId={profile?.selected_area_id}
+                    areaName={selectedAreaName}
+                    topicId={currentQ.topic_id}
+                    topicName={currentTopicName}
+                    questionContent={currentQ.content || ''}
+                    questionDifficulty={currentQ.difficulty}
+                    explanation={currentExplanation}
+                    alternatives={currentQ.alternatives.map((alt: any) => ({
+                      id: alt.id,
+                      content: alt.content || '',
+                      isCorrect: Boolean(alt.is_correct),
+                    }))}
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={nextQuestion}

@@ -29,6 +29,7 @@ export default function QuestionIssueReporter(props: QuestionIssueReporterProps)
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submittedMessage, setSubmittedMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   const canSubmit = useMemo(
     () => Boolean(props.reporterId && props.questionId && navigator.onLine),
@@ -39,15 +40,34 @@ export default function QuestionIssueReporter(props: QuestionIssueReporterProps)
     return null;
   }
 
+  const closeModal = () => {
+    setOpen(false);
+    setSubmitting(false);
+    setErrorMessage('');
+    setSubmittedMessage('');
+  };
+
+  const openModal = () => {
+    setOpen(true);
+    setErrorMessage('');
+    setSubmittedMessage('');
+  };
+
   const handleSubmit = async () => {
-    if (!canSubmit || submitting) {
-      if (!navigator.onLine) {
-        alert('Conecte-se a internet para reportar a inconsistencia.');
-      }
+    if (submitting) return;
+
+    if (!navigator.onLine) {
+      setErrorMessage('Conecte-se a internet para enviar o reporte.');
+      return;
+    }
+
+    if (!canSubmit) {
+      setErrorMessage('Nao foi possivel identificar a conta para enviar este reporte.');
       return;
     }
 
     setSubmitting(true);
+    setErrorMessage('');
     try {
       await reportQuestionIssue({
         questionId: props.questionId,
@@ -65,102 +85,132 @@ export default function QuestionIssueReporter(props: QuestionIssueReporterProps)
         description,
       });
 
-      setSubmittedMessage('Recebido. Esta questao entrou na fila de revisao tecnica.');
       setDescription('');
-      setOpen(false);
+      setSubmittedMessage('Obrigado por ajudares a melhorar o MINSA Prep. O teu reporte entrou na fila de revisao e deixa a preparacao mais forte para toda a comunidade. Continua firme.');
     } catch (error: any) {
-      alert(error?.message || 'Nao foi possivel reportar esta questao.');
+      setErrorMessage(error?.message || 'Nao foi possivel reportar esta questao.');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="mt-3 rounded-[1.35rem] border border-amber-200 bg-amber-50/80 px-4 py-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-700">
-            Curadoria colaborativa
-          </p>
-          <p className="mt-1 text-sm text-amber-950/80">
-            Encontrou um problema tecnico, de area ou de gabarito? Envie para revisao.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => {
-            setSubmittedMessage('');
-            setOpen((prev) => !prev);
-          }}
-          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-amber-300 bg-white px-4 py-2.5 text-xs font-black uppercase tracking-[0.16em] text-amber-700 transition hover:bg-amber-100"
-        >
-          <Flag className="h-4 w-4" />
-          Reportar inconsistencia
-        </button>
-      </div>
-
-      {submittedMessage && (
-        <div className="mt-3 flex items-start gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-800">
-          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{submittedMessage}</span>
-        </div>
-      )}
+    <>
+      <button
+        type="button"
+        onClick={openModal}
+        className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-lime-300/80 bg-white/75 text-lime-700 shadow-sm transition hover:bg-white hover:text-lime-800"
+        aria-label="Reportar inconsistencia"
+        title="Reportar inconsistencia"
+      >
+        <Flag className="h-5 w-5" />
+      </button>
 
       {open && (
-        <div className="mt-4 space-y-3 rounded-[1.25rem] border border-amber-200 bg-white p-4 shadow-sm">
-          <div>
-            <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
-              Tipo de problema
-            </label>
-            <select
-              value={reason}
-              onChange={(event) => setReason(event.target.value as QuestionIssueReason)}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-amber-400 focus:bg-white"
-            >
-              {QUESTION_ISSUE_REASON_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md overflow-hidden rounded-[2rem] border border-lime-200 bg-white shadow-2xl">
+            {submittedMessage ? (
+              <div className="bg-[linear-gradient(180deg,#ecfccb_0%,#dcfce7_100%)] px-6 py-7">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white/80 text-lime-700 shadow-sm">
+                  <ShieldAlert className="h-7 w-7" />
+                </div>
+                <h3 className="mt-5 text-center text-2xl font-black text-lime-800">
+                  Obrigado pelo reporte
+                </h3>
+                <p className="mt-3 text-center text-sm leading-6 text-lime-900/85">
+                  {submittedMessage}
+                </p>
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="mt-6 w-full rounded-[1.2rem] bg-[#67d300] px-5 py-3.5 text-sm font-black uppercase tracking-[0.14em] text-white shadow-[0_6px_0_0_rgba(77,124,15,0.95)] transition hover:translate-y-[1px] hover:shadow-[0_4px_0_0_rgba(77,124,15,0.95)]"
+                >
+                  Voltar ao estudo
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="border-b border-slate-100 px-6 py-6">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-lime-100 text-lime-700">
+                      <Flag className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-lime-700">
+                        Revisao colaborativa
+                      </p>
+                      <h3 className="mt-1 text-xl font-black text-slate-900">
+                        Encontrou um problema?
+                      </h3>
+                    </div>
+                  </div>
+                  <p className="mt-4 text-sm leading-6 text-slate-600">
+                    Se o enunciado, o gabarito ou a classificacao parecerem errados, envie um reporte rapido. A revisao tecnica agradece.
+                  </p>
+                </div>
 
-          <div>
-            <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
-              Observacao
-            </label>
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              rows={4}
-              placeholder="Explique rapidamente onde esta o problema para a revisao ser mais rapida."
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-amber-400 focus:bg-white"
-            />
-          </div>
+                <div className="space-y-4 bg-slate-50 px-6 py-6">
+                  <div>
+                    <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                      Tipo de problema
+                    </label>
+                    <select
+                      value={reason}
+                      onChange={(event) => setReason(event.target.value as QuestionIssueReason)}
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-lime-400"
+                    >
+                      {QUESTION_ISSUE_REASON_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={!canSubmit || submitting}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-amber-500 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              Enviar para revisao
-            </button>
+                  <div>
+                    <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                      Observacao
+                    </label>
+                    <textarea
+                      value={description}
+                      onChange={(event) => setDescription(event.target.value)}
+                      rows={4}
+                      placeholder="Explique rapidamente o que encontrou para acelerarmos a revisao."
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-lime-400"
+                    />
+                  </div>
 
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              disabled={submitting}
-              className="rounded-2xl border border-slate-200 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-500 transition hover:bg-slate-50"
-            >
-              Fechar
-            </button>
+                  {errorMessage && (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                      {errorMessage}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-3 border-t border-slate-100 bg-white px-6 py-5 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    disabled={submitting}
+                    className="rounded-2xl border border-slate-200 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-500 transition hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-lime-500 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-lime-400 disabled:opacity-50"
+                  >
+                    {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    Enviar reporte
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

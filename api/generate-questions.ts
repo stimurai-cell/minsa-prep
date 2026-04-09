@@ -294,6 +294,49 @@ const formatReferenceQuestions = (items: Array<{ content: string; difficulty?: s
     .join('\n');
 };
 
+const CONTEST_STYLE_ENDINGS = ['Excepto:', 'Assinale a falsa:', 'Assinale a verdadeira:'];
+
+const normalizePromptText = (value: string) =>
+  String(value || '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+
+const hasContestStyleEnding = (question: string) => {
+  const normalized = normalizePromptText(question);
+  return CONTEST_STYLE_ENDINGS.some((ending) => normalized.endsWith(normalizePromptText(ending)));
+};
+
+const normalizeAlternativeText = (value: string) =>
+  String(value || '')
+    .replace(/^\s*[a-d]\s*[\.\)\-:]\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const getAlternativeLengthIssue = (question: NormalizedQuestion) => {
+  const lengths = question.alternatives.map((alternative) => normalizeAlternativeText(alternative.text).length);
+  const correctIndex = question.alternatives.findIndex((alternative) => alternative.isCorrect);
+  if (correctIndex < 0 || lengths.length !== EXPECTED_ALTERNATIVES) return '';
+
+  const correctLength = lengths[correctIndex];
+  const distractorLengths = lengths.filter((_, index) => index !== correctIndex);
+  const maxDistractorLength = Math.max(...distractorLengths, 0);
+  const averageDistractorLength = distractorLengths.reduce((sum, length) => sum + length, 0) / Math.max(1, distractorLengths.length);
+  const uniqueLongestCorrect = correctLength === Math.max(...lengths) && lengths.filter((length) => length === correctLength).length === 1;
+
+  if (
+    uniqueLongestCorrect
+    && correctLength - maxDistractorLength >= 18
+    && correctLength >= Math.ceil(averageDistractorLength * 1.35)
+  ) {
+    return 'a alternativa correta ficou visualmente maior do que as outras';
+  }
+
+  return '';
+};
+
 const getSupabase = async () => {
   if (!supabaseUrl || !supabaseServiceKey) return null;
   if (!supabaseClientPromise) {
@@ -361,6 +404,11 @@ REGRAS IMPORTANTES:
 - A dificuldade precisa refletir claramente o nivel pedido
 - Gere exatamente 4 alternativas por pergunta (A, B, C, D)
 - Apenas uma alternativa deve estar correta
+- Estruture o enunciado como frase afirmativa finalizada com uma destas expressoes: "Excepto:", "Assinale a falsa:" ou "Assinale a verdadeira:"
+- Modele o estilo pelo padrao de concursos reais: objetivo, direto, tecnico e sem floreios desnecessarios
+- Mantenha paralelismo entre as alternativas, com tamanhos visuais semelhantes; a correta nao pode ser sistematicamente a mais longa
+- Inclua pelo menos um distrator visualmente plausivel com erro de escrita discreto quando isso fizer sentido e sem criar ambiguidade
+- Crie distratores que confundam norma tecnica com senso comum sempre que o topico permitir
 - Inclua explicacoes claras para cada pergunta
 - Sempre feche a explicacao com uma base bibliografica curta e confiavel
 - Nao invente leis, datas, protocolos, valores de referencia ou orientacoes clinicas
@@ -426,6 +474,10 @@ const validateQuestions = (
       errors.push(`Q${index + 1}: enunciado vazio/curto`);
     }
 
+    if (question.question && !hasContestStyleEnding(question.question)) {
+      errors.push(`Q${index + 1}: o enunciado precisa terminar com "Excepto:", "Assinale a falsa:" ou "Assinale a verdadeira:"`);
+    }
+
     if (!question.alternatives || question.alternatives.length !== expectedAlternatives) {
       errors.push(`Q${index + 1}: precisa de ${expectedAlternatives} alternativas`);
     } else {
@@ -445,6 +497,11 @@ const validateQuestions = (
         }
         seenAlternatives.add(altKey);
       });
+
+      const lengthIssue = getAlternativeLengthIssue(question);
+      if (lengthIssue) {
+        errors.push(`Q${index + 1}: ${lengthIssue}`);
+      }
     }
 
     const questionKey = normalizeQuestionIdentity(question.question);

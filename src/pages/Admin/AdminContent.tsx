@@ -12,6 +12,14 @@ type GeneratedQuestion = {
     difficulty?: string;
 };
 
+type QuestionFormDraft = {
+    content: string;
+    difficulty: string;
+    explanation: string;
+    examYear: string;
+    alternatives: Array<{ id: string; content: string; is_correct: boolean }>;
+};
+
 type GenerationSourceMode = 'topic' | 'material_text' | 'material_file';
 
 const SOURCE_FILE_MAX_BYTES = 3.5 * 1024 * 1024;
@@ -25,6 +33,71 @@ const ALLOWED_SOURCE_MIME_TYPES = [
 const getAlternativeBadge = (index: number) => String.fromCharCode(65 + index);
 const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim());
 const getRelationName = (value: any) => (Array.isArray(value) ? value[0]?.name : value?.name) || 'N/D';
+const createEmptyQuestionDraft = (): QuestionFormDraft => ({
+    content: '',
+    difficulty: 'medium',
+    explanation: '',
+    examYear: '',
+    alternatives: Array.from({ length: 4 }, (_, index) => ({
+        id: `manual-${index}`,
+        content: '',
+        is_correct: false,
+    })),
+});
+const normalizeExamYear = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const year = Number(trimmed);
+    if (!Number.isInteger(year) || year < 1900 || year > 2100) return Number.NaN;
+    return year;
+};
+const shouldRetryQuestionInsertWithoutAreaClient = (error: any) => {
+    const message = String(error?.message || '').toLowerCase();
+    const details = String(error?.details || '').toLowerCase();
+    const code = String(error?.code || '').toLowerCase();
+    const combined = `${message} ${details} ${code}`;
+
+    return code === '42703'
+        || (
+            combined.includes('area_id')
+            && (
+                combined.includes('schema cache')
+                || combined.includes('column')
+                || combined.includes('not found')
+                || combined.includes('does not exist')
+            )
+        );
+};
+const validateQuestionDraft = (draft: QuestionFormDraft) => {
+    if (draft.content.trim().length < 10) {
+        return 'Escreva um enunciado mais completo para a questao.';
+    }
+
+    if (draft.alternatives.length !== 4) {
+        return 'Cada questao precisa ter exatamente 4 alternativas.';
+    }
+
+    if (draft.alternatives.some((alternative) => alternative.content.trim().length < 2)) {
+        return 'Preencha as quatro alternativas antes de guardar.';
+    }
+
+    const correctCount = draft.alternatives.filter((alternative) => alternative.is_correct).length;
+    if (correctCount !== 1) {
+        return 'Defina exatamente uma alternativa correta.';
+    }
+
+    const normalizedAlternatives = draft.alternatives.map((alternative) => alternative.content.trim().toLowerCase());
+    if (new Set(normalizedAlternatives).size !== normalizedAlternatives.length) {
+        return 'As alternativas devem ser diferentes entre si.';
+    }
+
+    const examYear = normalizeExamYear(draft.examYear);
+    if (Number.isNaN(examYear)) {
+        return 'Informe um ano de concurso valido ou deixe o campo vazio.';
+    }
+
+    return null;
+};
 const normalizeQuestionSearchResult = (question: any) => ({
     ...question,
     alternatives: Array.isArray(question?.alternatives) ? question.alternatives : [],
@@ -74,12 +147,9 @@ export default function AdminContent() {
     const [searchLoading, setSearchLoading] = useState(false);
     const [searchAttempted, setSearchAttempted] = useState(false);
     const [editingQuestion, setEditingQuestion] = useState<any | null>(null);
-    const [editDraft, setEditDraft] = useState<{
-        content: string;
-        difficulty: string;
-        explanation: string;
-        alternatives: Array<{ id: string; content: string; is_correct: boolean }>;
-    } | null>(null);
+    const [editDraft, setEditDraft] = useState<QuestionFormDraft | null>(null);
+    const [creatingQuestionTopic, setCreatingQuestionTopic] = useState<any | null>(null);
+    const [manualDraft, setManualDraft] = useState<QuestionFormDraft | null>(null);
 
     const [genArea, setGenArea] = useState('');
     const [genTopic, setGenTopic] = useState('');
@@ -237,12 +307,23 @@ export default function AdminContent() {
         content: question.content || '',
         difficulty: question.difficulty || 'medium',
         explanation: question.question_explanations?.[0]?.content || '',
+        examYear: question.exam_year ? String(question.exam_year) : '',
         alternatives: (question.alternatives || []).map((alternative: any) => ({
             id: alternative.id,
             content: alternative.content || '',
             is_correct: Boolean(alternative.is_correct),
         })),
     });
+
+    const openManualQuestionModal = (topic: any) => {
+        setCreatingQuestionTopic(topic);
+        setManualDraft(createEmptyQuestionDraft());
+    };
+
+    const closeManualQuestionModal = () => {
+        setCreatingQuestionTopic(null);
+        setManualDraft(null);
+    };
 
     const handleQuestionSearch = async () => {
         const term = questionSearch.trim();
@@ -333,14 +414,31 @@ export default function AdminContent() {
         setEditDraft({ ...editDraft, alternatives });
     };
 
+    const handleManualAlternativeContentChange = (index: number, value: string) => {
+        if (!manualDraft) return;
+        const alternatives = [...manualDraft.alternatives];
+        alternatives[index] = { ...alternatives[index], content: value };
+        setManualDraft({ ...manualDraft, alternatives });
+    };
+
+    const handleMarkManualCorrectAlternative = (id: string) => {
+        if (!manualDraft) return;
+        const alternatives = manualDraft.alternatives.map((alternative) => ({
+            ...alternative,
+            is_correct: alternative.id === id,
+        }));
+        setManualDraft({ ...manualDraft, alternatives });
+    };
+
     const handleSaveQuestionEdits = async () => {
         if (!editingQuestion || !editDraft) return;
-        const correctCount = editDraft.alternatives.filter((alt) => alt.is_correct).length;
-        if (correctCount !== 1) {
-            alert('Defina exatamente uma alternativa correta.');
+        const validationError = validateQuestionDraft(editDraft);
+        if (validationError) {
+            alert(validationError);
             return;
         }
 
+        const examYear = normalizeExamYear(editDraft.examYear);
         setSavingContent(true);
         try {
             const { error: questionError } = await supabase
@@ -348,6 +446,7 @@ export default function AdminContent() {
                 .update({
                     content: editDraft.content.trim(),
                     difficulty: editDraft.difficulty,
+                    exam_year: examYear,
                 })
                 .eq('id', editingQuestion.id);
             if (questionError) throw questionError;
@@ -388,6 +487,88 @@ export default function AdminContent() {
     const handleCancelEdit = () => {
         setEditingQuestion(null);
         setEditDraft(null);
+    };
+
+    const handleCreateManualQuestion = async () => {
+        if (!creatingQuestionTopic || !manualDraft) return;
+
+        const validationError = validateQuestionDraft(manualDraft);
+        if (validationError) {
+            alert(validationError);
+            return;
+        }
+
+        const examYear = normalizeExamYear(manualDraft.examYear);
+        let insertedQuestionId: string | null = null;
+
+        setSavingContent(true);
+        try {
+            const questionPayload = {
+                topic_id: creatingQuestionTopic.id,
+                content: manualDraft.content.trim(),
+                difficulty: manualDraft.difficulty,
+                exam_year: examYear,
+            };
+
+            let insertedQuestion = await supabase
+                .from('questions')
+                .insert({
+                    ...questionPayload,
+                    area_id: managementArea,
+                })
+                .select('id')
+                .single();
+
+            if (insertedQuestion.error && shouldRetryQuestionInsertWithoutAreaClient(insertedQuestion.error)) {
+                insertedQuestion = await supabase
+                    .from('questions')
+                    .insert(questionPayload)
+                    .select('id')
+                    .single();
+            }
+
+            if (insertedQuestion.error || !insertedQuestion.data?.id) {
+                throw insertedQuestion.error || new Error('Nao foi possivel criar a questao manualmente.');
+            }
+
+            insertedQuestionId = insertedQuestion.data.id;
+
+            const { error: alternativesError } = await supabase
+                .from('alternatives')
+                .insert(
+                    manualDraft.alternatives.map((alternative) => ({
+                        question_id: insertedQuestionId,
+                        content: alternative.content.trim(),
+                        is_correct: alternative.is_correct,
+                    }))
+                );
+
+            if (alternativesError) throw alternativesError;
+
+            if (manualDraft.explanation.trim()) {
+                const { error: explanationError } = await supabase
+                    .from('question_explanations')
+                    .insert({
+                        question_id: insertedQuestionId,
+                        content: manualDraft.explanation.trim(),
+                    });
+
+                if (explanationError) throw explanationError;
+            }
+
+            alert('Questao manual criada com sucesso.');
+            closeManualQuestionModal();
+            if (managementArea) {
+                await fetchManagementContent(managementArea);
+            }
+        } catch (error: any) {
+            if (insertedQuestionId) {
+                await supabase.from('questions').delete().eq('id', insertedQuestionId);
+            }
+            alert(error?.message || 'Falha ao criar a questao manual.');
+        } finally {
+            setSavingContent(false);
+        }
     };
 
     const handleDeleteTopic = async (topicId: string) => {
@@ -802,6 +983,14 @@ export default function AdminContent() {
                                         <div className="flex gap-2 shrink-0">
                                             <button
                                                 type="button"
+                                                onClick={() => openManualQuestionModal(topic)}
+                                                className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-700 transition hover:bg-emerald-100"
+                                            >
+                                                <Plus className="h-3.5 w-3.5" />
+                                                Nova questao
+                                            </button>
+                                            <button
+                                                type="button"
                                                 onClick={() => setExpandedTopicId(expandedTopicId === topic.id ? null : topic.id)}
                                                 className={`rounded-xl border-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-colors ${expandedTopicId === topic.id
                                                     ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
@@ -825,8 +1014,18 @@ export default function AdminContent() {
                                     {expandedTopicId === topic.id && (
                                         <div className="mt-5 space-y-4 pt-5 border-t border-slate-100 animate-in slide-in-from-top-2 duration-300">
                                             {topic.questions.length === 0 ? (
-                                                <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                                    Nenhuma pergunta neste tópico.
+                                                <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
+                                                    <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                                                        Nenhuma pergunta neste tópico.
+                                                    </p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openManualQuestionModal(topic)}
+                                                        className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-emerald-500"
+                                                    >
+                                                        <Plus className="h-3.5 w-3.5" />
+                                                        Criar primeira questao
+                                                    </button>
                                                 </div>
                                             ) : (
                                                 topic.questions.map((question: any, index: number) => (
@@ -1232,6 +1431,144 @@ export default function AdminContent() {
 
             <AdminQuestionReports />
 
+            {creatingQuestionTopic && manualDraft && (
+                <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+                    <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-[2rem] border border-emerald-200 bg-white shadow-2xl">
+                        <div className="border-b border-slate-100 px-6 py-5">
+                            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
+                                        Criacao Manual
+                                    </p>
+                                    <h3 className="mt-2 text-xl font-black text-slate-900">
+                                        Nova questao em {creatingQuestionTopic.name}
+                                    </h3>
+                                    <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        <span>Area: {managementAreaName}</span>
+                                        <span>Topico: {creatingQuestionTopic.name}</span>
+                                        <span>Formato: 4 alternativas (A-D)</span>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={closeManualQuestionModal}
+                                    className="rounded-2xl border border-slate-200 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-500 transition hover:bg-slate-50"
+                                >
+                                    Fechar
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 space-y-5 overflow-y-auto bg-slate-50 px-6 py-6">
+                            <div>
+                                <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                    Enunciado
+                                </label>
+                                <textarea
+                                    value={manualDraft.content}
+                                    onChange={(event) => setManualDraft({ ...manualDraft, content: event.target.value })}
+                                    rows={5}
+                                    placeholder="Escreva a pergunta manualmente, com o estilo final que deseja publicar."
+                                    className="w-full rounded-[1.5rem] border border-slate-200 bg-white px-4 py-4 text-sm font-semibold leading-6 text-slate-800 outline-none focus:border-emerald-400"
+                                />
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-[220px_220px_1fr]">
+                                <div>
+                                    <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        Dificuldade
+                                    </label>
+                                    <select
+                                        value={manualDraft.difficulty}
+                                        onChange={(event) => setManualDraft({ ...manualDraft, difficulty: event.target.value })}
+                                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-400"
+                                    >
+                                        <option value="easy">Facil</option>
+                                        <option value="medium">Media</option>
+                                        <option value="hard">Dificil</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        Ano do concurso
+                                    </label>
+                                    <input
+                                        value={manualDraft.examYear}
+                                        onChange={(event) => setManualDraft({ ...manualDraft, examYear: event.target.value.replace(/\D+/g, '').slice(0, 4) })}
+                                        inputMode="numeric"
+                                        placeholder="Opcional"
+                                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-400"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        Explicacao oficial
+                                    </label>
+                                    <textarea
+                                        value={manualDraft.explanation}
+                                        onChange={(event) => setManualDraft({ ...manualDraft, explanation: event.target.value })}
+                                        rows={4}
+                                        placeholder="Opcional, mas recomendado para a correcao imediata no app."
+                                        className="w-full rounded-[1.5rem] border border-slate-200 bg-white px-4 py-4 text-sm font-semibold leading-6 text-slate-800 outline-none focus:border-emerald-400"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                    Alternativas
+                                </p>
+                                {manualDraft.alternatives.map((alternative, index) => (
+                                    <div key={alternative.id} className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
+                                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                                Alternativa {String.fromCharCode(65 + index)}
+                                            </span>
+                                            <label className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">
+                                                <input
+                                                    type="radio"
+                                                    name="manual-question-correct"
+                                                    checked={alternative.is_correct}
+                                                    onChange={() => handleMarkManualCorrectAlternative(alternative.id)}
+                                                />
+                                                Marcar como correta
+                                            </label>
+                                        </div>
+                                        <input
+                                            value={alternative.content}
+                                            onChange={(event) => handleManualAlternativeContentChange(index, event.target.value)}
+                                            placeholder={`Texto da alternativa ${String.fromCharCode(65 + index)}`}
+                                            className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-400 focus:bg-white"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="border-t border-slate-100 bg-white px-6 py-5">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                                <button
+                                    type="button"
+                                    onClick={closeManualQuestionModal}
+                                    disabled={savingContent}
+                                    className="rounded-2xl border border-slate-200 px-5 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-600 transition hover:bg-slate-100 disabled:opacity-50"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleCreateManualQuestion}
+                                    disabled={savingContent}
+                                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-emerald-500 disabled:opacity-50"
+                                >
+                                    {savingContent ? 'A guardar...' : 'Publicar questao manual'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {editingQuestion && editDraft && (
                 <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
                     <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-[2rem] border border-emerald-200 bg-white shadow-2xl">
@@ -1272,7 +1609,7 @@ export default function AdminContent() {
                                 />
                             </div>
 
-                            <div className="grid gap-4 md:grid-cols-[220px_1fr]">
+                            <div className="grid gap-4 md:grid-cols-[220px_220px_1fr]">
                                 <div>
                                     <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
                                         Dificuldade
@@ -1286,6 +1623,18 @@ export default function AdminContent() {
                                         <option value="medium">Media</option>
                                         <option value="hard">Dificil</option>
                                     </select>
+                                </div>
+                                <div>
+                                    <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        Ano do concurso
+                                    </label>
+                                    <input
+                                        value={editDraft.examYear}
+                                        onChange={(event) => setEditDraft({ ...editDraft, examYear: event.target.value.replace(/\D+/g, '').slice(0, 4) })}
+                                        inputMode="numeric"
+                                        placeholder="Opcional"
+                                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-400"
+                                    />
                                 </div>
                                 <div>
                                     <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">

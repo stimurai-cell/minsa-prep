@@ -207,6 +207,9 @@ TAREFA:
 - Toda explicacao aprovada deve terminar com base bibliografica curta e confiavel.
 - Nunca aprove questao fora da area declarada ou claramente deslocada do topico declarado.
 - Nunca aceite inversao de conceitos, cadeias, aminoacidos, unidades, valores ou nomenclatura.
+- Mantenha o estilo de concurso: enunciado afirmativo terminado em "Excepto:", "Assinale a falsa:" ou "Assinale a verdadeira:".
+- Corrija lotes em que a alternativa correta esteja visualmente maior do que as demais; as opcoes devem ter tamanho e estrutura semelhantes.
+- Preserve 4 alternativas (A-D) e use distratores plausiveis, incluindo erro grafico discreto ou confusao entre norma tecnica e senso comum quando isso melhorar o realismo sem gerar ambiguidade.
 
 QUESTOES A REVISAR EM JSON:
 ${JSON.stringify(questions, null, 2)}

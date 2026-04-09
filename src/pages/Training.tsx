@@ -1150,24 +1150,24 @@ export default function Training() {
                     </p>
                     <p className="mt-2 max-h-24 overflow-y-auto pr-1 text-sm leading-5 text-slate-700">{currentExplanation}</p>
                   </div>
+                  <QuestionIssueReporter
+                    questionId={currentQ.id}
+                    reporterId={profile?.id}
+                    reporterName={profile?.full_name}
+                    areaId={profile?.selected_area_id}
+                    areaName={selectedAreaName}
+                    topicId={currentQ.topic_id}
+                    topicName={currentQuestionTopicName}
+                    questionContent={currentQ.content || ''}
+                    questionDifficulty={currentQ.difficulty}
+                    explanation={currentExplanation}
+                    alternatives={currentQ.alternatives.map((alt: any) => ({
+                      id: alt.id,
+                      content: alt.content || '',
+                      isCorrect: Boolean(alt.is_correct),
+                    }))}
+                  />
                 </div>
-                <QuestionIssueReporter
-                  questionId={currentQ.id}
-                  reporterId={profile?.id}
-                  reporterName={profile?.full_name}
-                  areaId={profile?.selected_area_id}
-                  areaName={selectedAreaName}
-                  topicId={currentQ.topic_id}
-                  topicName={currentQuestionTopicName}
-                  questionContent={currentQ.content || ''}
-                  questionDifficulty={currentQ.difficulty}
-                  explanation={currentExplanation}
-                  alternatives={currentQ.alternatives.map((alt: any) => ({
-                    id: alt.id,
-                    content: alt.content || '',
-                    isCorrect: Boolean(alt.is_correct),
-                  }))}
-                />
                 <button
                   type="button"
                   onClick={nextQuestion}
