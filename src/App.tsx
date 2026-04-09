@@ -46,7 +46,6 @@ const EliteWelcome = lazy(() => import('./pages/EliteWelcome'));
 const EliteAssessment = lazy(() => import('./pages/EliteAssessment'));
 const EliteStrategy = lazy(() => import('./pages/EliteStrategy'));
 const ElitePlanPreview = lazy(() => import('./pages/ElitePlanPreview'));
-const QuestionStudio = lazy(() => import('./pages/QuestionStudio'));
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuthStore();
@@ -199,7 +198,7 @@ export default function App() {
               <Route path="premium" element={<Premium />} />
               <Route path="notifications" element={<Notifications />} />
               <Route path="admin" element={<Admin />} />
-              <Route path="question-studio" element={<QuestionStudio />} />
+              <Route path="question-studio" element={<Navigate to="/admin?tab=content" replace />} />
               <Route path="elite-welcome" element={<EliteWelcome />} />
               <Route path="elite-assessment" element={<EliteAssessment />} />
               <Route path="elite-strategy" element={<EliteStrategy />} />

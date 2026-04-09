@@ -8,7 +8,6 @@ import {
   Settings,
   Share,
   ShieldCheck,
-  Sparkles,
   Star,
   Trophy,
   Users,
@@ -155,7 +154,6 @@ export default function Profile() {
   const createdAtYear = profile?.created_at ? new Date(profile.created_at).getFullYear() : '2024';
   const currentLeague = profile?.current_league || 'Bronze';
   const streakCount = profile?.streak_count || 0;
-  const canCreateQuestions = profile?.role === 'elite' || profile?.role === 'admin';
   const featuredBadge = userBadges[0];
   const remainingBadges = userBadges.slice(1, 7);
   const topFriends = followingFriends.slice(0, 8);
@@ -239,15 +237,6 @@ export default function Profile() {
             Adicionar amigos
           </Link>
 
-          {canCreateQuestions && (
-            <Link
-              to="/question-studio"
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-sm font-black uppercase tracking-[0.14em] text-white transition hover:bg-emerald-500"
-            >
-              <Sparkles className="h-4 w-4" />
-              Criar questao
-            </Link>
-          )}
         </div>
 
         <section>

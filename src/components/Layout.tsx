@@ -108,9 +108,6 @@ export default function Layout() {
   const studentSecondaryLinks = [
     { to: '/ranking', label: 'Ranking da area', icon: Award, activeColor: 'text-indigo-500', activeBg: 'bg-indigo-100', activeBorder: 'border-indigo-200' },
     { to: '/news', label: 'Avisos', icon: Megaphone, activeColor: 'text-blue-500', activeBg: 'bg-blue-100', activeBorder: 'border-blue-200' },
-    ...(profile?.role === 'elite'
-      ? [{ to: '/question-studio', label: 'Criar questoes', icon: FolderTree, activeColor: 'text-emerald-500', activeBg: 'bg-emerald-100', activeBorder: 'border-emerald-200' }]
-      : []),
     { to: '/premium', label: 'Loja', icon: Crown, activeColor: 'text-yellow-500', activeBg: 'bg-yellow-100', activeBorder: 'border-yellow-200' },
     { to: '/profile', label: 'Perfil', icon: UserRound, activeColor: 'text-teal-500', activeBg: 'bg-teal-100', activeBorder: 'border-teal-200' },
   ];

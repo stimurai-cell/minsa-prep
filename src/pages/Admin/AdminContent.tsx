@@ -961,6 +961,39 @@ export default function AdminContent() {
 
                                 </div>
 
+                                {managementArea && managementTopics.length > 0 && (
+                                    <div className="rounded-[1.5rem] border border-emerald-200 bg-[linear-gradient(135deg,#ecfdf5_0%,#f8fffb_100%)] p-5 shadow-sm">
+                                        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                                            <div>
+                                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
+                                                    Criacao Manual
+                                                </p>
+                                                <h3 className="mt-2 text-lg font-black text-slate-900">
+                                                    Criar questoes uma a uma dentro do admin
+                                                </h3>
+                                                <p className="mt-2 text-sm font-medium leading-6 text-slate-600">
+                                                    Abra o topico desejado e use o botao <span className="font-black text-emerald-700">Nova questao</span> para escrever manualmente o enunciado, as 4 alternativas e marcar a correta.
+                                                </p>
+                                            </div>
+
+                                            <div className="grid gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-800">
+                                                <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 shadow-sm">
+                                                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-[9px]">1</span>
+                                                    Escolher topico
+                                                </div>
+                                                <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 shadow-sm">
+                                                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-[9px]">2</span>
+                                                    Clicar em Nova questao
+                                                </div>
+                                                <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 shadow-sm">
+                                                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-[9px]">3</span>
+                                                    Publicar
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {managementTopics.length === 0 ? (
                             <div className="h-full rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center text-center p-8">
                                 <Database className="w-12 h-12 text-slate-300 mb-4 opacity-50" />

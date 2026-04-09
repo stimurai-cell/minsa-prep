@@ -10,7 +10,6 @@ import {
   Clock3,
   Crown,
   Flame,
-  FolderTree,
   PlayCircle,
   ShieldCheck,
   Sparkles,
@@ -387,15 +386,6 @@ const trainingTitle = shouldStartWithReview
       icon: UserPlus,
       tone: 'rose',
     },
-    ...(profile?.role === 'elite'
-      ? [{
-          to: '/question-studio',
-          title: 'Criar questoes',
-          description: 'Abra o formulario manual para inserir uma questao por vez com 4 alternativas.',
-          icon: FolderTree,
-          tone: 'emerald',
-        }]
-      : []),
     isFreeUser
       ? {
           to: '/premium',
