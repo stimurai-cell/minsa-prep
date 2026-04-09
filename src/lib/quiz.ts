@@ -49,14 +49,75 @@ export const filterPlayableQuestions = (
   options?: { exactAlternativeCount?: number }
 ) => (questions || []).filter((question) => isPlayableQuestion(question, options));
 
+const buildBalancedCorrectSlots = (total: number, alternativesPerQuestion: number) => {
+  const slots: number[] = [];
+  let lastSlot: number | null = null;
+
+  while (slots.length < total) {
+    const block = shuffleArray(
+      Array.from({ length: alternativesPerQuestion }, (_, index) => index)
+    );
+
+    if (lastSlot !== null && block[0] === lastSlot && block.length > 1) {
+      block.push(block.shift() as number);
+    }
+
+    slots.push(...block);
+    lastSlot = block[block.length - 1] ?? lastSlot;
+  }
+
+  return slots.slice(0, total);
+};
+
+const rebalanceAlternativesForSession = (questions: any[]) => {
+  const targetSlots = buildBalancedCorrectSlots(questions.length, 4);
+
+  return questions.map((question, index) => {
+    const normalizedAlternatives = normalizeAlternatives(question.alternatives || []).map(
+      (alternative: any) => ({
+        ...alternative,
+        content: stripAlternativePrefix(alternative.content || alternative.text || ''),
+      })
+    );
+
+    const correctAlternatives = normalizedAlternatives.filter(
+      (alternative: any) =>
+        alternative?.is_correct === true || alternative?.isCorrect === true
+    );
+
+    if (normalizedAlternatives.length !== 4 || correctAlternatives.length !== 1) {
+      return {
+        ...question,
+        alternatives: shuffleArray(normalizedAlternatives),
+      };
+    }
+
+    const correctAlternative = correctAlternatives[0];
+    const distractors = shuffleArray(
+      normalizedAlternatives.filter((alternative: any) => alternative !== correctAlternative)
+    );
+    const rebalanced = Array.from({ length: normalizedAlternatives.length });
+    const targetSlot = targetSlots[index] ?? 0;
+
+    rebalanced[targetSlot] = correctAlternative;
+
+    let distractorIndex = 0;
+    for (let slot = 0; slot < rebalanced.length; slot += 1) {
+      if (!rebalanced[slot]) {
+        rebalanced[slot] = distractors[distractorIndex];
+        distractorIndex += 1;
+      }
+    }
+
+    return {
+      ...question,
+      alternatives: rebalanced,
+    };
+  });
+};
+
 export const prepareQuestionSet = (questions: any[]) =>
-  shuffleArray(questions).map((question) => ({
-    ...question,
-    alternatives: shuffleArray(normalizeAlternatives(question.alternatives || [])).map((alternative: any) => ({
-      ...alternative,
-      content: stripAlternativePrefix(alternative.content || alternative.text || ''),
-    })),
-  }));
+  rebalanceAlternativesForSession(shuffleArray(questions));
 
 export const getAlternativeLabel = (index: number) =>
   index >= 0 && index < 26 ? String.fromCharCode(97 + index) : `op${index + 1}`;

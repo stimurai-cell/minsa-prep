@@ -315,6 +315,74 @@ const normalizeAlternativeText = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const shuffleItems = <T,>(items: T[]) => {
+  const copy = [...items];
+
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+  }
+
+  return copy;
+};
+
+const buildBalancedCorrectSlots = (total: number, alternativesPerQuestion: number) => {
+  const slots: number[] = [];
+  let lastSlot: number | null = null;
+
+  while (slots.length < total) {
+    const block = shuffleItems(
+      Array.from({ length: alternativesPerQuestion }, (_, index) => index)
+    );
+
+    if (lastSlot !== null && block[0] === lastSlot && block.length > 1) {
+      block.push(block.shift() as number);
+    }
+
+    slots.push(...block);
+    lastSlot = block[block.length - 1] ?? lastSlot;
+  }
+
+  return slots.slice(0, total);
+};
+
+const rebalanceCorrectAlternativePositions = (questions: NormalizedQuestion[]) => {
+  const targetSlots = buildBalancedCorrectSlots(questions.length, EXPECTED_ALTERNATIVES);
+
+  return questions.map((question, index) => {
+    if (question.alternatives.length !== EXPECTED_ALTERNATIVES) {
+      return question;
+    }
+
+    const correctAlternatives = question.alternatives.filter((alternative) => alternative.isCorrect);
+    if (correctAlternatives.length !== 1) {
+      return question;
+    }
+
+    const correctAlternative = correctAlternatives[0];
+    const distractors = shuffleItems(
+      question.alternatives.filter((alternative) => alternative !== correctAlternative)
+    );
+    const alternatives = Array.from({ length: question.alternatives.length }) as NormalizedQuestion['alternatives'];
+    const targetSlot = targetSlots[index] ?? 0;
+
+    alternatives[targetSlot] = correctAlternative;
+
+    let distractorIndex = 0;
+    for (let slot = 0; slot < alternatives.length; slot += 1) {
+      if (!alternatives[slot]) {
+        alternatives[slot] = distractors[distractorIndex];
+        distractorIndex += 1;
+      }
+    }
+
+    return {
+      ...question,
+      alternatives,
+    };
+  });
+};
+
 const getAlternativeLengthIssue = (question: NormalizedQuestion) => {
   const lengths = question.alternatives.map((alternative) => normalizeAlternativeText(alternative.text).length);
   const correctIndex = question.alternatives.findIndex((alternative) => alternative.isCorrect);
@@ -1420,7 +1488,8 @@ export default async function handler(req: any, res: any) {
                     continue;
                   }
 
-                  candidateQuestions.push(...reviewedBatch.approvedQuestions);
+                  const balancedBatch = rebalanceCorrectAlternativePositions(reviewedBatch.approvedQuestions);
+                  candidateQuestions.push(...balancedBatch);
                   candidateCoverageSummary = mergeCoverageSummary(candidateCoverageSummary, parsedBatch?.coverage_summary);
                   const validationSummary = String(parsedBatch?.validation_summary || '').trim();
                   if (validationSummary) {
