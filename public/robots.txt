@@ -1,0 +1,22 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /training
+Disallow: /simulation
+Disallow: /practice
+Disallow: /social
+Disallow: /profile
+Disallow: /settings
+Disallow: /notifications
+Disallow: /premium
+Disallow: /ranking
+Disallow: /leagues
+Disallow: /battle
+Disallow: /speed-mode
+Disallow: /elite-welcome
+Disallow: /elite-assessment
+Disallow: /elite-strategy
+Disallow: /elite-plan-preview
+
+Sitemap: https://minsa-prep.vercel.app/sitemap.xml

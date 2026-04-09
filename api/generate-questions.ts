@@ -7,10 +7,16 @@ import {
   sanitizeGovernanceReferences,
 } from './_lib/questionGovernance.js';
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const databaseUrl = process.env.DATABASE_URL || '';
-const geminiApiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+const readEnvValue = (...values: Array<string | undefined>) =>
+  values
+    .map((value) => String(value || '').trim())
+    .find(Boolean)
+    || '';
+
+const supabaseUrl = readEnvValue(process.env.VITE_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_URL);
+const supabaseServiceKey = readEnvValue(process.env.SUPABASE_SERVICE_ROLE_KEY);
+const databaseUrl = readEnvValue(process.env.DATABASE_URL);
+const geminiApiKey = readEnvValue(process.env.GEMINI_API_KEY, process.env.VITE_GEMINI_API_KEY);
 const defaultGeminiModel = 'gemini-2.5-flash';
 
 let supabaseClientPromise: Promise<any> | null = null;
@@ -95,6 +101,8 @@ const MAX_TOTAL_GENERATION_COUNT = 100;
 const MAX_GENERATION_ATTEMPTS = 2;
 const MAX_SOURCE_FILE_BYTES = 3.5 * 1024 * 1024;
 const GEMINI_REQUEST_TIMEOUT_MS = 45000;
+const GEMINI_MAX_REQUEST_RETRIES = 3;
+const GEMINI_RETRY_DELAYS_MS = [1500, 3500];
 const PG_CONNECTION_TIMEOUT_MS = 5000;
 const ALLOWED_SOURCE_MIME_TYPES = new Set([
   'application/pdf',
@@ -309,6 +317,34 @@ const hasContestStyleEnding = (question: string) => {
   return CONTEST_STYLE_ENDINGS.some((ending) => normalized.endsWith(normalizePromptText(ending)));
 };
 
+const inferContestStyleEnding = (question: string) => {
+  const normalized = normalizePromptText(question);
+
+  if (normalized.includes('except') || normalized.includes('exceto')) {
+    return 'Excepto:';
+  }
+
+  if (
+    normalized.includes('falsa')
+    || normalized.includes('incorreta')
+    || normalized.includes('errada')
+    || normalized.includes('nao constitui')
+  ) {
+    return 'Assinale a falsa:';
+  }
+
+  return 'Assinale a verdadeira:';
+};
+
+const ensureContestStyleEnding = (question: string) => {
+  const trimmed = String(question || '').trim();
+  if (!trimmed) return '';
+  if (hasContestStyleEnding(trimmed)) return trimmed;
+
+  const sanitized = trimmed.replace(/[\s,;:.!?-]+$/g, '').trim();
+  return `${sanitized}, ${inferContestStyleEnding(sanitized)}`;
+};
+
 const normalizeAlternativeText = (value: string) =>
   String(value || '')
     .replace(/^\s*[a-d]\s*[\.\)\-:]\s*/i, '')
@@ -396,14 +432,27 @@ const getAlternativeLengthIssue = (question: NormalizedQuestion) => {
 
   if (
     uniqueLongestCorrect
-    && correctLength - maxDistractorLength >= 18
-    && correctLength >= Math.ceil(averageDistractorLength * 1.35)
+    && correctLength - maxDistractorLength >= 32
+    && correctLength >= Math.ceil(averageDistractorLength * 1.5)
   ) {
     return 'a alternativa correta ficou visualmente maior do que as outras';
   }
 
   return '';
 };
+
+const prepareQuestionsForValidation = (questions: NormalizedQuestion[]) =>
+  rebalanceCorrectAlternativePositions(
+    questions.map((question) => ({
+      ...question,
+      question: ensureContestStyleEnding(question.question),
+      alternatives: question.alternatives.map((alternative) => ({
+        ...alternative,
+        text: normalizeAlternativeText(alternative.text),
+      })),
+      explanation: String(question.explanation || '').trim(),
+    }))
+  );
 
 const getSupabase = async () => {
   if (!supabaseUrl || !supabaseServiceKey) return null;
@@ -767,6 +816,14 @@ const getErrorMessage = (error: unknown) => {
     return 'A chave do Gemini foi bloqueada por vazamento. Gere uma nova chave no Google AI Studio e atualize GEMINI_API_KEY/VITE_GEMINI_API_KEY.';
   }
   if (message.includes('RESOURCE_EXHAUSTED') || message.includes('"code":429')) return 'A quota do Gemini acabou. Tente novamente mais tarde.';
+  if (
+    message.toLowerCase().includes('unavailable')
+    || message.includes('"code":503')
+    || message.toLowerCase().includes('high demand')
+    || message.toLowerCase().includes('try again later')
+  ) {
+    return 'O Gemini esta temporariamente sobrecarregado. O sistema tentou novamente automaticamente, mas o servico continuou indisponivel. Tente de novo dentro de instantes.';
+  }
   if (message.includes('NOT_FOUND') || (message.toLowerCase().includes('model') && message.toLowerCase().includes('not found'))) {
     return 'O modelo Gemini configurado nao esta disponivel para esta chave. Ajuste GEMINI_MODEL para um modelo suportado.';
   }
@@ -791,17 +848,38 @@ const shouldRetryQuestionInsertWithoutArea = (error: unknown) => {
     );
 };
 
-const getModelPriority = (model: string) => {
-  const normalized = String(model || '').toLowerCase();
-  if (!normalized) return 99;
-  if (normalized.includes('flash-lite')) return 2;
-  if (normalized.includes('flash')) return 0;
-  return 1;
-};
-
 const buildModelCandidates = (primaryModel: string) =>
-  Array.from(new Set([primaryModel, defaultGeminiModel, 'gemini-2.5-flash'].filter(Boolean)))
-    .sort((left, right) => getModelPriority(left) - getModelPriority(right));
+  Array.from(
+    new Set(
+      [
+        String(primaryModel || '').trim(),
+        defaultGeminiModel,
+        'gemini-2.5-flash-lite',
+      ]
+        .filter(Boolean)
+    )
+  );
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isRetryableGeminiError = (error: unknown) => {
+  const { message, details, hint, code } = extractErrorInfo(error);
+  const combined = `${message} ${details} ${hint} ${code}`.toLowerCase();
+
+  return (
+    combined.includes('unavailable') ||
+    combined.includes('"code":503') ||
+    combined.includes('code:503') ||
+    combined.includes('code 503') ||
+    combined.includes('high demand') ||
+    combined.includes('try again later') ||
+    combined.includes('backend error') ||
+    combined.includes('temporarily unavailable') ||
+    combined.includes('deadline exceeded') ||
+    combined.includes('timed out') ||
+    combined.includes('excedeu')
+  );
+};
 
 const generateContentWithTimeout = async (
   ai: any,
@@ -809,22 +887,38 @@ const generateContentWithTimeout = async (
   label: string,
   timeoutMs = GEMINI_REQUEST_TIMEOUT_MS,
 ) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(new Error(`${label} excedeu ${Math.round(timeoutMs / 1000)}s.`)), timeoutMs);
+  let lastError: unknown = null;
 
-  try {
-    return await ai.models.generateContent({
-      ...request,
-      abortSignal: controller.signal,
-    });
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error(`${label} excedeu ${Math.round(timeoutMs / 1000)}s.`);
+  for (let attempt = 1; attempt <= GEMINI_MAX_REQUEST_RETRIES; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      return await ai.models.generateContent({
+        ...request,
+        abortSignal: controller.signal,
+      });
+    } catch (error) {
+      lastError = controller.signal.aborted
+        ? new Error(`${label} excedeu ${Math.round(timeoutMs / 1000)}s.`)
+        : error;
+
+      const canRetry = attempt < GEMINI_MAX_REQUEST_RETRIES && isRetryableGeminiError(lastError);
+      if (!canRetry) {
+        throw lastError;
+      }
+
+      const delay = GEMINI_RETRY_DELAYS_MS[attempt - 1] ?? GEMINI_RETRY_DELAYS_MS[GEMINI_RETRY_DELAYS_MS.length - 1] ?? 2000;
+      console.warn(`[generate-questions] retrying transient Gemini failure (${attempt}/${GEMINI_MAX_REQUEST_RETRIES})`, label, getErrorMessage(lastError));
+      await wait(delay);
+    } finally {
+      clearTimeout(timeoutId);
     }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
   }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Falha desconhecida ao comunicar com o Gemini.');
 };
 
 const extractResponseText = (response: any) => {
@@ -972,6 +1066,120 @@ const createGovernanceReviewResponseSchema = (Type: any, expectedCount: number) 
   required: ['reviewer_summary', 'questions'],
 });
 
+const createRepairResponseSchema = (Type: any, expectedCount: number) => ({
+  type: Type.OBJECT,
+  properties: {
+    repair_summary: { type: Type.STRING },
+    questions: {
+      type: Type.ARRAY,
+      minItems: expectedCount,
+      maxItems: expectedCount,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          question: { type: Type.STRING },
+          alternatives: {
+            type: Type.ARRAY,
+            minItems: EXPECTED_ALTERNATIVES,
+            maxItems: EXPECTED_ALTERNATIVES,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                text: { type: Type.STRING },
+                isCorrect: { type: Type.BOOLEAN },
+              },
+              required: ['text', 'isCorrect'],
+            },
+          },
+          explanation: { type: Type.STRING },
+          difficulty: { type: Type.STRING },
+        },
+        required: ['question', 'alternatives', 'explanation', 'difficulty'],
+      },
+    },
+  },
+  required: ['repair_summary', 'questions'],
+});
+
+const repairGeneratedBatch = async ({
+  ai,
+  Type,
+  model,
+  area,
+  topic,
+  validateWithWeb,
+  questions,
+  validationErrors,
+}: {
+  ai: any;
+  Type: any;
+  model: string;
+  area: string;
+  topic: string;
+  validateWithWeb: boolean;
+  questions: NormalizedQuestion[];
+  validationErrors: string[];
+}) => {
+  if (!questions.length || !validationErrors.length) {
+    return {
+      repairedQuestions: questions,
+      repairSummary: '',
+    };
+  }
+
+  const prompt = `
+REVISE O LOTE DE QUESTOES ABAIXO SEM MUDAR O TEMA CENTRAL.
+AREA: ${area}
+TOPICO: ${topic}
+
+PROBLEMAS DETETADOS PELO VALIDADOR:
+${validationErrors.map((error) => `- ${error}`).join('\n')}
+
+OBJETIVO:
+- devolver exatamente ${questions.length} questoes
+- manter exatamente ${EXPECTED_ALTERNATIVES} alternativas por questao
+- manter apenas 1 alternativa correta por questao
+- fazer o enunciado terminar obrigatoriamente com "Excepto:", "Assinale a falsa:" ou "Assinale a verdadeira:"
+- encurtar ou reequilibrar as alternativas para que a correta nao fique visualmente muito maior do que as outras
+- preservar dificuldade, sentido tecnico e clareza
+- manter portugues de Angola e estilo de concurso
+- devolver JSON puro
+
+QUESTOES A REPARAR:
+${JSON.stringify(questions, null, 2)}
+`;
+
+  const response = await generateContentWithTimeout(
+    ai,
+    {
+      model,
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: createRepairResponseSchema(Type, questions.length),
+        tools: validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
+      },
+    },
+    `A reparacao do lote no modelo ${model}`,
+  );
+
+  const rawText = extractResponseText(response);
+  const parsed = rawText ? parseGeneratedPayload(rawText) : null;
+  const repairedQuestions = prepareQuestionsForValidation(normalizeQuestions(parsed?.questions || []));
+  const repairValidationErrors = validateQuestions(repairedQuestions, EXPECTED_ALTERNATIVES, {
+    expectedCount: questions.length,
+  });
+
+  if (repairValidationErrors.length) {
+    throw new Error(`A reparacao do lote ainda devolveu perguntas invalidas: ${repairValidationErrors.join('; ')}`);
+  }
+
+  return {
+    repairedQuestions,
+    repairSummary: String(parsed?.repair_summary || '').trim(),
+  };
+};
+
 const reviewGeneratedBatch = async ({
   ai,
   Type,
@@ -1046,7 +1254,7 @@ const reviewGeneratedBatch = async ({
       difficulty: String(item.difficulty || '').trim(),
     }));
 
-  const approvedQuestions = normalizeQuestions(approvedPayload);
+  const approvedQuestions = prepareQuestionsForValidation(normalizeQuestions(approvedPayload));
   const reviewValidationErrors = approvedQuestions.length
     ? validateQuestions(approvedQuestions, EXPECTED_ALTERNATIVES, { referenceQuestions })
     : [];
@@ -1225,7 +1433,7 @@ const persistWithPostgres = async (input: PersistInput): Promise<PersistResult> 
 
   const client = await pool.connect();
   try {
-    const normalized = normalizeQuestions(input.questions);
+    const normalized = prepareQuestionsForValidation(normalizeQuestions(input.questions));
     const validationErrors = validateQuestions(normalized, EXPECTED_ALTERNATIVES);
     if (validationErrors.length) {
       throw new Error(`Perguntas invalidas para guardar: ${validationErrors.join('; ')}`);
@@ -1279,7 +1487,7 @@ const persistWithSupabase = async (input: PersistInput): Promise<PersistResult> 
   const supabase = await getSupabase();
   if (!supabase) throw new Error('Supabase nao configurado.');
 
-  const normalized = normalizeQuestions(input.questions);
+  const normalized = prepareQuestionsForValidation(normalizeQuestions(input.questions));
   const validationErrors = validateQuestions(normalized, EXPECTED_ALTERNATIVES);
   if (validationErrors.length) {
     throw new Error(`Perguntas invalidas para guardar: ${validationErrors.join('; ')}`);
@@ -1350,7 +1558,7 @@ export default async function handler(req: any, res: any) {
     }
 
     const { action } = req.body || {};
-    const modelName = process.env.GEMINI_MODEL || process.env.VITE_GEMINI_MODEL || defaultGeminiModel;
+    const modelName = readEnvValue(process.env.GEMINI_MODEL, process.env.VITE_GEMINI_MODEL, defaultGeminiModel);
     const modelCandidates = buildModelCandidates(modelName);
     const hasSupabase = Boolean(supabaseUrl && supabaseServiceKey);
 
@@ -1454,11 +1662,11 @@ export default async function handler(req: any, res: any) {
                 );
                 const rawText = extractResponseText(response);
                 const parsedBatch = rawText ? parseGeneratedPayload(rawText) : null;
-                const normalizedBatch = normalizeQuestions(parsedBatch?.questions || []);
+                const normalizedBatch = prepareQuestionsForValidation(normalizeQuestions(parsedBatch?.questions || []));
                 const filteredBatch = filterUniqueQuestions(normalizedBatch, {
                   referenceQuestions,
                 });
-                const uniqueBatch = filteredBatch.uniqueQuestions;
+                let uniqueBatch = filteredBatch.uniqueQuestions;
 
                 candidateValidationErrors = uniqueBatch.length
                   ? validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES, { referenceQuestions })
@@ -1467,6 +1675,34 @@ export default async function handler(req: any, res: any) {
                       ? 'A IA devolveu apenas perguntas repetidas nesta tentativa.'
                       : 'Nenhuma pergunta valida foi gerada nesta tentativa.',
                   ];
+
+                if (candidateValidationErrors.length && uniqueBatch.length) {
+                  try {
+                    const repairedBatch = await repairGeneratedBatch({
+                      ai,
+                      Type,
+                      model: candidateModel,
+                      area: resolvedAreaName,
+                      topic: resolvedTheme,
+                      validateWithWeb: preparedSource.validateWithWeb,
+                      questions: uniqueBatch,
+                      validationErrors: candidateValidationErrors,
+                    });
+
+                    uniqueBatch = repairedBatch.repairedQuestions;
+                    candidateValidationErrors = validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES, { referenceQuestions });
+
+                    if (!candidateValidationErrors.length && repairedBatch.repairSummary) {
+                      candidateValidationSummaryParts.push(repairedBatch.repairSummary);
+                    }
+                  } catch (repairError) {
+                    console.warn(
+                      '[generate-questions] repair step failed',
+                      candidateModel,
+                      getErrorMessage(repairError),
+                    );
+                  }
+                }
 
                 if (!candidateValidationErrors.length) {
                   const reviewedBatch = await reviewGeneratedBatch({
@@ -1488,7 +1724,7 @@ export default async function handler(req: any, res: any) {
                     continue;
                   }
 
-                  const balancedBatch = rebalanceCorrectAlternativePositions(reviewedBatch.approvedQuestions);
+                  const balancedBatch = prepareQuestionsForValidation(reviewedBatch.approvedQuestions);
                   candidateQuestions.push(...balancedBatch);
                   candidateCoverageSummary = mergeCoverageSummary(candidateCoverageSummary, parsedBatch?.coverage_summary);
                   const validationSummary = String(parsedBatch?.validation_summary || '').trim();
