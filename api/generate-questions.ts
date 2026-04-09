@@ -303,6 +303,12 @@ const formatReferenceQuestions = (items: Array<{ content: string; difficulty?: s
 };
 
 const CONTEST_STYLE_ENDINGS = ['Excepto:', 'Assinale a falsa:', 'Assinale a verdadeira:'];
+const CONTEST_STYLE_COMMANDS = [
+  'Assinale a alternativa correta.',
+  'Assinale a alternativa incorreta.',
+  'Marque a opção correta.',
+  'Marque a opção incorreta.',
+];
 
 const normalizePromptText = (value: string) =>
   String(value || '')
@@ -317,32 +323,43 @@ const hasContestStyleEnding = (question: string) => {
   return CONTEST_STYLE_ENDINGS.some((ending) => normalized.endsWith(normalizePromptText(ending)));
 };
 
-const inferContestStyleEnding = (question: string) => {
+const hasContestStyleCommand = (question: string) => {
   const normalized = normalizePromptText(question);
-
-  if (normalized.includes('except') || normalized.includes('exceto')) {
-    return 'Excepto:';
-  }
-
-  if (
-    normalized.includes('falsa')
-    || normalized.includes('incorreta')
-    || normalized.includes('errada')
-    || normalized.includes('nao constitui')
-  ) {
-    return 'Assinale a falsa:';
-  }
-
-  return 'Assinale a verdadeira:';
+  return CONTEST_STYLE_COMMANDS.some((command) => normalized.endsWith(normalizePromptText(command)));
 };
 
-const ensureContestStyleEnding = (question: string) => {
+const hasQuestionMarkEnding = (question: string) => normalizePromptText(question).endsWith('?');
+
+const getQuestionFormatType = (question: string) => {
+  const normalized = normalizePromptText(question);
+
+  if (!normalized) return 'empty';
+  if (hasContestStyleEnding(question)) return 'contest-ending';
+  if (hasContestStyleCommand(question)) return 'command-ending';
+  if (normalized.endsWith('?')) return 'direct-question';
+  if (normalized.includes('caso clinico') || normalized.includes('doente') || normalized.includes('paciente')) return 'scenario';
+  return 'statement';
+};
+
+const getQuestionLeadPattern = (question: string) =>
+  normalizePromptText(question)
+    .replace(/[?!.:,;]+$/g, '')
+    .split(' ')
+    .slice(0, 4)
+    .join(' ');
+
+const hasAcceptedQuestionFormat = (question: string) =>
+  hasContestStyleEnding(question)
+  || hasContestStyleCommand(question)
+  || hasQuestionMarkEnding(question);
+
+const ensureQuestionClosingPunctuation = (question: string) => {
   const trimmed = String(question || '').trim();
   if (!trimmed) return '';
-  if (hasContestStyleEnding(trimmed)) return trimmed;
+  if (hasAcceptedQuestionFormat(trimmed)) return trimmed;
 
   const sanitized = trimmed.replace(/[\s,;:.!?-]+$/g, '').trim();
-  return `${sanitized}, ${inferContestStyleEnding(sanitized)}`;
+  return `${sanitized}?`;
 };
 
 const normalizeAlternativeText = (value: string) =>
@@ -445,7 +462,7 @@ const prepareQuestionsForValidation = (questions: NormalizedQuestion[]) =>
   rebalanceCorrectAlternativePositions(
     questions.map((question) => ({
       ...question,
-      question: ensureContestStyleEnding(question.question),
+      question: ensureQuestionClosingPunctuation(question.question),
       alternatives: question.alternatives.map((alternative) => ({
         ...alternative,
         text: normalizeAlternativeText(alternative.text),
@@ -453,6 +470,35 @@ const prepareQuestionsForValidation = (questions: NormalizedQuestion[]) =>
       explanation: String(question.explanation || '').trim(),
     }))
   );
+
+const getFormatDiversityIssues = (questions: NormalizedQuestion[]) => {
+  if (questions.length < 4) return [];
+
+  const issues: string[] = [];
+  const formatCounts = new Map<string, number>();
+  const leadCounts = new Map<string, number>();
+
+  questions.forEach((question) => {
+    const format = getQuestionFormatType(question.question);
+    const lead = getQuestionLeadPattern(question.question);
+    formatCounts.set(format, (formatCounts.get(format) || 0) + 1);
+    if (lead) {
+      leadCounts.set(lead, (leadCounts.get(lead) || 0) + 1);
+    }
+  });
+
+  const dominantFormat = Array.from(formatCounts.entries()).sort((left, right) => right[1] - left[1])[0];
+  if (dominantFormat && dominantFormat[1] >= Math.max(4, Math.ceil(questions.length * 0.75))) {
+    issues.push('o lote ficou demasiado uniforme no formato dos enunciados');
+  }
+
+  const repetitiveLead = Array.from(leadCounts.entries()).find(([, count]) => count >= Math.max(3, Math.ceil(questions.length * 0.6)));
+  if (repetitiveLead) {
+    issues.push('muitas perguntas começaram com a mesma estrutura, deixando o lote robotico');
+  }
+
+  return issues;
+};
 
 const getSupabase = async () => {
   if (!supabaseUrl || !supabaseServiceKey) return null;
@@ -521,8 +567,10 @@ REGRAS IMPORTANTES:
 - A dificuldade precisa refletir claramente o nivel pedido
 - Gere exatamente 4 alternativas por pergunta (A, B, C, D)
 - Apenas uma alternativa deve estar correta
-- Estruture o enunciado como frase afirmativa finalizada com uma destas expressoes: "Excepto:", "Assinale a falsa:" ou "Assinale a verdadeira:"
 - Modele o estilo pelo padrao de concursos reais: objetivo, direto, tecnico e sem floreios desnecessarios
+- Varie o formato dos enunciados dentro do mesmo lote para nao ficar robotico
+- Misture perguntas diretas com "?", afirmacoes tecnicas com "Excepto:", "Assinale a falsa:" ou "Assinale a verdadeira:", e comandos naturais como "Assinale a alternativa correta."
+- Nao repita a mesma abertura ou o mesmo fecho em todas as perguntas do lote
 - Mantenha paralelismo entre as alternativas, com tamanhos visuais semelhantes; a correta nao pode ser sistematicamente a mais longa
 - Inclua pelo menos um distrator visualmente plausivel com erro de escrita discreto quando isso fizer sentido e sem criar ambiguidade
 - Crie distratores que confundam norma tecnica com senso comum sempre que o topico permitir
@@ -591,8 +639,8 @@ const validateQuestions = (
       errors.push(`Q${index + 1}: enunciado vazio/curto`);
     }
 
-    if (question.question && !hasContestStyleEnding(question.question)) {
-      errors.push(`Q${index + 1}: o enunciado precisa terminar com "Excepto:", "Assinale a falsa:" ou "Assinale a verdadeira:"`);
+    if (question.question && !hasAcceptedQuestionFormat(question.question)) {
+      errors.push(`Q${index + 1}: o enunciado precisa terminar com "?", "Excepto:", "Assinale a falsa:", "Assinale a verdadeira:" ou um comando como "Assinale a alternativa correta."`);
     }
 
     if (!question.alternatives || question.alternatives.length !== expectedAlternatives) {
@@ -634,6 +682,8 @@ const validateQuestions = (
     seenQuestions.add(questionKey);
     seenQuestionContents.push(question.question);
   });
+
+  errors.push(...getFormatDiversityIssues(questions));
 
   return errors;
 };
@@ -1139,7 +1189,8 @@ OBJETIVO:
 - devolver exatamente ${questions.length} questoes
 - manter exatamente ${EXPECTED_ALTERNATIVES} alternativas por questao
 - manter apenas 1 alternativa correta por questao
-- fazer o enunciado terminar obrigatoriamente com "Excepto:", "Assinale a falsa:" ou "Assinale a verdadeira:"
+- variar o formato dos enunciados no mesmo lote, evitando que todas usem o mesmo fecho
+- aceitar e misturar formatos como pergunta direta com "?", afirmacao com "Excepto:", "Assinale a falsa:", "Assinale a verdadeira:" e comandos como "Assinale a alternativa correta."
 - encurtar ou reequilibrar as alternativas para que a correta nao fique visualmente muito maior do que as outras
 - preservar dificuldade, sentido tecnico e clareza
 - manter portugues de Angola e estilo de concurso
