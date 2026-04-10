@@ -2306,9 +2306,6 @@ export default async function handler(req: any, res: any) {
             } catch (error) {
               lastError = error;
               console.warn('[generate-questions] model failed', candidateModel, getErrorMessage(error));
-              if (shouldRetryWithAnotherGeminiKey(error)) {
-                throw error;
-              }
               continue;
             }
 
