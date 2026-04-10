@@ -1121,6 +1121,11 @@ const shouldRetryWithAnotherGeminiKey = (error: unknown) => {
   return (
     combined.includes('resource_exhausted') ||
     combined.includes('"code":429') ||
+    combined.includes('"code":503') ||
+    combined.includes('unavailable') ||
+    combined.includes('high demand') ||
+    combined.includes('temporarily unavailable') ||
+    combined.includes('try again later') ||
     combined.includes('reported as leaked') ||
     combined.includes('api key') ||
     combined.includes('apikey') ||
