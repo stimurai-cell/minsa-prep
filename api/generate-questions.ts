@@ -368,6 +368,44 @@ const normalizeAlternativeText = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const MOBILE_ALTERNATIVE_TARGET_CHARS_PER_LINE = 16;
+
+const countAlternativeWords = (value: string) =>
+  normalizeAlternativeText(value)
+    .split(' ')
+    .filter(Boolean)
+    .length;
+
+const estimateAlternativeVisualLineCount = (value: string) => {
+  const words = normalizeAlternativeText(value)
+    .split(' ')
+    .filter(Boolean);
+
+  if (!words.length) return 0;
+
+  let lines = 1;
+  let currentLineLength = 0;
+
+  for (const word of words) {
+    const wordLength = word.length;
+
+    if (!currentLineLength) {
+      currentLineLength = wordLength;
+      continue;
+    }
+
+    if (currentLineLength + 1 + wordLength <= MOBILE_ALTERNATIVE_TARGET_CHARS_PER_LINE) {
+      currentLineLength += 1 + wordLength;
+      continue;
+    }
+
+    lines += 1;
+    currentLineLength = wordLength;
+  }
+
+  return lines;
+};
+
 const cleanQuestionRoboticPhrasing = (value: string) => {
   let question = String(value || '').replace(/\s+/g, ' ').trim();
   if (!question) return '';
@@ -455,22 +493,38 @@ const rebalanceCorrectAlternativePositions = (questions: NormalizedQuestion[]) =
 };
 
 const getAlternativeLengthIssue = (question: NormalizedQuestion) => {
-  const lengths = question.alternatives.map((alternative) => normalizeAlternativeText(alternative.text).length);
+  const normalizedAlternatives = question.alternatives.map((alternative) => normalizeAlternativeText(alternative.text));
+  const lengths = normalizedAlternatives.map((alternative) => alternative.length);
+  const lineCounts = normalizedAlternatives.map((alternative) => estimateAlternativeVisualLineCount(alternative));
+  const wordCounts = normalizedAlternatives.map((alternative) => countAlternativeWords(alternative));
   const correctIndex = question.alternatives.findIndex((alternative) => alternative.isCorrect);
   if (correctIndex < 0 || lengths.length !== EXPECTED_ALTERNATIVES) return '';
 
   const correctLength = lengths[correctIndex];
+  const correctLineCount = lineCounts[correctIndex];
+  const correctWordCount = wordCounts[correctIndex];
   const distractorLengths = lengths.filter((_, index) => index !== correctIndex);
+  const distractorLineCounts = lineCounts.filter((_, index) => index !== correctIndex);
+  const distractorWordCounts = wordCounts.filter((_, index) => index !== correctIndex);
   const maxDistractorLength = Math.max(...distractorLengths, 0);
+  const maxDistractorLineCount = Math.max(...distractorLineCounts, 0);
+  const maxDistractorWordCount = Math.max(...distractorWordCounts, 0);
   const averageDistractorLength = distractorLengths.reduce((sum, length) => sum + length, 0) / Math.max(1, distractorLengths.length);
+  const averageDistractorLineCount = distractorLineCounts.reduce((sum, count) => sum + count, 0) / Math.max(1, distractorLineCounts.length);
   const uniqueLongestCorrect = correctLength === Math.max(...lengths) && lengths.filter((length) => length === correctLength).length === 1;
+  const uniqueTallestCorrect = correctLineCount === Math.max(...lineCounts) && lineCounts.filter((count) => count === correctLineCount).length === 1;
 
-  if (
-    uniqueLongestCorrect
-    && correctLength >= 96
-    && correctLength - maxDistractorLength >= 36
-    && correctLength >= Math.ceil(averageDistractorLength * 1.6)
-  ) {
+  const visuallyUnbalancedByLines = uniqueTallestCorrect
+    && correctLineCount - maxDistractorLineCount >= 2
+    && correctLineCount >= Math.ceil(averageDistractorLineCount + 1)
+    && (correctLength >= 42 || correctWordCount >= 7);
+
+  const visuallyUnbalancedByLength = uniqueLongestCorrect
+    && correctLength - maxDistractorLength >= 18
+    && correctLength >= Math.ceil(averageDistractorLength * 1.25)
+    && correctWordCount - maxDistractorWordCount >= 2;
+
+  if (visuallyUnbalancedByLines || visuallyUnbalancedByLength) {
     return 'a alternativa correta ficou visualmente maior do que as outras';
   }
 
@@ -591,6 +645,8 @@ REGRAS IMPORTANTES:
 - Misture perguntas diretas com "?", afirmacoes tecnicas com "Excepto:", "Assinale a falsa:" ou "Assinale a verdadeira:", e comandos naturais como "Assinale a alternativa correta."
 - Nao repita a mesma abertura ou o mesmo fecho em todas as perguntas do lote
 - Mantenha paralelismo entre as alternativas, com tamanhos visuais semelhantes; a correta nao pode ser sistematicamente a mais longa
+- Mantenha o mesmo nivel de detalhe entre as 4 alternativas; a correta nao pode parecer a opcao mais completa, mais especifica ou mais "profissional" do lote
+- Pense no layout mobile: a correta nao pode ocupar 2 ou mais linhas a mais do que os distratores num ecra estreito
 - Inclua pelo menos um distrator visualmente plausivel com erro de escrita discreto quando isso fizer sentido e sem criar ambiguidade
 - Crie distratores que confundam norma tecnica com senso comum sempre que o topico permitir
 - Inclua explicacoes claras para cada pergunta
@@ -1208,7 +1264,8 @@ OBJETIVO:
 - manter apenas 1 alternativa correta por questao
 - variar o formato dos enunciados no mesmo lote, evitando que todas usem o mesmo fecho
 - aceitar e misturar formatos como pergunta direta com "?", afirmacao com "Excepto:", "Assinale a falsa:", "Assinale a verdadeira:" e comandos como "Assinale a alternativa correta."
-- encurtar ou reequilibrar as alternativas para que a correta nao fique visualmente muito maior do que as outras
+- reescrever as alternativas com paralelismo sintatico e de detalhe; a correta nao pode parecer mais completa nem ocupar 2 ou mais linhas a mais num ecra movel
+- se necessario, encurte a correta e fortaleça os distratores para que todas parecam igualmente plausiveis a primeira vista
 - preservar dificuldade, sentido tecnico e clareza
 - manter portugues de Angola e estilo de concurso
 - devolver JSON puro
