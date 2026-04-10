@@ -37,6 +37,15 @@ type NormalizedQuestion = {
   difficulty: string;
 };
 
+type AlternativeBalanceProfile = {
+  minWords: number;
+  maxWords: number;
+  maxWordSpread: number;
+  maxCharSpread: number;
+  maxVisualLineSpread: number;
+  promptLabel: string;
+};
+
 type PersistInput = {
   area_id: string;
   topic_id?: string | null;
@@ -56,6 +65,11 @@ type SourceFileInput = {
 type GeneratedPayload = {
   validation_summary?: string;
   coverage_summary?: string[];
+  questions?: IncomingQuestion[];
+};
+
+type HarmonizationPayload = {
+  harmonization_summary?: string;
   questions?: IncomingQuestion[];
 };
 
@@ -162,6 +176,51 @@ const getDifficultyInstruction = (difficulty: string) => {
     default:
       return 'MEDIO: exige compreensao pratica, mas sem depender de pegadinhas excessivas.';
   }
+};
+
+const getAlternativeBalanceProfile = (difficulty?: string): AlternativeBalanceProfile => {
+  switch (normalizeDifficulty(difficulty)) {
+    case 'easy':
+      return {
+        minWords: 4,
+        maxWords: 9,
+        maxWordSpread: 3,
+        maxCharSpread: 18,
+        maxVisualLineSpread: 1,
+        promptLabel: '4 a 9 palavras por alternativa, com diferenca maxima de 3 palavras e 18 caracteres dentro da mesma questao.',
+      };
+    case 'hard':
+      return {
+        minWords: 6,
+        maxWords: 13,
+        maxWordSpread: 4,
+        maxCharSpread: 26,
+        maxVisualLineSpread: 1,
+        promptLabel: '6 a 13 palavras por alternativa, com diferenca maxima de 4 palavras e 26 caracteres dentro da mesma questao.',
+      };
+    default:
+      return {
+        minWords: 5,
+        maxWords: 11,
+        maxWordSpread: 3,
+        maxCharSpread: 22,
+        maxVisualLineSpread: 1,
+        promptLabel: '5 a 11 palavras por alternativa, com diferenca maxima de 3 palavras e 22 caracteres dentro da mesma questao.',
+      };
+  }
+};
+
+const buildAlternativeBalanceContract = (difficulty?: string) => {
+  const profile = getAlternativeBalanceProfile(difficulty);
+
+  return [
+    'CONTRATO DE CONSTRUCAO DAS ALTERNATIVAS:',
+    '- Antes de escrever as opcoes finais, defina um unico molde sintatico para as 4 alternativas da mesma questao.',
+    `- Janela recomendada: ${profile.promptLabel}`,
+    `- Em ecra movel, a diferenca visual nao pode ultrapassar ${profile.maxVisualLineSpread} linha estimada entre a maior e a menor alternativa.`,
+    '- Se a correta precisar de um detalhe tecnico, distribua nivel semelhante de detalhe pelos distratores plausiveis.',
+    '- Nao compense apenas cortando a correta; quando fizer sentido, reforce os distratores com o mesmo nivel de especificidade.',
+  ].join('\n');
 };
 
 const normalizeSourceMode = (value?: string): SourceMode => {
@@ -406,6 +465,132 @@ const estimateAlternativeVisualLineCount = (value: string) => {
   return lines;
 };
 
+const analyzeAlternativeBalance = (question: NormalizedQuestion) => {
+  const profile = getAlternativeBalanceProfile(question.difficulty);
+  const normalizedAlternatives = question.alternatives.map((alternative) => normalizeAlternativeText(alternative.text));
+  const charCounts = normalizedAlternatives.map((alternative) => alternative.length);
+  const wordCounts = normalizedAlternatives.map((alternative) => countAlternativeWords(alternative));
+  const lineCounts = normalizedAlternatives.map((alternative) => estimateAlternativeVisualLineCount(alternative));
+  const correctIndex = question.alternatives.findIndex((alternative) => alternative.isCorrect);
+
+  if (correctIndex < 0 || charCounts.length !== EXPECTED_ALTERNATIVES) {
+    return {
+      profile,
+      charCounts,
+      wordCounts,
+      lineCounts,
+      charSpread: 0,
+      wordSpread: 0,
+      lineSpread: 0,
+      needsHarmonization: false,
+      validationIssue: '',
+    };
+  }
+
+  const correctLength = charCounts[correctIndex];
+  const correctWordCount = wordCounts[correctIndex];
+  const correctLineCount = lineCounts[correctIndex];
+  const distractorLengths = charCounts.filter((_, index) => index !== correctIndex);
+  const distractorWordCounts = wordCounts.filter((_, index) => index !== correctIndex);
+  const distractorLineCounts = lineCounts.filter((_, index) => index !== correctIndex);
+  const maxDistractorLength = Math.max(...distractorLengths, 0);
+  const minDistractorLength = Math.min(...distractorLengths, Number.POSITIVE_INFINITY);
+  const maxDistractorWordCount = Math.max(...distractorWordCounts, 0);
+  const minDistractorWordCount = Math.min(...distractorWordCounts, Number.POSITIVE_INFINITY);
+  const maxDistractorLineCount = Math.max(...distractorLineCounts, 0);
+  const averageDistractorLength = distractorLengths.reduce((sum, length) => sum + length, 0) / Math.max(1, distractorLengths.length);
+  const averageDistractorWordCount = distractorWordCounts.reduce((sum, count) => sum + count, 0) / Math.max(1, distractorWordCounts.length);
+  const averageDistractorLineCount = distractorLineCounts.reduce((sum, count) => sum + count, 0) / Math.max(1, distractorLineCounts.length);
+  const maxCharCount = Math.max(...charCounts, 0);
+  const minCharCount = Math.min(...charCounts, Number.POSITIVE_INFINITY);
+  const maxWordCount = Math.max(...wordCounts, 0);
+  const minWordCount = Math.min(...wordCounts, Number.POSITIVE_INFINITY);
+  const maxLineCount = Math.max(...lineCounts, 0);
+  const minLineCount = Math.min(...lineCounts, Number.POSITIVE_INFINITY);
+  const charSpread = maxCharCount - minCharCount;
+  const wordSpread = maxWordCount - minWordCount;
+  const lineSpread = maxLineCount - minLineCount;
+  const uniqueLongestCorrect = correctLength === maxCharCount && charCounts.filter((length) => length === correctLength).length === 1;
+  const uniqueTallestCorrect = correctLineCount === maxLineCount && lineCounts.filter((count) => count === correctLineCount).length === 1;
+  const anyAlternativeOutsideRecommendedWindow = wordCounts.some(
+    (count) => count < profile.minWords || count > profile.maxWords
+  );
+  const correctDominatesByLines = uniqueTallestCorrect
+    && correctLineCount > maxDistractorLineCount
+    && (lineSpread >= 1 || correctLineCount > averageDistractorLineCount)
+    && (correctWordCount >= averageDistractorWordCount + 2 || correctLength >= averageDistractorLength + 10);
+  const correctDominatesByLength = uniqueLongestCorrect
+    && correctLength > maxDistractorLength
+    && charSpread >= 14
+    && (correctWordCount >= maxDistractorWordCount + 2 || correctLength >= averageDistractorLength + 12);
+
+  const needsHarmonization = anyAlternativeOutsideRecommendedWindow
+    || lineSpread > profile.maxVisualLineSpread
+    || wordSpread > profile.maxWordSpread
+    || charSpread > profile.maxCharSpread
+    || correctDominatesByLines
+    || correctDominatesByLength;
+
+  const visuallyUnbalancedByLines = uniqueTallestCorrect
+    && correctLineCount - maxDistractorLineCount >= 2
+    && correctLineCount >= Math.ceil(averageDistractorLineCount + 1)
+    && (correctLength >= 42 || correctWordCount >= 7);
+
+  const visuallyUnbalancedByLength = uniqueLongestCorrect
+    && correctLength - maxDistractorLength >= Math.max(18, profile.maxCharSpread - 2)
+    && correctLength >= Math.ceil(averageDistractorLength * 1.18)
+    && correctWordCount - maxDistractorWordCount >= 2;
+
+  const validationIssue = visuallyUnbalancedByLines || visuallyUnbalancedByLength
+    ? 'a alternativa correta ficou visualmente maior do que as outras'
+    : '';
+
+  return {
+    profile,
+    charCounts,
+    wordCounts,
+    lineCounts,
+    charSpread,
+    wordSpread,
+    lineSpread,
+    needsHarmonization,
+    validationIssue,
+    correctDominatesByLines,
+    correctDominatesByLength,
+    maxDistractorLength,
+    minDistractorLength,
+    maxDistractorWordCount,
+    minDistractorWordCount,
+    minLineCount,
+    minWordCount,
+    minCharCount,
+  };
+};
+
+const shouldProactivelyHarmonizeBatch = (questions: NormalizedQuestion[]) =>
+  questions.some((question) => analyzeAlternativeBalance(question).needsHarmonization);
+
+const buildAlternativeBalanceDiagnostics = (questions: NormalizedQuestion[]) =>
+  questions
+    .map((question, index) => {
+      const analysis = analyzeAlternativeBalance(question);
+      const profile = analysis.profile;
+      const diagnostics = [
+        `Q${index + 1}`,
+        `palavras=${analysis.wordCounts.join('/') || '0/0/0/0'}`,
+        `linhas=${analysis.lineCounts.join('/') || '0/0/0/0'}`,
+        `chars=${analysis.charCounts.join('/') || '0/0/0/0'}`,
+        `janela=${profile.minWords}-${profile.maxWords}`,
+      ];
+
+      if (analysis.needsHarmonization) {
+        diagnostics.push('harmonizar');
+      }
+
+      return `- ${diagnostics.join(' | ')}`;
+    })
+    .join('\n');
+
 const cleanQuestionRoboticPhrasing = (value: string) => {
   let question = String(value || '').replace(/\s+/g, ' ').trim();
   if (!question) return '';
@@ -493,42 +678,7 @@ const rebalanceCorrectAlternativePositions = (questions: NormalizedQuestion[]) =
 };
 
 const getAlternativeLengthIssue = (question: NormalizedQuestion) => {
-  const normalizedAlternatives = question.alternatives.map((alternative) => normalizeAlternativeText(alternative.text));
-  const lengths = normalizedAlternatives.map((alternative) => alternative.length);
-  const lineCounts = normalizedAlternatives.map((alternative) => estimateAlternativeVisualLineCount(alternative));
-  const wordCounts = normalizedAlternatives.map((alternative) => countAlternativeWords(alternative));
-  const correctIndex = question.alternatives.findIndex((alternative) => alternative.isCorrect);
-  if (correctIndex < 0 || lengths.length !== EXPECTED_ALTERNATIVES) return '';
-
-  const correctLength = lengths[correctIndex];
-  const correctLineCount = lineCounts[correctIndex];
-  const correctWordCount = wordCounts[correctIndex];
-  const distractorLengths = lengths.filter((_, index) => index !== correctIndex);
-  const distractorLineCounts = lineCounts.filter((_, index) => index !== correctIndex);
-  const distractorWordCounts = wordCounts.filter((_, index) => index !== correctIndex);
-  const maxDistractorLength = Math.max(...distractorLengths, 0);
-  const maxDistractorLineCount = Math.max(...distractorLineCounts, 0);
-  const maxDistractorWordCount = Math.max(...distractorWordCounts, 0);
-  const averageDistractorLength = distractorLengths.reduce((sum, length) => sum + length, 0) / Math.max(1, distractorLengths.length);
-  const averageDistractorLineCount = distractorLineCounts.reduce((sum, count) => sum + count, 0) / Math.max(1, distractorLineCounts.length);
-  const uniqueLongestCorrect = correctLength === Math.max(...lengths) && lengths.filter((length) => length === correctLength).length === 1;
-  const uniqueTallestCorrect = correctLineCount === Math.max(...lineCounts) && lineCounts.filter((count) => count === correctLineCount).length === 1;
-
-  const visuallyUnbalancedByLines = uniqueTallestCorrect
-    && correctLineCount - maxDistractorLineCount >= 2
-    && correctLineCount >= Math.ceil(averageDistractorLineCount + 1)
-    && (correctLength >= 42 || correctWordCount >= 7);
-
-  const visuallyUnbalancedByLength = uniqueLongestCorrect
-    && correctLength - maxDistractorLength >= 18
-    && correctLength >= Math.ceil(averageDistractorLength * 1.25)
-    && correctWordCount - maxDistractorWordCount >= 2;
-
-  if (visuallyUnbalancedByLines || visuallyUnbalancedByLength) {
-    return 'a alternativa correta ficou visualmente maior do que as outras';
-  }
-
-  return '';
+  return analyzeAlternativeBalance(question).validationIssue;
 };
 
 const prepareQuestionsForValidation = (questions: NormalizedQuestion[]) =>
@@ -627,6 +777,7 @@ VALIDACAO WEB: ${validateWithWeb ? 'ATIVA' : 'DESATIVADA'}
 MATERIAL DE APOIO:
 ${rawContent || 'Nenhum'}
 GUIA DE DIFICULDADE: ${getDifficultyInstruction(difficulty)}
+${buildAlternativeBalanceContract(difficulty)}
 
 QUESTOES JA EXISTENTES NESTE TOPICO. NAO REPITA, NAO REESCREVA E NAO CRIE VARIACOES MUITO PARECIDAS:
 ${formatReferenceQuestions(existingQuestions)}
@@ -641,6 +792,7 @@ REGRAS IMPORTANTES:
 - Gere exatamente 4 alternativas por pergunta (A, B, C, D)
 - Apenas uma alternativa deve estar correta
 - Modele o estilo pelo padrao de concursos reais: objetivo, direto, tecnico e sem floreios desnecessarios
+- Ao criar as alternativas, trabalhe em bloco: defina primeiro o molde das 4 opcoes e so depois escreva o texto final
 - Varie o formato dos enunciados dentro do mesmo lote para nao ficar robotico
 - Misture perguntas diretas com "?", afirmacoes tecnicas com "Excepto:", "Assinale a falsa:" ou "Assinale a verdadeira:", e comandos naturais como "Assinale a alternativa correta."
 - Nao repita a mesma abertura ou o mesmo fecho em todas as perguntas do lote
@@ -1144,6 +1296,41 @@ const createResponseSchema = (Type: any, expectedCount: number) => ({
   required: ['validation_summary', 'coverage_summary', 'questions'],
 });
 
+const createHarmonizationResponseSchema = (Type: any, expectedCount: number) => ({
+  type: Type.OBJECT,
+  properties: {
+    harmonization_summary: { type: Type.STRING },
+    questions: {
+      type: Type.ARRAY,
+      minItems: expectedCount,
+      maxItems: expectedCount,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          question: { type: Type.STRING },
+          alternatives: {
+            type: Type.ARRAY,
+            minItems: EXPECTED_ALTERNATIVES,
+            maxItems: EXPECTED_ALTERNATIVES,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                text: { type: Type.STRING },
+                isCorrect: { type: Type.BOOLEAN },
+              },
+              required: ['text', 'isCorrect'],
+            },
+          },
+          explanation: { type: Type.STRING },
+          difficulty: { type: Type.STRING },
+        },
+        required: ['question', 'alternatives', 'explanation', 'difficulty'],
+      },
+    },
+  },
+  required: ['harmonization_summary', 'questions'],
+});
+
 const createGovernanceReviewResponseSchema = (Type: any, expectedCount: number) => ({
   type: Type.OBJECT,
   properties: {
@@ -1224,6 +1411,93 @@ const createRepairResponseSchema = (Type: any, expectedCount: number) => ({
   required: ['repair_summary', 'questions'],
 });
 
+const harmonizeGeneratedBatch = async ({
+  ai,
+  Type,
+  model,
+  area,
+  topic,
+  difficulty,
+  validateWithWeb,
+  questions,
+  force = false,
+}: {
+  ai: any;
+  Type: any;
+  model: string;
+  area: string;
+  topic: string;
+  difficulty: string;
+  validateWithWeb: boolean;
+  questions: NormalizedQuestion[];
+  force?: boolean;
+}) => {
+  if (!questions.length) {
+    return {
+      harmonizedQuestions: questions,
+      harmonizationSummary: '',
+      harmonizationApplied: false,
+    };
+  }
+
+  const normalizedDifficulty = normalizeDifficulty(difficulty || questions[0]?.difficulty);
+  const shouldHarmonize = force || shouldProactivelyHarmonizeBatch(questions);
+  if (!shouldHarmonize) {
+    return {
+      harmonizedQuestions: questions,
+      harmonizationSummary: '',
+      harmonizationApplied: false,
+    };
+  }
+
+  const prompt = `
+HARMONIZACAO PRE-VALIDACAO DO LOTE DE QUESTOES
+AREA: ${area}
+TOPICO: ${topic}
+DIFICULDADE BASE: ${normalizedDifficulty}
+
+${buildAlternativeBalanceContract(normalizedDifficulty)}
+
+DIAGNOSTICO INICIAL DO LOTE:
+${buildAlternativeBalanceDiagnostics(questions)}
+
+OBJETIVO:
+- reescrever cada bloco de alternativas como se estivesse a criar as 4 opcoes do zero a partir do mesmo molde sintatico
+- preservar AREA, TOPICO, dificuldade, gabarito, explicacao e diversidade de formato dos enunciados
+- impedir que a alternativa correta pareca melhor apenas por ser mais longa, mais detalhada ou mais profissional
+- se uma alternativa estiver curta demais, fortalece-a com detalhe plausivel; se a correta estiver longa demais, encurte-a sem perder rigor
+- devolver o lote pronto para seguir para a validacao estrutural final
+- devolver JSON puro
+
+QUESTOES A HARMONIZAR:
+${JSON.stringify(questions, null, 2)}
+`;
+
+  const response = await generateContentWithTimeout(
+    ai,
+    {
+      model,
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: createHarmonizationResponseSchema(Type, questions.length),
+        tools: validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
+      },
+    },
+    `A harmonizacao pre-validacao do modelo ${model}`,
+  );
+
+  const rawText = extractResponseText(response);
+  const parsed = rawText ? (parseGeneratedPayload(rawText) as HarmonizationPayload) : null;
+  const harmonizedQuestions = prepareQuestionsForValidation(normalizeQuestions(parsed?.questions || []));
+
+  return {
+    harmonizedQuestions,
+    harmonizationSummary: String(parsed?.harmonization_summary || '').trim(),
+    harmonizationApplied: true,
+  };
+};
+
 const repairGeneratedBatch = async ({
   ai,
   Type,
@@ -1254,6 +1528,7 @@ const repairGeneratedBatch = async ({
 REVISE O LOTE DE QUESTOES ABAIXO SEM MUDAR O TEMA CENTRAL.
 AREA: ${area}
 TOPICO: ${topic}
+${buildAlternativeBalanceContract(questions[0]?.difficulty)}
 
 PROBLEMAS DETETADOS PELO VALIDADOR:
 ${validationErrors.map((error) => `- ${error}`).join('\n')}
@@ -1264,6 +1539,7 @@ OBJETIVO:
 - manter apenas 1 alternativa correta por questao
 - variar o formato dos enunciados no mesmo lote, evitando que todas usem o mesmo fecho
 - aceitar e misturar formatos como pergunta direta com "?", afirmacao com "Excepto:", "Assinale a falsa:", "Assinale a verdadeira:" e comandos como "Assinale a alternativa correta."
+- reconstruir cada grupo de alternativas desde a origem, como um conjunto unico, em vez de apenas cortar a opcao correta no fim
 - reescrever as alternativas com paralelismo sintatico e de detalhe; a correta nao pode parecer mais completa nem ocupar 2 ou mais linhas a mais num ecra movel
 - se necessario, encurte a correta e fortaleça os distratores para que todas parecam igualmente plausiveis a primeira vista
 - preservar dificuldade, sentido tecnico e clareza
@@ -1290,7 +1566,31 @@ ${JSON.stringify(questions, null, 2)}
 
   const rawText = extractResponseText(response);
   const parsed = rawText ? parseGeneratedPayload(rawText) : null;
-  const repairedQuestions = prepareQuestionsForValidation(normalizeQuestions(parsed?.questions || []));
+  const normalizedRepairBatch = prepareQuestionsForValidation(normalizeQuestions(parsed?.questions || []));
+  let repairedQuestions = normalizedRepairBatch;
+  let repairHarmonizationSummary = '';
+
+  try {
+    const harmonizedRepairBatch = await harmonizeGeneratedBatch({
+      ai,
+      Type,
+      model,
+      area,
+      topic,
+      difficulty: questions[0]?.difficulty || 'medium',
+      validateWithWeb,
+      questions: normalizedRepairBatch,
+    });
+    repairedQuestions = harmonizedRepairBatch.harmonizedQuestions;
+    repairHarmonizationSummary = harmonizedRepairBatch.harmonizationSummary;
+  } catch (harmonizationError) {
+    console.warn(
+      '[generate-questions] repair harmonization failed',
+      model,
+      getErrorMessage(harmonizationError),
+    );
+  }
+
   const repairValidationErrors = validateQuestions(repairedQuestions, EXPECTED_ALTERNATIVES, {
     expectedCount: questions.length,
   });
@@ -1301,7 +1601,12 @@ ${JSON.stringify(questions, null, 2)}
 
   return {
     repairedQuestions,
-    repairSummary: String(parsed?.repair_summary || '').trim(),
+    repairSummary: [
+      String(parsed?.repair_summary || '').trim(),
+      repairHarmonizationSummary,
+    ]
+      .filter(Boolean)
+      .join(' '),
   };
 };
 
@@ -1379,7 +1684,31 @@ const reviewGeneratedBatch = async ({
       difficulty: String(item.difficulty || '').trim(),
     }));
 
-  const approvedQuestions = prepareQuestionsForValidation(normalizeQuestions(approvedPayload));
+  const normalizedApprovedQuestions = prepareQuestionsForValidation(normalizeQuestions(approvedPayload));
+  let approvedQuestions = normalizedApprovedQuestions;
+  let reviewHarmonizationSummary = '';
+
+  try {
+    const harmonizedReviewedBatch = await harmonizeGeneratedBatch({
+      ai,
+      Type,
+      model,
+      area,
+      topic,
+      difficulty: normalizedApprovedQuestions[0]?.difficulty || questions[0]?.difficulty || 'medium',
+      validateWithWeb,
+      questions: normalizedApprovedQuestions,
+    });
+    approvedQuestions = harmonizedReviewedBatch.harmonizedQuestions;
+    reviewHarmonizationSummary = harmonizedReviewedBatch.harmonizationSummary;
+  } catch (harmonizationError) {
+    console.warn(
+      '[generate-questions] governance harmonization failed',
+      model,
+      getErrorMessage(harmonizationError),
+    );
+  }
+
   const reviewValidationErrors = approvedQuestions.length
     ? validateQuestions(approvedQuestions, EXPECTED_ALTERNATIVES, { referenceQuestions })
     : [];
@@ -1398,7 +1727,12 @@ const reviewGeneratedBatch = async ({
 
   return {
     approvedQuestions,
-    reviewerSummary: String(parsed?.reviewer_summary || '').trim(),
+    reviewerSummary: [
+      String(parsed?.reviewer_summary || '').trim(),
+      reviewHarmonizationSummary,
+    ]
+      .filter(Boolean)
+      .join(' '),
     rejectedReasons,
   };
 };
@@ -1788,7 +2122,32 @@ export default async function handler(req: any, res: any) {
                 const rawText = extractResponseText(response);
                 const parsedBatch = rawText ? parseGeneratedPayload(rawText) : null;
                 const normalizedBatch = prepareQuestionsForValidation(normalizeQuestions(parsedBatch?.questions || []));
-                const filteredBatch = filterUniqueQuestions(normalizedBatch, {
+                let candidateBatchForValidation = normalizedBatch;
+                let harmonizationSummary = '';
+
+                try {
+                  const harmonizedBatch = await harmonizeGeneratedBatch({
+                    ai,
+                    Type,
+                    model: candidateModel,
+                    area: resolvedAreaName,
+                    topic: resolvedTheme,
+                    difficulty: normalizeDifficulty(difficulty),
+                    validateWithWeb: preparedSource.validateWithWeb,
+                    questions: normalizedBatch,
+                  });
+
+                  candidateBatchForValidation = harmonizedBatch.harmonizedQuestions;
+                  harmonizationSummary = harmonizedBatch.harmonizationSummary;
+                } catch (harmonizationError) {
+                  console.warn(
+                    '[generate-questions] pre-validation harmonization failed',
+                    candidateModel,
+                    getErrorMessage(harmonizationError),
+                  );
+                }
+
+                const filteredBatch = filterUniqueQuestions(candidateBatchForValidation, {
                   referenceQuestions,
                 });
                 let uniqueBatch = filteredBatch.uniqueQuestions;
@@ -1865,6 +2224,9 @@ export default async function handler(req: any, res: any) {
                   const validationSummary = String(parsedBatch?.validation_summary || '').trim();
                   if (validationSummary) {
                     candidateValidationSummaryParts.push(validationSummary);
+                  }
+                  if (harmonizationSummary) {
+                    candidateValidationSummaryParts.push(harmonizationSummary);
                   }
                   if (reviewedBatch.reviewerSummary) {
                     candidateValidationSummaryParts.push(reviewedBatch.reviewerSummary);
@@ -2018,3 +2380,4 @@ export default async function handler(req: any, res: any) {
 }
 
 export const _validateQuestionsForTest = validateQuestions;
+export const _analyzeAlternativeBalanceForTest = analyzeAlternativeBalance;

@@ -1,4 +1,7 @@
-import { _validateQuestionsForTest as validate } from '../api/generate-questions';
+import {
+  _analyzeAlternativeBalanceForTest as analyzeAlternativeBalance,
+  _validateQuestionsForTest as validate,
+} from '../api/generate-questions';
 
 const balancedSample = [
   {
@@ -40,4 +43,10 @@ if (!biasedErrors.some((error) => error.includes('visualmente maior'))) {
   process.exit(1);
 }
 
-console.log('Validacao de payload IA passou com cobertura de regressao.');
+const proactiveSignal = analyzeAlternativeBalance(visuallyBiasedSample[0] as any);
+if (!proactiveSignal.needsHarmonization) {
+  console.error('A pre-harmonizacao nao sinalizou o caso regressivo:', proactiveSignal);
+  process.exit(1);
+}
+
+console.log('Validacao de payload IA passou com cobertura de regressao e pre-harmonizacao.');

@@ -209,6 +209,7 @@ TAREFA:
 - Nunca aceite inversao de conceitos, cadeias, aminoacidos, unidades, valores ou nomenclatura.
 - Mantenha o estilo de concurso: enunciado afirmativo terminado em "Excepto:", "Assinale a falsa:" ou "Assinale a verdadeira:".
 - Corrija lotes em que a alternativa correta esteja visualmente maior do que as demais; as opcoes devem ter tamanho e estrutura semelhantes.
+- Quando precisar corrigir alternativas, reconstrua o bloco inteiro como um conjunto unico desde a origem, em vez de apenas cortar a correta.
 - Reprove e reescreva alternativas quando a correta parecer mais completa, mais especifica ou mais convincente apenas pelo tamanho.
 - Pense no ecra movel: a correta nao pode ocupar 2 ou mais linhas a mais do que as outras.
 - Preserve 4 alternativas (A-D) e use distratores plausiveis, incluindo erro grafico discreto ou confusao entre norma tecnica e senso comum quando isso melhorar o realismo sem gerar ambiguidade.
