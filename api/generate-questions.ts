@@ -16,7 +16,14 @@ const readEnvValue = (...values: Array<string | undefined>) =>
 const supabaseUrl = readEnvValue(process.env.VITE_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_URL);
 const supabaseServiceKey = readEnvValue(process.env.SUPABASE_SERVICE_ROLE_KEY);
 const databaseUrl = readEnvValue(process.env.DATABASE_URL);
-const geminiApiKey = readEnvValue(process.env.GEMINI_API_KEY, process.env.VITE_GEMINI_API_KEY);
+const geminiApiKeys = Array.from(
+  new Set(
+    [process.env.GEMINI_API_KEY, process.env.VITE_GEMINI_API_KEY]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+  )
+);
+const geminiApiKey = geminiApiKeys[0] || '';
 const defaultGeminiModel = 'gemini-2.5-flash';
 
 let supabaseClientPromise: Promise<any> | null = null;
@@ -1107,6 +1114,20 @@ const getErrorMessage = (error: unknown) => {
   return [message, ...extraParts].join(' | ');
 };
 
+const shouldRetryWithAnotherGeminiKey = (error: unknown) => {
+  const { message, details, hint, code } = extractErrorInfo(error);
+  const combined = `${message} ${details} ${hint} ${code}`.toLowerCase();
+
+  return (
+    combined.includes('resource_exhausted') ||
+    combined.includes('"code":429') ||
+    combined.includes('reported as leaked') ||
+    combined.includes('api key') ||
+    combined.includes('apikey') ||
+    combined.includes('permission')
+  );
+};
+
 const shouldRetryQuestionInsertWithoutArea = (error: unknown) => {
   const { message, details, code } = extractErrorInfo(error);
   const combined = `${message} ${details}`.toLowerCase();
@@ -2025,6 +2046,7 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({
         model: modelName,
         model_candidates: modelCandidates,
+        api_key_candidates: geminiApiKeys.length,
         mode: geminiApiKey ? 'server-api' : 'missing-gemini-key',
         can_generate: Boolean(geminiApiKey),
         can_save: Boolean(databaseUrl || hasSupabase),
@@ -2048,9 +2070,6 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ error: 'Area e topico sao obrigatorios.' });
       }
 
-      const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-      const preparedSource = await prepareGenerationSource(req.body || {}, ai);
-      const resolvedTheme = preparedSource.resolvedTheme || requestedTopicName;
       const existingQuestions = hasSupabase || databaseUrl
         ? await fetchExistingTopicQuestions(resolvedAreaId, topic_id, topic_name, custom_topic_name)
         : [];
@@ -2060,272 +2079,310 @@ export default async function handler(req: any, res: any) {
       let coverageSummary: string[] = [];
       let validationSummaryParts: string[] = [];
       let lastError: unknown = null;
+      let resolvedTheme = requestedTopicName;
+      let sourceModeUsed: SourceMode = normalizeSourceMode(req.body?.source_mode);
+      let validateWithWebUsed = Boolean(req.body?.validate_with_web) || sourceModeUsed !== 'topic';
 
-      try {
-        for (const candidateModel of modelCandidates) {
-          let candidateValidationErrors: string[] = [];
-          try {
-            const candidateQuestions: NormalizedQuestion[] = [];
-            let candidateCoverageSummary: string[] = [];
-            const candidateValidationSummaryParts: string[] = [];
+      for (const [apiKeyIndex, candidateApiKey] of geminiApiKeys.entries()) {
+        const ai = new GoogleGenAI({ apiKey: candidateApiKey });
+        let preparedSource: PreparedGenerationSource | null = null;
 
-            while (candidateQuestions.length < requestedCount) {
-              const remainingCount = requestedCount - candidateQuestions.length;
-              const batchCount = Math.min(MAX_GENERATION_BATCH_SIZE, remainingCount);
-              const referenceQuestions = [
-                ...existingQuestions.map((item) => item.content),
-                ...candidateQuestions.map((question) => question.question),
-              ];
-              const prompt = buildQuestionsPrompt({
-                area: resolvedAreaName,
-                topic: resolvedTheme,
-                count: batchCount,
-                difficulty: normalizeDifficulty(difficulty),
-                rawContent: preparedSource.rawContext,
-                sourceMode: preparedSource.sourceMode,
-                validateWithWeb: preparedSource.validateWithWeb,
-                existingQuestions: [
-                  ...candidateQuestions.map((question) => ({
-                    content: question.question,
-                    difficulty: question.difficulty,
-                  })),
-                  ...existingQuestions,
-                ].slice(0, MAX_REFERENCE_QUESTIONS),
-              });
+        try {
+          preparedSource = await prepareGenerationSource(req.body || {}, ai);
+          resolvedTheme = preparedSource.resolvedTheme || requestedTopicName;
+          sourceModeUsed = preparedSource.sourceMode;
+          validateWithWebUsed = preparedSource.validateWithWeb;
 
-              const contents = preparedSource.filePart
-                ? [{
-                  role: 'user',
-                  parts: [
-                    createPartFromText(prompt),
-                    createPartFromUri(preparedSource.filePart.uri, preparedSource.filePart.mimeType),
-                  ],
-                }]
-                : prompt;
+          for (const candidateModel of modelCandidates) {
+            let candidateValidationErrors: string[] = [];
+            try {
+              const candidateQuestions: NormalizedQuestion[] = [];
+              let candidateCoverageSummary: string[] = [];
+              const candidateValidationSummaryParts: string[] = [];
 
-              candidateValidationErrors = [];
-
-              for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt += 1) {
-                const response = await generateContentWithTimeout(
-                  ai,
-                  {
-                    model: candidateModel,
-                    contents,
-                    config: {
-                      responseMimeType: 'application/json',
-                      responseSchema: createResponseSchema(Type, batchCount),
-                      tools: preparedSource.validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
-                    },
-                  },
-                  `A geracao do modelo ${candidateModel}`,
-                );
-                const rawText = extractResponseText(response);
-                const parsedBatch = rawText ? parseGeneratedPayload(rawText) : null;
-                const normalizedBatch = prepareQuestionsForValidation(normalizeQuestions(parsedBatch?.questions || []));
-                let candidateBatchForValidation = normalizedBatch;
-                let harmonizationSummary = '';
-
-                try {
-                  const harmonizedBatch = await harmonizeGeneratedBatch({
-                    ai,
-                    Type,
-                    model: candidateModel,
-                    area: resolvedAreaName,
-                    topic: resolvedTheme,
-                    difficulty: normalizeDifficulty(difficulty),
-                    validateWithWeb: preparedSource.validateWithWeb,
-                    questions: normalizedBatch,
-                  });
-
-                  candidateBatchForValidation = harmonizedBatch.harmonizedQuestions;
-                  harmonizationSummary = harmonizedBatch.harmonizationSummary;
-                } catch (harmonizationError) {
-                  console.warn(
-                    '[generate-questions] pre-validation harmonization failed',
-                    candidateModel,
-                    getErrorMessage(harmonizationError),
-                  );
-                }
-
-                const filteredBatch = filterUniqueQuestions(candidateBatchForValidation, {
-                  referenceQuestions,
+              while (candidateQuestions.length < requestedCount) {
+                const remainingCount = requestedCount - candidateQuestions.length;
+                const batchCount = Math.min(MAX_GENERATION_BATCH_SIZE, remainingCount);
+                const referenceQuestions = [
+                  ...existingQuestions.map((item) => item.content),
+                  ...candidateQuestions.map((question) => question.question),
+                ];
+                const prompt = buildQuestionsPrompt({
+                  area: resolvedAreaName,
+                  topic: resolvedTheme,
+                  count: batchCount,
+                  difficulty: normalizeDifficulty(difficulty),
+                  rawContent: preparedSource.rawContext,
+                  sourceMode: preparedSource.sourceMode,
+                  validateWithWeb: preparedSource.validateWithWeb,
+                  existingQuestions: [
+                    ...candidateQuestions.map((question) => ({
+                      content: question.question,
+                      difficulty: question.difficulty,
+                    })),
+                    ...existingQuestions,
+                  ].slice(0, MAX_REFERENCE_QUESTIONS),
                 });
-                let uniqueBatch = filteredBatch.uniqueQuestions;
 
-                const structuralValidationErrors = uniqueBatch.length
-                  ? validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES, { referenceQuestions })
-                  : [
-                    filteredBatch.skippedQuestions.length
-                      ? 'A IA devolveu apenas perguntas repetidas nesta tentativa.'
-                      : 'Nenhuma pergunta valida foi gerada nesta tentativa.',
-                  ];
-                const diversityValidationIssues = uniqueBatch.length
-                  ? getFormatDiversityIssues(uniqueBatch)
-                  : [];
-                candidateValidationErrors = [...structuralValidationErrors, ...diversityValidationIssues];
+                const contents = preparedSource.filePart
+                  ? [{
+                    role: 'user',
+                    parts: [
+                      createPartFromText(prompt),
+                      createPartFromUri(preparedSource.filePart.uri, preparedSource.filePart.mimeType),
+                    ],
+                  }]
+                  : prompt;
 
-                if (candidateValidationErrors.length && uniqueBatch.length) {
+                candidateValidationErrors = [];
+
+                for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt += 1) {
+                  const response = await generateContentWithTimeout(
+                    ai,
+                    {
+                      model: candidateModel,
+                      contents,
+                      config: {
+                        responseMimeType: 'application/json',
+                        responseSchema: createResponseSchema(Type, batchCount),
+                        tools: preparedSource.validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
+                      },
+                    },
+                    `A geracao do modelo ${candidateModel}`,
+                  );
+                  const rawText = extractResponseText(response);
+                  const parsedBatch = rawText ? parseGeneratedPayload(rawText) : null;
+                  const normalizedBatch = prepareQuestionsForValidation(normalizeQuestions(parsedBatch?.questions || []));
+                  let candidateBatchForValidation = normalizedBatch;
+                  let harmonizationSummary = '';
+
                   try {
-                    const repairedBatch = await repairGeneratedBatch({
+                    const harmonizedBatch = await harmonizeGeneratedBatch({
                       ai,
                       Type,
                       model: candidateModel,
                       area: resolvedAreaName,
                       topic: resolvedTheme,
+                      difficulty: normalizeDifficulty(difficulty),
                       validateWithWeb: preparedSource.validateWithWeb,
-                      questions: uniqueBatch,
-                      validationErrors: candidateValidationErrors,
+                      questions: normalizedBatch,
                     });
 
-                    uniqueBatch = repairedBatch.repairedQuestions;
-                    const repairedStructuralErrors = validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES, { referenceQuestions });
-                    const repairedDiversityIssues = getFormatDiversityIssues(uniqueBatch);
-                    candidateValidationErrors = repairedStructuralErrors;
-
-                    if (!repairedStructuralErrors.length && repairedDiversityIssues.length) {
-                      candidateValidationSummaryParts.push(`A IA manteve boa cobertura tecnica, mas o lote ainda ficou um pouco uniforme no formato: ${repairedDiversityIssues.join('; ')}.`);
-                    }
-
-                    if (!repairedStructuralErrors.length && repairedBatch.repairSummary) {
-                      candidateValidationSummaryParts.push(repairedBatch.repairSummary);
-                    }
-                  } catch (repairError) {
+                    candidateBatchForValidation = harmonizedBatch.harmonizedQuestions;
+                    harmonizationSummary = harmonizedBatch.harmonizationSummary;
+                  } catch (harmonizationError) {
                     console.warn(
-                      '[generate-questions] repair step failed',
+                      '[generate-questions] pre-validation harmonization failed',
                       candidateModel,
-                      getErrorMessage(repairError),
+                      getErrorMessage(harmonizationError),
                     );
                   }
-                }
 
-                if (!candidateValidationErrors.length) {
-                  const reviewedBatch = await reviewGeneratedBatch({
-                    ai,
-                    Type,
-                    model: candidateModel,
-                    area: resolvedAreaName,
-                    topic: resolvedTheme,
-                    sourceMode: preparedSource.sourceMode,
-                    validateWithWeb: preparedSource.validateWithWeb,
-                    questions: uniqueBatch,
+                  const filteredBatch = filterUniqueQuestions(candidateBatchForValidation, {
                     referenceQuestions,
                   });
+                  let uniqueBatch = filteredBatch.uniqueQuestions;
 
-                  if (!reviewedBatch.approvedQuestions.length) {
-                    candidateValidationErrors = reviewedBatch.rejectedReasons.length
-                      ? reviewedBatch.rejectedReasons
-                      : ['A revisao tecnica reprovou todas as perguntas desta tentativa.'];
-                    continue;
+                  const structuralValidationErrors = uniqueBatch.length
+                    ? validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES, { referenceQuestions })
+                    : [
+                      filteredBatch.skippedQuestions.length
+                        ? 'A IA devolveu apenas perguntas repetidas nesta tentativa.'
+                        : 'Nenhuma pergunta valida foi gerada nesta tentativa.',
+                    ];
+                  const diversityValidationIssues = uniqueBatch.length
+                    ? getFormatDiversityIssues(uniqueBatch)
+                    : [];
+                  candidateValidationErrors = [...structuralValidationErrors, ...diversityValidationIssues];
+
+                  if (candidateValidationErrors.length && uniqueBatch.length) {
+                    try {
+                      const repairedBatch = await repairGeneratedBatch({
+                        ai,
+                        Type,
+                        model: candidateModel,
+                        area: resolvedAreaName,
+                        topic: resolvedTheme,
+                        validateWithWeb: preparedSource.validateWithWeb,
+                        questions: uniqueBatch,
+                        validationErrors: candidateValidationErrors,
+                      });
+
+                      uniqueBatch = repairedBatch.repairedQuestions;
+                      const repairedStructuralErrors = validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES, { referenceQuestions });
+                      const repairedDiversityIssues = getFormatDiversityIssues(uniqueBatch);
+                      candidateValidationErrors = repairedStructuralErrors;
+
+                      if (!repairedStructuralErrors.length && repairedDiversityIssues.length) {
+                        candidateValidationSummaryParts.push(`A IA manteve boa cobertura tecnica, mas o lote ainda ficou um pouco uniforme no formato: ${repairedDiversityIssues.join('; ')}.`);
+                      }
+
+                      if (!repairedStructuralErrors.length && repairedBatch.repairSummary) {
+                        candidateValidationSummaryParts.push(repairedBatch.repairSummary);
+                      }
+                    } catch (repairError) {
+                      console.warn(
+                        '[generate-questions] repair step failed',
+                        candidateModel,
+                        getErrorMessage(repairError),
+                      );
+                    }
                   }
 
-                  const balancedBatch = prepareQuestionsForValidation(reviewedBatch.approvedQuestions);
-                  candidateQuestions.push(...balancedBatch);
-                  candidateCoverageSummary = mergeCoverageSummary(candidateCoverageSummary, parsedBatch?.coverage_summary);
-                  const validationSummary = String(parsedBatch?.validation_summary || '').trim();
-                  if (validationSummary) {
-                    candidateValidationSummaryParts.push(validationSummary);
+                  if (!candidateValidationErrors.length) {
+                    const reviewedBatch = await reviewGeneratedBatch({
+                      ai,
+                      Type,
+                      model: candidateModel,
+                      area: resolvedAreaName,
+                      topic: resolvedTheme,
+                      sourceMode: preparedSource.sourceMode,
+                      validateWithWeb: preparedSource.validateWithWeb,
+                      questions: uniqueBatch,
+                      referenceQuestions,
+                    });
+
+                    if (!reviewedBatch.approvedQuestions.length) {
+                      candidateValidationErrors = reviewedBatch.rejectedReasons.length
+                        ? reviewedBatch.rejectedReasons
+                        : ['A revisao tecnica reprovou todas as perguntas desta tentativa.'];
+                      continue;
+                    }
+
+                    const balancedBatch = prepareQuestionsForValidation(reviewedBatch.approvedQuestions);
+                    candidateQuestions.push(...balancedBatch);
+                    candidateCoverageSummary = mergeCoverageSummary(candidateCoverageSummary, parsedBatch?.coverage_summary);
+                    const validationSummary = String(parsedBatch?.validation_summary || '').trim();
+                    if (validationSummary) {
+                      candidateValidationSummaryParts.push(validationSummary);
+                    }
+                    if (harmonizationSummary) {
+                      candidateValidationSummaryParts.push(harmonizationSummary);
+                    }
+                    if (reviewedBatch.reviewerSummary) {
+                      candidateValidationSummaryParts.push(reviewedBatch.reviewerSummary);
+                    }
+                    if (filteredBatch.skippedQuestions.length) {
+                      candidateValidationSummaryParts.push(
+                        `${filteredBatch.skippedQuestions.length} perguntas repetidas foram descartadas automaticamente nesta rodada.`
+                      );
+                    }
+                    if (reviewedBatch.rejectedReasons.length) {
+                      candidateValidationSummaryParts.push(
+                        `${reviewedBatch.rejectedReasons.length} perguntas foram bloqueadas pela revisao tecnica por risco de erro ou inadequacao area-topico.`
+                      );
+                    }
+                    break;
                   }
-                  if (harmonizationSummary) {
-                    candidateValidationSummaryParts.push(harmonizationSummary);
-                  }
-                  if (reviewedBatch.reviewerSummary) {
-                    candidateValidationSummaryParts.push(reviewedBatch.reviewerSummary);
-                  }
-                  if (filteredBatch.skippedQuestions.length) {
-                    candidateValidationSummaryParts.push(
-                      `${filteredBatch.skippedQuestions.length} perguntas repetidas foram descartadas automaticamente nesta rodada.`
-                    );
-                  }
-                  if (reviewedBatch.rejectedReasons.length) {
-                    candidateValidationSummaryParts.push(
-                      `${reviewedBatch.rejectedReasons.length} perguntas foram bloqueadas pela revisao tecnica por risco de erro ou inadequacao area-topico.`
-                    );
-                  }
-                  break;
+
+                  console.warn(
+                    '[generate-questions] validation failed attempt',
+                    attempt,
+                    candidateModel,
+                    `batch=${batchCount}`,
+                    candidateValidationErrors,
+                    filteredBatch.skippedQuestions,
+                  );
                 }
 
-                console.warn(
-                  '[generate-questions] validation failed attempt',
-                  attempt,
-                  candidateModel,
-                  `batch=${batchCount}`,
-                  candidateValidationErrors,
-                  filteredBatch.skippedQuestions,
-                );
+                if (candidateValidationErrors.length) {
+                  break;
+                }
               }
 
-              if (candidateValidationErrors.length) {
+              if (!candidateValidationErrors.length && candidateQuestions.length === requestedCount) {
+                normalized = candidateQuestions;
+                coverageSummary = candidateCoverageSummary;
+                validationSummaryParts = candidateValidationSummaryParts;
+                validationErrors = [];
+                modelUsed = candidateModel;
                 break;
               }
+            } catch (error) {
+              lastError = error;
+              console.warn('[generate-questions] model failed', candidateModel, getErrorMessage(error));
+              if (shouldRetryWithAnotherGeminiKey(error)) {
+                throw error;
+              }
+              continue;
             }
 
-            if (!candidateValidationErrors.length && candidateQuestions.length === requestedCount) {
-              normalized = candidateQuestions;
-              coverageSummary = candidateCoverageSummary;
-              validationSummaryParts = candidateValidationSummaryParts;
-              validationErrors = [];
-              modelUsed = candidateModel;
+            if (!normalized.length) {
+              validationErrors = candidateValidationErrors.length
+                ? candidateValidationErrors
+                : [`Nao foi possivel completar o lote de ${requestedCount} perguntas com o modelo ${candidateModel}.`];
+            }
+
+            if (normalized.length === requestedCount) {
               break;
             }
-          } catch (error) {
-            lastError = error;
-            console.warn('[generate-questions] model failed', candidateModel, getErrorMessage(error));
-            continue;
           }
 
-          if (!normalized.length) {
-            validationErrors = candidateValidationErrors.length
-              ? candidateValidationErrors
-              : [`Nao foi possivel completar o lote de ${requestedCount} perguntas com o modelo ${candidateModel}.`];
+          if (!normalized.length && !validationErrors.length && lastError) {
+            throw lastError;
+          }
+        } catch (error) {
+          lastError = error;
+          const canTryNextKey = shouldRetryWithAnotherGeminiKey(error) && apiKeyIndex < geminiApiKeys.length - 1;
+
+          if (!canTryNextKey) {
+            throw error;
           }
 
-          if (normalized.length === requestedCount) {
-            break;
+          console.warn(
+            '[generate-questions] switching gemini key after failure',
+            `key=${apiKeyIndex + 1}/${geminiApiKeys.length}`,
+            getErrorMessage(error),
+          );
+          continue;
+        } finally {
+          if (preparedSource?.cleanup) {
+            await preparedSource.cleanup();
           }
         }
 
-        if (!normalized.length && !validationErrors.length && lastError) {
-          throw lastError;
-        }
-
-        if (!normalized.length) {
-          return res.status(422).json({
-            error: `A IA nao conseguiu fechar ${requestedCount} perguntas validas apos varias tentativas.`,
-            validation_errors: validationErrors,
-          });
-        }
-
-        if (validationErrors.length || normalized.length !== requestedCount) {
-          return res.status(422).json({
-            error: `A IA nao conseguiu entregar exatamente ${requestedCount} perguntas validas.`,
-            validation_errors: validationErrors,
-          });
-        }
-
-        return res.status(200).json({
-          area_id: resolvedAreaId,
-          area_name: resolvedAreaName,
-          topic_id,
-          topic_name,
-          custom_topic_name,
-          count: requestedCount,
-          difficulty: normalizeDifficulty(difficulty),
-          model_used: modelUsed,
-          source_mode: preparedSource.sourceMode,
-          source_theme: resolvedTheme,
-          validate_with_web: preparedSource.validateWithWeb,
-          validation_summary: Array.from(new Set(validationSummaryParts.filter(Boolean))).join(' ')
-            || (preparedSource.validateWithWeb
-              ? 'Conteudo consolidado com validacao web e revisao tecnica por area antes da montagem final das questoes.'
-              : 'Conteudo estruturado a partir do topico, seguido de revisao tecnica por area antes da aprovacao final.'),
-          coverage_summary: coverageSummary.length ? coverageSummary : createCoverageSummary(normalized),
-          questions: normalized,
-        });
-      } finally {
-        if (preparedSource.cleanup) {
-          await preparedSource.cleanup();
+        if (normalized.length === requestedCount || validationErrors.length) {
+          break;
         }
       }
+
+      if (!normalized.length && !validationErrors.length && lastError) {
+        throw lastError;
+      }
+
+      if (!normalized.length) {
+        return res.status(422).json({
+          error: `A IA nao conseguiu fechar ${requestedCount} perguntas validas apos varias tentativas.`,
+          validation_errors: validationErrors,
+        });
+      }
+
+      if (validationErrors.length || normalized.length !== requestedCount) {
+        return res.status(422).json({
+          error: `A IA nao conseguiu entregar exatamente ${requestedCount} perguntas validas.`,
+          validation_errors: validationErrors,
+        });
+      }
+
+      return res.status(200).json({
+        area_id: resolvedAreaId,
+        area_name: resolvedAreaName,
+        topic_id,
+        topic_name,
+        custom_topic_name,
+        count: requestedCount,
+        difficulty: normalizeDifficulty(difficulty),
+        model_used: modelUsed,
+        source_mode: sourceModeUsed,
+        source_theme: resolvedTheme,
+        validate_with_web: validateWithWebUsed,
+        validation_summary: Array.from(new Set(validationSummaryParts.filter(Boolean))).join(' ')
+          || (validateWithWebUsed
+            ? 'Conteudo consolidado com validacao web e revisao tecnica por area antes da montagem final das questoes.'
+            : 'Conteudo estruturado a partir do topico, seguido de revisao tecnica por area antes da aprovacao final.'),
+        coverage_summary: coverageSummary.length ? coverageSummary : createCoverageSummary(normalized),
+        questions: normalized,
+      });
     }
 
     if (action === 'save') {
