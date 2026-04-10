@@ -21,9 +21,11 @@ const readEnvValue = (...values: Array<string | undefined>) =>
 const supabaseUrl = readEnvValue(process.env.VITE_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_URL);
 const supabaseServiceKey = readEnvValue(process.env.SUPABASE_SERVICE_ROLE_KEY);
 const databaseUrl = readEnvValue(process.env.DATABASE_URL);
+const allowClientPrefixedGeminiFallback = !readEnvValue(process.env.VERCEL_ENV);
+const localDevGeminiFallbackKey = allowClientPrefixedGeminiFallback ? process.env.VITE_GEMINI_API_KEY : '';
 const geminiApiKeys = Array.from(
   new Set(
-    [process.env.GEMINI_API_KEY, process.env.VITE_GEMINI_API_KEY]
+    [process.env.GEMINI_API_KEY, process.env.GEMINI_API_KEY_2, localDevGeminiFallbackKey]
       .map((value) => String(value || '').trim())
       .filter(Boolean)
   )
@@ -1114,7 +1116,7 @@ const getErrorMessage = (error: unknown) => {
   const { message, details, hint, code } = extractErrorInfo(error);
   if (!message) return 'Falha desconhecida ao guardar ou comunicar com o servidor.';
   if (message.toLowerCase().includes('reported as leaked')) {
-    return 'A chave do Gemini foi bloqueada por vazamento. Gere uma nova chave no Google AI Studio e atualize GEMINI_API_KEY/VITE_GEMINI_API_KEY.';
+    return 'A chave do Gemini foi bloqueada por vazamento. Gere uma nova chave no Google AI Studio e atualize GEMINI_API_KEY/GEMINI_API_KEY_2.';
   }
   if (message.includes('RESOURCE_EXHAUSTED') || message.includes('"code":429')) return 'A quota do Gemini acabou. Tente novamente mais tarde.';
   if (

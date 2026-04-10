@@ -11,7 +11,7 @@ const getErrorMessage = (error: unknown) => {
   const message = error.message;
 
   if (message.toLowerCase().includes('reported as leaked')) {
-    return 'A chave do Gemini foi bloqueada por vazamento. Gere outra chave e atualize as variaveis GEMINI_API_KEY/VITE_GEMINI_API_KEY.';
+    return 'A chave do Gemini foi bloqueada por vazamento. Gere outra chave e atualize as variaveis GEMINI_API_KEY/GEMINI_API_KEY_2. Use VITE_GEMINI_API_KEY apenas para fallback local em desenvolvimento.';
   }
 
   if (message.includes('RESOURCE_EXHAUSTED') || message.includes('"code":429')) {
