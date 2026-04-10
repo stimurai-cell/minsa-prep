@@ -6,6 +6,11 @@ import {
   buildGovernanceReviewPrompt,
   sanitizeGovernanceReferences,
 } from './_lib/questionGovernance.js';
+import {
+  buildTopicGroundingPromptSection,
+  resolveTopicGroundingHint,
+  type TopicGroundingHint,
+} from './_lib/topicGrounding.js';
 
 const readEnvValue = (...values: Array<string | undefined>) =>
   values
@@ -97,6 +102,7 @@ type PreparedGenerationSource = {
   resolvedTheme: string;
   rawContext: string;
   validateWithWeb: boolean;
+  topicGrounding: TopicGroundingHint;
   filePart?: { uri: string; mimeType: string; name: string } | null;
   cleanup?: (() => Promise<void>) | null;
 };
@@ -761,6 +767,7 @@ const buildQuestionsPrompt = ({
   rawContent,
   sourceMode,
   validateWithWeb,
+  topicGrounding,
   existingQuestions,
 }: {
   area: string;
@@ -770,8 +777,16 @@ const buildQuestionsPrompt = ({
   rawContent: string;
   sourceMode: SourceMode;
   validateWithWeb: boolean;
+  topicGrounding: TopicGroundingHint;
   existingQuestions: Array<{ content: string; difficulty?: string | null }>;
-}) => `
+}) => {
+  const topicGroundingSection = buildTopicGroundingPromptSection({
+    area,
+    topic,
+    validateWithWeb,
+  }).section;
+
+  return `
 ESPECIALISTA EM CONCURSOS DE SAUDE EM ANGOLA
 DATA ATUAL: ${new Date().toISOString().slice(0, 10)}
 AREA: ${area}
@@ -785,6 +800,7 @@ MATERIAL DE APOIO:
 ${rawContent || 'Nenhum'}
 GUIA DE DIFICULDADE: ${getDifficultyInstruction(difficulty)}
 ${buildAlternativeBalanceContract(difficulty)}
+${topicGroundingSection}
 
 QUESTOES JA EXISTENTES NESTE TOPICO. NAO REPITA, NAO REESCREVA E NAO CRIE VARIACOES MUITO PARECIDAS:
 ${formatReferenceQuestions(existingQuestions)}
@@ -794,6 +810,8 @@ REGRAS IMPORTANTES:
 - Crie perguntas realistas para concursos publicos de saude
 - A questao precisa pertencer de forma clara a AREA e ao TOPICO declarados
 - Esgote o tema ao longo do lote, cobrindo diferentes subtopicos sem repeticao
+- Se o topico for institucional, use as atribuicoes reais do orgao e nao responsabilidades inferidas por senso comum
+- Se o topico for cultura geral, mantenha o lote em conhecimentos gerais e nao force tecnicismo da area declarada
 - Gere exatamente ${count} perguntas neste lote, nem mais nem menos
 - A dificuldade precisa refletir claramente o nivel pedido
 - Gere exatamente 4 alternativas por pergunta (A, B, C, D)
@@ -835,6 +853,7 @@ RETORNE APENAS:
   ]
 }
 `;
+};
 
 const normalizeQuestions = (rawQuestions: IncomingQuestion[] = []): NormalizedQuestion[] => rawQuestions.map((q) => ({
   question: String(q.question || q.content || '').trim(),
@@ -1531,6 +1550,7 @@ const repairGeneratedBatch = async ({
   area,
   topic,
   validateWithWeb,
+  topicGroundingNotes,
   questions,
   validationErrors,
 }: {
@@ -1540,6 +1560,7 @@ const repairGeneratedBatch = async ({
   area: string;
   topic: string;
   validateWithWeb: boolean;
+  topicGroundingNotes: string;
   questions: NormalizedQuestion[];
   validationErrors: string[];
 }) => {
@@ -1555,6 +1576,7 @@ REVISE O LOTE DE QUESTOES ABAIXO SEM MUDAR O TEMA CENTRAL.
 AREA: ${area}
 TOPICO: ${topic}
 ${buildAlternativeBalanceContract(questions[0]?.difficulty)}
+${topicGroundingNotes}
 
 PROBLEMAS DETETADOS PELO VALIDADOR:
 ${validationErrors.map((error) => `- ${error}`).join('\n')}
@@ -1644,6 +1666,7 @@ const reviewGeneratedBatch = async ({
   topic,
   sourceMode,
   validateWithWeb,
+  topicGroundingNotes,
   questions,
   referenceQuestions,
 }: {
@@ -1654,6 +1677,7 @@ const reviewGeneratedBatch = async ({
   topic: string;
   sourceMode: SourceMode;
   validateWithWeb: boolean;
+  topicGroundingNotes: string;
   questions: NormalizedQuestion[];
   referenceQuestions: string[];
 }) => {
@@ -1670,6 +1694,7 @@ const reviewGeneratedBatch = async ({
     topic,
     sourceMode,
     validateWithWeb,
+    topicGroundingNotes,
     questions,
   });
 
@@ -1781,7 +1806,12 @@ const prepareGenerationSource = async (
 ): Promise<PreparedGenerationSource> => {
   const sourceMode = normalizeSourceMode(body?.source_mode);
   const resolvedTheme = String(body?.source_theme || body?.custom_topic_name || body?.topic_name || '').trim();
-  const validateWithWeb = Boolean(body?.validate_with_web) || sourceMode !== 'topic';
+  const isCustomTopicRequest = Boolean(String(body?.custom_topic_name || '').trim());
+  const topicGrounding = resolveTopicGroundingHint({
+    area: String(body?.area_name || '').trim(),
+    topic: resolvedTheme,
+  });
+  const validateWithWeb = Boolean(body?.validate_with_web) || sourceMode !== 'topic' || isCustomTopicRequest || topicGrounding.forceValidateWithWeb;
   const baseContext = String(body?.context || '').trim();
 
   if (sourceMode === 'material_text') {
@@ -1795,6 +1825,7 @@ const prepareGenerationSource = async (
       resolvedTheme,
       rawContext: sourceText,
       validateWithWeb,
+      topicGrounding,
       filePart: null,
       cleanup: null,
     };
@@ -1817,6 +1848,7 @@ const prepareGenerationSource = async (
       resolvedTheme,
       rawContext: baseContext,
       validateWithWeb,
+      topicGrounding,
       filePart: {
         uri: activeFile.uri || '',
         mimeType: activeFile.mimeType || mimeType,
@@ -1833,6 +1865,7 @@ const prepareGenerationSource = async (
     resolvedTheme,
     rawContext: baseContext,
     validateWithWeb,
+    topicGrounding,
     filePart: null,
     cleanup: null,
   };
@@ -2087,6 +2120,7 @@ export default async function handler(req: any, res: any) {
       let resolvedTheme = requestedTopicName;
       let sourceModeUsed: SourceMode = normalizeSourceMode(req.body?.source_mode);
       let validateWithWebUsed = Boolean(req.body?.validate_with_web) || sourceModeUsed !== 'topic';
+      let topicGroundingNotes = '';
 
       for (const [apiKeyIndex, candidateApiKey] of geminiApiKeys.entries()) {
         const ai = new GoogleGenAI({ apiKey: candidateApiKey });
@@ -2097,6 +2131,11 @@ export default async function handler(req: any, res: any) {
           resolvedTheme = preparedSource.resolvedTheme || requestedTopicName;
           sourceModeUsed = preparedSource.sourceMode;
           validateWithWebUsed = preparedSource.validateWithWeb;
+          topicGroundingNotes = buildTopicGroundingPromptSection({
+            area: resolvedAreaName,
+            topic: resolvedTheme,
+            validateWithWeb: preparedSource.validateWithWeb,
+          }).section;
 
           for (const candidateModel of modelCandidates) {
             let candidateValidationErrors: string[] = [];
@@ -2117,10 +2156,11 @@ export default async function handler(req: any, res: any) {
                   topic: resolvedTheme,
                   count: batchCount,
                   difficulty: normalizeDifficulty(difficulty),
-                  rawContent: preparedSource.rawContext,
-                  sourceMode: preparedSource.sourceMode,
-                  validateWithWeb: preparedSource.validateWithWeb,
-                  existingQuestions: [
+                rawContent: preparedSource.rawContext,
+                sourceMode: preparedSource.sourceMode,
+                validateWithWeb: preparedSource.validateWithWeb,
+                topicGrounding: preparedSource.topicGrounding,
+                existingQuestions: [
                     ...candidateQuestions.map((question) => ({
                       content: question.question,
                       difficulty: question.difficulty,
@@ -2205,13 +2245,14 @@ export default async function handler(req: any, res: any) {
                       const repairedBatch = await repairGeneratedBatch({
                         ai,
                         Type,
-                        model: candidateModel,
-                        area: resolvedAreaName,
-                        topic: resolvedTheme,
-                        validateWithWeb: preparedSource.validateWithWeb,
-                        questions: uniqueBatch,
-                        validationErrors: candidateValidationErrors,
-                      });
+                      model: candidateModel,
+                      area: resolvedAreaName,
+                      topic: resolvedTheme,
+                      validateWithWeb: preparedSource.validateWithWeb,
+                      topicGroundingNotes,
+                      questions: uniqueBatch,
+                      validationErrors: candidateValidationErrors,
+                    });
 
                       uniqueBatch = repairedBatch.repairedQuestions;
                       const repairedStructuralErrors = validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES, { referenceQuestions });
@@ -2243,6 +2284,7 @@ export default async function handler(req: any, res: any) {
                       topic: resolvedTheme,
                       sourceMode: preparedSource.sourceMode,
                       validateWithWeb: preparedSource.validateWithWeb,
+                      topicGroundingNotes,
                       questions: uniqueBatch,
                       referenceQuestions,
                     });

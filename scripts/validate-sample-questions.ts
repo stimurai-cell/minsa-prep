@@ -2,6 +2,8 @@ import {
   _analyzeAlternativeBalanceForTest as analyzeAlternativeBalance,
   _validateQuestionsForTest as validate,
 } from '../api/generate-questions';
+import { resolveTopicGroundingHint } from '../api/_lib/topicGrounding';
+import { validateTemporalConcepts } from '../src/lib/temporalValidation';
 
 const balancedSample = [
   {
@@ -49,4 +51,30 @@ if (!proactiveSignal.needsHarmonization) {
   process.exit(1);
 }
 
-console.log('Validacao de payload IA passou com cobertura de regressao e pre-harmonizacao.');
+const armedHint = resolveTopicGroundingHint({
+  area: 'Farmacia',
+  topic: 'ARMED',
+});
+
+if (armedHint.scopeMode !== 'institutional' || !armedHint.forceValidateWithWeb) {
+  console.error('O enquadramento de ARMED nao ficou suficientemente rigoroso:', armedHint);
+  process.exit(1);
+}
+
+const cultureHint = resolveTopicGroundingHint({
+  area: 'Farmacia',
+  topic: 'Cultura geral',
+});
+
+if (cultureHint.scopeMode !== 'general_culture' || !cultureHint.relaxAreaStrictness) {
+  console.error('O enquadramento de cultura geral nao ficou correto:', cultureHint);
+  process.exit(1);
+}
+
+const temporalValidation = validateTemporalConcepts('A INFARMED regula medicamentos em Angola.');
+if (temporalValidation.isValid) {
+  console.error('A validacao temporal deveria bloquear a troca entre INFARMED e Angola:', temporalValidation);
+  process.exit(1);
+}
+
+console.log('Validacao de payload IA passou com cobertura de regressao, pre-harmonizacao e enquadramento tematico.');

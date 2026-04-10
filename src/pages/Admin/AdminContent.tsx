@@ -1231,7 +1231,7 @@ export default function AdminContent() {
                                     <div className="space-y-1 text-xs text-emerald-900">
                                         <p className="font-black uppercase tracking-widest text-emerald-700">Regras Ativas</p>
                                         <p>Apenas 4 alternativas por questão.</p>
-                                        <p>Texto e ficheiro passam por validação web antes do retorno.</p>
+                                        <p>Texto, ficheiro e tópicos sensíveis como siglas ou cultura geral passam por validação web antes do retorno.</p>
                                         <p>Todo lote passa por revisão técnica da área antes de seguir.</p>
                                         <p>PDF e DOCX até 3.5 MB.</p>
                                     </div>
