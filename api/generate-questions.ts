@@ -368,6 +368,24 @@ const normalizeAlternativeText = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const cleanQuestionRoboticPhrasing = (value: string) => {
+  let question = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!question) return '';
+
+  question = question
+    .replace(/^Assinale a verdadeira sobre\s+(.+),\s*Assinale a verdadeira:$/i, 'Sobre $1, assinale a alternativa correta.')
+    .replace(/^Assinale a falsa sobre\s+(.+),\s*Assinale a falsa:$/i, 'Sobre $1, assinale a alternativa incorreta.')
+    .replace(/^Assinale a verdadeira em relação a\s+(.+),\s*Assinale a verdadeira:$/i, 'Em relação a $1, assinale a alternativa correta.')
+    .replace(/^Assinale a falsa em relação a\s+(.+),\s*Assinale a falsa:$/i, 'Em relação a $1, assinale a alternativa incorreta.');
+
+  question = question
+    .replace(/(Assinale a verdadeira)[^A-Za-zÀ-ÿ0-9]+Assinale a verdadeira:$/i, '$1.')
+    .replace(/(Assinale a falsa)[^A-Za-zÀ-ÿ0-9]+Assinale a falsa:$/i, '$1.')
+    .replace(/(Excepto)[^A-Za-zÀ-ÿ0-9]+Excepto:$/i, '$1:');
+
+  return question;
+};
+
 const shuffleItems = <T,>(items: T[]) => {
   const copy = [...items];
 
@@ -449,8 +467,9 @@ const getAlternativeLengthIssue = (question: NormalizedQuestion) => {
 
   if (
     uniqueLongestCorrect
-    && correctLength - maxDistractorLength >= 32
-    && correctLength >= Math.ceil(averageDistractorLength * 1.5)
+    && correctLength >= 96
+    && correctLength - maxDistractorLength >= 36
+    && correctLength >= Math.ceil(averageDistractorLength * 1.6)
   ) {
     return 'a alternativa correta ficou visualmente maior do que as outras';
   }
@@ -462,7 +481,7 @@ const prepareQuestionsForValidation = (questions: NormalizedQuestion[]) =>
   rebalanceCorrectAlternativePositions(
     questions.map((question) => ({
       ...question,
-      question: ensureQuestionClosingPunctuation(question.question),
+      question: ensureQuestionClosingPunctuation(cleanQuestionRoboticPhrasing(question.question)),
       alternatives: question.alternatives.map((alternative) => ({
         ...alternative,
         text: normalizeAlternativeText(alternative.text),
@@ -682,8 +701,6 @@ const validateQuestions = (
     seenQuestions.add(questionKey);
     seenQuestionContents.push(question.question);
   });
-
-  errors.push(...getFormatDiversityIssues(questions));
 
   return errors;
 };
@@ -1719,13 +1736,17 @@ export default async function handler(req: any, res: any) {
                 });
                 let uniqueBatch = filteredBatch.uniqueQuestions;
 
-                candidateValidationErrors = uniqueBatch.length
+                const structuralValidationErrors = uniqueBatch.length
                   ? validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES, { referenceQuestions })
                   : [
                     filteredBatch.skippedQuestions.length
                       ? 'A IA devolveu apenas perguntas repetidas nesta tentativa.'
                       : 'Nenhuma pergunta valida foi gerada nesta tentativa.',
                   ];
+                const diversityValidationIssues = uniqueBatch.length
+                  ? getFormatDiversityIssues(uniqueBatch)
+                  : [];
+                candidateValidationErrors = [...structuralValidationErrors, ...diversityValidationIssues];
 
                 if (candidateValidationErrors.length && uniqueBatch.length) {
                   try {
@@ -1741,9 +1762,15 @@ export default async function handler(req: any, res: any) {
                     });
 
                     uniqueBatch = repairedBatch.repairedQuestions;
-                    candidateValidationErrors = validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES, { referenceQuestions });
+                    const repairedStructuralErrors = validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES, { referenceQuestions });
+                    const repairedDiversityIssues = getFormatDiversityIssues(uniqueBatch);
+                    candidateValidationErrors = repairedStructuralErrors;
 
-                    if (!candidateValidationErrors.length && repairedBatch.repairSummary) {
+                    if (!repairedStructuralErrors.length && repairedDiversityIssues.length) {
+                      candidateValidationSummaryParts.push(`A IA manteve boa cobertura tecnica, mas o lote ainda ficou um pouco uniforme no formato: ${repairedDiversityIssues.join('; ')}.`);
+                    }
+
+                    if (!repairedStructuralErrors.length && repairedBatch.repairSummary) {
                       candidateValidationSummaryParts.push(repairedBatch.repairSummary);
                     }
                   } catch (repairError) {
