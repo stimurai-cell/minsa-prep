@@ -1169,6 +1169,41 @@ const getErrorMessage = (error: unknown) => {
   return [message, ...extraParts].join(' | ');
 };
 
+const getErrorStatusCode = (error: unknown) => {
+  const { message, details, hint, code } = extractErrorInfo(error);
+  const combined = `${message} ${details} ${hint} ${code}`.toLowerCase();
+
+  if (
+    combined.includes('resource_exhausted') ||
+    combined.includes('"code":429') ||
+    combined.includes('code:429') ||
+    combined.includes('quota') ||
+    combined.includes('exhausted')
+  ) {
+    return 429;
+  }
+
+  if (
+    combined.includes('unavailable') ||
+    combined.includes('"code":503') ||
+    combined.includes('code:503') ||
+    combined.includes('high demand') ||
+    combined.includes('temporarily unavailable')
+  ) {
+    return 503;
+  }
+
+  if (
+    combined.includes('timed out') ||
+    combined.includes('deadline exceeded') ||
+    combined.includes('excedeu')
+  ) {
+    return 504;
+  }
+
+  return 500;
+};
+
 const shouldRetryWithAnotherGeminiKey = (error: unknown) => {
   const { message, details, hint, code } = extractErrorInfo(error);
   const combined = `${message} ${details} ${hint} ${code}`.toLowerCase();
@@ -2514,7 +2549,7 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'Acao invalida.' });
   } catch (error) {
     console.error('API Error:', error);
-    return res.status(500).json({ error: getErrorMessage(error) });
+    return res.status(getErrorStatusCode(error)).json({ error: getErrorMessage(error) });
   }
 }
 
