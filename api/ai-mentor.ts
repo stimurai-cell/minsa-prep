@@ -1,6 +1,13 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
 const defaultGeminiModel = 'gemini-1.5-flash';
+const readEnvValue = (...values: Array<string | undefined>) =>
+    values
+        .map((value) => String(value || '').trim())
+        .find(Boolean)
+        || '';
+
+const allowClientPrefixedGeminiFallback = !readEnvValue(process.env.VERCEL_ENV);
 
 const buildMentorPrompt = ({
     fullName,
@@ -48,11 +55,15 @@ export default async function handler(req: any, res: any) {
         return res.status(405).json({ error: 'Método não permitido.' });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = readEnvValue(
+        process.env.GEMINI_API_KEY,
+        process.env.GEMINI_API_KEY_2,
+        allowClientPrefixedGeminiFallback ? process.env.VITE_GEMINI_API_KEY : undefined
+    );
     const modelName = process.env.GEMINI_MODEL || defaultGeminiModel;
 
     if (!apiKey) {
-        return res.status(500).json({ error: 'GEMINI_API_KEY não configurada.' });
+        return res.status(500).json({ error: 'GEMINI_API_KEY/GEMINI_API_KEY_2 não configurada.' });
     }
 
     const { fullName, area, topicProgress, recentAttempts, allTopics } = req.body || {};

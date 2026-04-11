@@ -6,6 +6,11 @@ import {
   buildGovernanceReviewPrompt,
   sanitizeGovernanceReferences,
 } from './_lib/questionGovernance.js';
+import {
+  buildTopicGroundingPromptSection,
+  resolveTopicGroundingHint,
+  type TopicGroundingHint,
+} from './_lib/topicGrounding.js';
 
 const readEnvValue = (...values: Array<string | undefined>) =>
   values
@@ -16,7 +21,16 @@ const readEnvValue = (...values: Array<string | undefined>) =>
 const supabaseUrl = readEnvValue(process.env.VITE_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_URL);
 const supabaseServiceKey = readEnvValue(process.env.SUPABASE_SERVICE_ROLE_KEY);
 const databaseUrl = readEnvValue(process.env.DATABASE_URL);
-const geminiApiKey = readEnvValue(process.env.GEMINI_API_KEY, process.env.VITE_GEMINI_API_KEY);
+const allowClientPrefixedGeminiFallback = !readEnvValue(process.env.VERCEL_ENV);
+const localDevGeminiFallbackKey = allowClientPrefixedGeminiFallback ? process.env.VITE_GEMINI_API_KEY : '';
+const geminiApiKeys = Array.from(
+  new Set(
+    [process.env.GEMINI_API_KEY, process.env.GEMINI_API_KEY_2, localDevGeminiFallbackKey]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+  )
+);
+const geminiApiKey = geminiApiKeys[0] || '';
 const defaultGeminiModel = 'gemini-2.5-flash';
 
 let supabaseClientPromise: Promise<any> | null = null;
@@ -35,6 +49,15 @@ type NormalizedQuestion = {
   alternatives: Array<{ text: string; isCorrect: boolean }>;
   explanation: string;
   difficulty: string;
+};
+
+type AlternativeBalanceProfile = {
+  minWords: number;
+  maxWords: number;
+  maxWordSpread: number;
+  maxCharSpread: number;
+  maxVisualLineSpread: number;
+  promptLabel: string;
 };
 
 type PersistInput = {
@@ -59,6 +82,11 @@ type GeneratedPayload = {
   questions?: IncomingQuestion[];
 };
 
+type HarmonizationPayload = {
+  harmonization_summary?: string;
+  questions?: IncomingQuestion[];
+};
+
 type GovernanceReviewQuestion = IncomingQuestion & {
   approved?: boolean;
   review_notes?: string[];
@@ -76,6 +104,7 @@ type PreparedGenerationSource = {
   resolvedTheme: string;
   rawContext: string;
   validateWithWeb: boolean;
+  topicGrounding: TopicGroundingHint;
   filePart?: { uri: string; mimeType: string; name: string } | null;
   cleanup?: (() => Promise<void>) | null;
 };
@@ -162,6 +191,51 @@ const getDifficultyInstruction = (difficulty: string) => {
     default:
       return 'MEDIO: exige compreensao pratica, mas sem depender de pegadinhas excessivas.';
   }
+};
+
+const getAlternativeBalanceProfile = (difficulty?: string): AlternativeBalanceProfile => {
+  switch (normalizeDifficulty(difficulty)) {
+    case 'easy':
+      return {
+        minWords: 4,
+        maxWords: 9,
+        maxWordSpread: 3,
+        maxCharSpread: 18,
+        maxVisualLineSpread: 1,
+        promptLabel: '4 a 9 palavras por alternativa, com diferenca maxima de 3 palavras e 18 caracteres dentro da mesma questao.',
+      };
+    case 'hard':
+      return {
+        minWords: 6,
+        maxWords: 13,
+        maxWordSpread: 4,
+        maxCharSpread: 26,
+        maxVisualLineSpread: 1,
+        promptLabel: '6 a 13 palavras por alternativa, com diferenca maxima de 4 palavras e 26 caracteres dentro da mesma questao.',
+      };
+    default:
+      return {
+        minWords: 5,
+        maxWords: 11,
+        maxWordSpread: 3,
+        maxCharSpread: 22,
+        maxVisualLineSpread: 1,
+        promptLabel: '5 a 11 palavras por alternativa, com diferenca maxima de 3 palavras e 22 caracteres dentro da mesma questao.',
+      };
+  }
+};
+
+const buildAlternativeBalanceContract = (difficulty?: string) => {
+  const profile = getAlternativeBalanceProfile(difficulty);
+
+  return [
+    'CONTRATO DE CONSTRUCAO DAS ALTERNATIVAS:',
+    '- Antes de escrever as opcoes finais, defina um unico molde sintatico para as 4 alternativas da mesma questao.',
+    `- Janela recomendada: ${profile.promptLabel}`,
+    `- Em ecra movel, a diferenca visual nao pode ultrapassar ${profile.maxVisualLineSpread} linha estimada entre a maior e a menor alternativa.`,
+    '- Se a correta precisar de um detalhe tecnico, distribua nivel semelhante de detalhe pelos distratores plausiveis.',
+    '- Nao compense apenas cortando a correta; quando fizer sentido, reforce os distratores com o mesmo nivel de especificidade.',
+  ].join('\n');
 };
 
 const normalizeSourceMode = (value?: string): SourceMode => {
@@ -368,6 +442,170 @@ const normalizeAlternativeText = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const MOBILE_ALTERNATIVE_TARGET_CHARS_PER_LINE = 16;
+
+const countAlternativeWords = (value: string) =>
+  normalizeAlternativeText(value)
+    .split(' ')
+    .filter(Boolean)
+    .length;
+
+const estimateAlternativeVisualLineCount = (value: string) => {
+  const words = normalizeAlternativeText(value)
+    .split(' ')
+    .filter(Boolean);
+
+  if (!words.length) return 0;
+
+  let lines = 1;
+  let currentLineLength = 0;
+
+  for (const word of words) {
+    const wordLength = word.length;
+
+    if (!currentLineLength) {
+      currentLineLength = wordLength;
+      continue;
+    }
+
+    if (currentLineLength + 1 + wordLength <= MOBILE_ALTERNATIVE_TARGET_CHARS_PER_LINE) {
+      currentLineLength += 1 + wordLength;
+      continue;
+    }
+
+    lines += 1;
+    currentLineLength = wordLength;
+  }
+
+  return lines;
+};
+
+const analyzeAlternativeBalance = (question: NormalizedQuestion) => {
+  const profile = getAlternativeBalanceProfile(question.difficulty);
+  const normalizedAlternatives = question.alternatives.map((alternative) => normalizeAlternativeText(alternative.text));
+  const charCounts = normalizedAlternatives.map((alternative) => alternative.length);
+  const wordCounts = normalizedAlternatives.map((alternative) => countAlternativeWords(alternative));
+  const lineCounts = normalizedAlternatives.map((alternative) => estimateAlternativeVisualLineCount(alternative));
+  const correctIndex = question.alternatives.findIndex((alternative) => alternative.isCorrect);
+
+  if (correctIndex < 0 || charCounts.length !== EXPECTED_ALTERNATIVES) {
+    return {
+      profile,
+      charCounts,
+      wordCounts,
+      lineCounts,
+      charSpread: 0,
+      wordSpread: 0,
+      lineSpread: 0,
+      needsHarmonization: false,
+      validationIssue: '',
+    };
+  }
+
+  const correctLength = charCounts[correctIndex];
+  const correctWordCount = wordCounts[correctIndex];
+  const correctLineCount = lineCounts[correctIndex];
+  const distractorLengths = charCounts.filter((_, index) => index !== correctIndex);
+  const distractorWordCounts = wordCounts.filter((_, index) => index !== correctIndex);
+  const distractorLineCounts = lineCounts.filter((_, index) => index !== correctIndex);
+  const maxDistractorLength = Math.max(...distractorLengths, 0);
+  const minDistractorLength = Math.min(...distractorLengths, Number.POSITIVE_INFINITY);
+  const maxDistractorWordCount = Math.max(...distractorWordCounts, 0);
+  const minDistractorWordCount = Math.min(...distractorWordCounts, Number.POSITIVE_INFINITY);
+  const maxDistractorLineCount = Math.max(...distractorLineCounts, 0);
+  const averageDistractorLength = distractorLengths.reduce((sum, length) => sum + length, 0) / Math.max(1, distractorLengths.length);
+  const averageDistractorWordCount = distractorWordCounts.reduce((sum, count) => sum + count, 0) / Math.max(1, distractorWordCounts.length);
+  const averageDistractorLineCount = distractorLineCounts.reduce((sum, count) => sum + count, 0) / Math.max(1, distractorLineCounts.length);
+  const maxCharCount = Math.max(...charCounts, 0);
+  const minCharCount = Math.min(...charCounts, Number.POSITIVE_INFINITY);
+  const maxWordCount = Math.max(...wordCounts, 0);
+  const minWordCount = Math.min(...wordCounts, Number.POSITIVE_INFINITY);
+  const maxLineCount = Math.max(...lineCounts, 0);
+  const minLineCount = Math.min(...lineCounts, Number.POSITIVE_INFINITY);
+  const charSpread = maxCharCount - minCharCount;
+  const wordSpread = maxWordCount - minWordCount;
+  const lineSpread = maxLineCount - minLineCount;
+  const uniqueLongestCorrect = correctLength === maxCharCount && charCounts.filter((length) => length === correctLength).length === 1;
+  const uniqueTallestCorrect = correctLineCount === maxLineCount && lineCounts.filter((count) => count === correctLineCount).length === 1;
+  const anyAlternativeOutsideRecommendedWindow = wordCounts.some(
+    (count) => count < profile.minWords || count > profile.maxWords
+  );
+  const correctDominatesByLines = uniqueTallestCorrect
+    && correctLineCount > maxDistractorLineCount
+    && (lineSpread >= 1 || correctLineCount > averageDistractorLineCount)
+    && (correctWordCount >= averageDistractorWordCount + 2 || correctLength >= averageDistractorLength + 10);
+  const correctDominatesByLength = uniqueLongestCorrect
+    && correctLength > maxDistractorLength
+    && charSpread >= 14
+    && (correctWordCount >= maxDistractorWordCount + 2 || correctLength >= averageDistractorLength + 12);
+
+  const needsHarmonization = anyAlternativeOutsideRecommendedWindow
+    || lineSpread > profile.maxVisualLineSpread
+    || wordSpread > profile.maxWordSpread
+    || charSpread > profile.maxCharSpread
+    || correctDominatesByLines
+    || correctDominatesByLength;
+
+  const visuallyUnbalancedByLines = uniqueTallestCorrect
+    && correctLineCount - maxDistractorLineCount >= 2
+    && correctLineCount >= Math.ceil(averageDistractorLineCount + 1)
+    && (correctLength >= 42 || correctWordCount >= 7);
+
+  const visuallyUnbalancedByLength = uniqueLongestCorrect
+    && correctLength - maxDistractorLength >= Math.max(18, profile.maxCharSpread - 2)
+    && correctLength >= Math.ceil(averageDistractorLength * 1.18)
+    && correctWordCount - maxDistractorWordCount >= 2;
+
+  const validationIssue = visuallyUnbalancedByLines || visuallyUnbalancedByLength
+    ? 'a alternativa correta ficou visualmente maior do que as outras'
+    : '';
+
+  return {
+    profile,
+    charCounts,
+    wordCounts,
+    lineCounts,
+    charSpread,
+    wordSpread,
+    lineSpread,
+    needsHarmonization,
+    validationIssue,
+    correctDominatesByLines,
+    correctDominatesByLength,
+    maxDistractorLength,
+    minDistractorLength,
+    maxDistractorWordCount,
+    minDistractorWordCount,
+    minLineCount,
+    minWordCount,
+    minCharCount,
+  };
+};
+
+const shouldProactivelyHarmonizeBatch = (questions: NormalizedQuestion[]) =>
+  questions.some((question) => analyzeAlternativeBalance(question).needsHarmonization);
+
+const buildAlternativeBalanceDiagnostics = (questions: NormalizedQuestion[]) =>
+  questions
+    .map((question, index) => {
+      const analysis = analyzeAlternativeBalance(question);
+      const profile = analysis.profile;
+      const diagnostics = [
+        `Q${index + 1}`,
+        `palavras=${analysis.wordCounts.join('/') || '0/0/0/0'}`,
+        `linhas=${analysis.lineCounts.join('/') || '0/0/0/0'}`,
+        `chars=${analysis.charCounts.join('/') || '0/0/0/0'}`,
+        `janela=${profile.minWords}-${profile.maxWords}`,
+      ];
+
+      if (analysis.needsHarmonization) {
+        diagnostics.push('harmonizar');
+      }
+
+      return `- ${diagnostics.join(' | ')}`;
+    })
+    .join('\n');
+
 const cleanQuestionRoboticPhrasing = (value: string) => {
   let question = String(value || '').replace(/\s+/g, ' ').trim();
   if (!question) return '';
@@ -455,26 +693,7 @@ const rebalanceCorrectAlternativePositions = (questions: NormalizedQuestion[]) =
 };
 
 const getAlternativeLengthIssue = (question: NormalizedQuestion) => {
-  const lengths = question.alternatives.map((alternative) => normalizeAlternativeText(alternative.text).length);
-  const correctIndex = question.alternatives.findIndex((alternative) => alternative.isCorrect);
-  if (correctIndex < 0 || lengths.length !== EXPECTED_ALTERNATIVES) return '';
-
-  const correctLength = lengths[correctIndex];
-  const distractorLengths = lengths.filter((_, index) => index !== correctIndex);
-  const maxDistractorLength = Math.max(...distractorLengths, 0);
-  const averageDistractorLength = distractorLengths.reduce((sum, length) => sum + length, 0) / Math.max(1, distractorLengths.length);
-  const uniqueLongestCorrect = correctLength === Math.max(...lengths) && lengths.filter((length) => length === correctLength).length === 1;
-
-  if (
-    uniqueLongestCorrect
-    && correctLength >= 96
-    && correctLength - maxDistractorLength >= 36
-    && correctLength >= Math.ceil(averageDistractorLength * 1.6)
-  ) {
-    return 'a alternativa correta ficou visualmente maior do que as outras';
-  }
-
-  return '';
+  return analyzeAlternativeBalance(question).validationIssue;
 };
 
 const prepareQuestionsForValidation = (questions: NormalizedQuestion[]) =>
@@ -519,6 +738,35 @@ const getFormatDiversityIssues = (questions: NormalizedQuestion[]) => {
   return issues;
 };
 
+const QUESTION_FORMAT_RECIPES = [
+  {
+    label: 'pergunta direta terminada com "?"',
+    guidance: 'Use uma abertura direta, como "Qual", "Que", "Quando" ou "Como", sem repetir a abertura de outra questao do lote.',
+  },
+  {
+    label: 'comando natural terminado com "Assinale a alternativa correta."',
+    guidance: 'Use uma abertura natural, como "Sobre", "Em relacao a" ou "No contexto de", sem copiar a estrutura das demais.',
+  },
+  {
+    label: 'afirmacao tecnica terminada com "Excepto:"',
+    guidance: 'Formule a ideia como criterio, regra ou conjunto de afirmacoes e feche com "Excepto:".',
+  },
+  {
+    label: 'afirmacao tecnica terminada com "Assinale a verdadeira:"',
+    guidance: 'Use formulacao afirmativa ou comparativa e feche com "Assinale a verdadeira:".',
+  },
+  {
+    label: 'afirmacao tecnica terminada com "Assinale a falsa:"',
+    guidance: 'Use formulacao afirmativa ou normativa e feche com "Assinale a falsa:".',
+  },
+] as const;
+
+const buildQuestionFormatPlan = (count: number) =>
+  Array.from({ length: count }, (_, index) => {
+    const recipe = QUESTION_FORMAT_RECIPES[index % QUESTION_FORMAT_RECIPES.length];
+    return `- Q${index + 1}: ${recipe.label}. ${recipe.guidance}`;
+  }).join('\n');
+
 const getSupabase = async () => {
   if (!supabaseUrl || !supabaseServiceKey) return null;
   if (!supabaseClientPromise) {
@@ -550,6 +798,7 @@ const buildQuestionsPrompt = ({
   rawContent,
   sourceMode,
   validateWithWeb,
+  topicGrounding,
   existingQuestions,
 }: {
   area: string;
@@ -559,8 +808,16 @@ const buildQuestionsPrompt = ({
   rawContent: string;
   sourceMode: SourceMode;
   validateWithWeb: boolean;
+  topicGrounding: TopicGroundingHint;
   existingQuestions: Array<{ content: string; difficulty?: string | null }>;
-}) => `
+}) => {
+  const topicGroundingSection = buildTopicGroundingPromptSection({
+    area,
+    topic,
+    validateWithWeb,
+  }).section;
+
+  return `
 ESPECIALISTA EM CONCURSOS DE SAUDE EM ANGOLA
 DATA ATUAL: ${new Date().toISOString().slice(0, 10)}
 AREA: ${area}
@@ -573,6 +830,11 @@ VALIDACAO WEB: ${validateWithWeb ? 'ATIVA' : 'DESATIVADA'}
 MATERIAL DE APOIO:
 ${rawContent || 'Nenhum'}
 GUIA DE DIFICULDADE: ${getDifficultyInstruction(difficulty)}
+${buildAlternativeBalanceContract(difficulty)}
+${topicGroundingSection}
+
+PLANO MINIMO DE VARIEDADE DO LOTE:
+${buildQuestionFormatPlan(count)}
 
 QUESTOES JA EXISTENTES NESTE TOPICO. NAO REPITA, NAO REESCREVA E NAO CRIE VARIACOES MUITO PARECIDAS:
 ${formatReferenceQuestions(existingQuestions)}
@@ -582,15 +844,22 @@ REGRAS IMPORTANTES:
 - Crie perguntas realistas para concursos publicos de saude
 - A questao precisa pertencer de forma clara a AREA e ao TOPICO declarados
 - Esgote o tema ao longo do lote, cobrindo diferentes subtopicos sem repeticao
+- Se o topico for institucional, use as atribuicoes reais do orgao e nao responsabilidades inferidas por senso comum
+- Se o topico for cultura geral, mantenha o lote em conhecimentos gerais e nao force tecnicismo da area declarada
+- Respeite o plano minimo de variedade acima; nao deixe 4 ou 5 enunciados no mesmo formato quando o lote tiver tamanho suficiente para variar
 - Gere exatamente ${count} perguntas neste lote, nem mais nem menos
 - A dificuldade precisa refletir claramente o nivel pedido
 - Gere exatamente 4 alternativas por pergunta (A, B, C, D)
 - Apenas uma alternativa deve estar correta
 - Modele o estilo pelo padrao de concursos reais: objetivo, direto, tecnico e sem floreios desnecessarios
+- Ao criar as alternativas, trabalhe em bloco: defina primeiro o molde das 4 opcoes e so depois escreva o texto final
 - Varie o formato dos enunciados dentro do mesmo lote para nao ficar robotico
 - Misture perguntas diretas com "?", afirmacoes tecnicas com "Excepto:", "Assinale a falsa:" ou "Assinale a verdadeira:", e comandos naturais como "Assinale a alternativa correta."
 - Nao repita a mesma abertura ou o mesmo fecho em todas as perguntas do lote
+- Antes de devolver o JSON final, confira se o lote cumpre o plano de variedade Q1..Q${count} e reescreva os enunciados que estiverem excessivamente parecidos
 - Mantenha paralelismo entre as alternativas, com tamanhos visuais semelhantes; a correta nao pode ser sistematicamente a mais longa
+- Mantenha o mesmo nivel de detalhe entre as 4 alternativas; a correta nao pode parecer a opcao mais completa, mais especifica ou mais "profissional" do lote
+- Pense no layout mobile: a correta nao pode ocupar 2 ou mais linhas a mais do que os distratores num ecra estreito
 - Inclua pelo menos um distrator visualmente plausivel com erro de escrita discreto quando isso fizer sentido e sem criar ambiguidade
 - Crie distratores que confundam norma tecnica com senso comum sempre que o topico permitir
 - Inclua explicacoes claras para cada pergunta
@@ -620,6 +889,7 @@ RETORNE APENAS:
   ]
 }
 `;
+};
 
 const normalizeQuestions = (rawQuestions: IncomingQuestion[] = []): NormalizedQuestion[] => rawQuestions.map((q) => ({
   question: String(q.question || q.content || '').trim(),
@@ -880,7 +1150,7 @@ const getErrorMessage = (error: unknown) => {
   const { message, details, hint, code } = extractErrorInfo(error);
   if (!message) return 'Falha desconhecida ao guardar ou comunicar com o servidor.';
   if (message.toLowerCase().includes('reported as leaked')) {
-    return 'A chave do Gemini foi bloqueada por vazamento. Gere uma nova chave no Google AI Studio e atualize GEMINI_API_KEY/VITE_GEMINI_API_KEY.';
+    return 'A chave do Gemini foi bloqueada por vazamento. Gere uma nova chave no Google AI Studio e atualize GEMINI_API_KEY/GEMINI_API_KEY_2.';
   }
   if (message.includes('RESOURCE_EXHAUSTED') || message.includes('"code":429')) return 'A quota do Gemini acabou. Tente novamente mais tarde.';
   if (
@@ -897,6 +1167,60 @@ const getErrorMessage = (error: unknown) => {
   if (message.toLowerCase().includes('apikey') || message.toLowerCase().includes('permission')) return 'A chave do Gemini parece invalida ou sem acesso ao modelo.';
   const extraParts = [details, hint ? `Sugestao: ${hint}` : '', code ? `Codigo: ${code}` : ''].filter(Boolean);
   return [message, ...extraParts].join(' | ');
+};
+
+const getErrorStatusCode = (error: unknown) => {
+  const { message, details, hint, code } = extractErrorInfo(error);
+  const combined = `${message} ${details} ${hint} ${code}`.toLowerCase();
+
+  if (
+    combined.includes('resource_exhausted') ||
+    combined.includes('"code":429') ||
+    combined.includes('code:429') ||
+    combined.includes('quota') ||
+    combined.includes('exhausted')
+  ) {
+    return 429;
+  }
+
+  if (
+    combined.includes('unavailable') ||
+    combined.includes('"code":503') ||
+    combined.includes('code:503') ||
+    combined.includes('high demand') ||
+    combined.includes('temporarily unavailable')
+  ) {
+    return 503;
+  }
+
+  if (
+    combined.includes('timed out') ||
+    combined.includes('deadline exceeded') ||
+    combined.includes('excedeu')
+  ) {
+    return 504;
+  }
+
+  return 500;
+};
+
+const shouldRetryWithAnotherGeminiKey = (error: unknown) => {
+  const { message, details, hint, code } = extractErrorInfo(error);
+  const combined = `${message} ${details} ${hint} ${code}`.toLowerCase();
+
+  return (
+    combined.includes('resource_exhausted') ||
+    combined.includes('"code":429') ||
+    combined.includes('"code":503') ||
+    combined.includes('unavailable') ||
+    combined.includes('high demand') ||
+    combined.includes('temporarily unavailable') ||
+    combined.includes('try again later') ||
+    combined.includes('reported as leaked') ||
+    combined.includes('api key') ||
+    combined.includes('apikey') ||
+    combined.includes('permission')
+  );
 };
 
 const shouldRetryQuestionInsertWithoutArea = (error: unknown) => {
@@ -1088,6 +1412,41 @@ const createResponseSchema = (Type: any, expectedCount: number) => ({
   required: ['validation_summary', 'coverage_summary', 'questions'],
 });
 
+const createHarmonizationResponseSchema = (Type: any, expectedCount: number) => ({
+  type: Type.OBJECT,
+  properties: {
+    harmonization_summary: { type: Type.STRING },
+    questions: {
+      type: Type.ARRAY,
+      minItems: expectedCount,
+      maxItems: expectedCount,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          question: { type: Type.STRING },
+          alternatives: {
+            type: Type.ARRAY,
+            minItems: EXPECTED_ALTERNATIVES,
+            maxItems: EXPECTED_ALTERNATIVES,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                text: { type: Type.STRING },
+                isCorrect: { type: Type.BOOLEAN },
+              },
+              required: ['text', 'isCorrect'],
+            },
+          },
+          explanation: { type: Type.STRING },
+          difficulty: { type: Type.STRING },
+        },
+        required: ['question', 'alternatives', 'explanation', 'difficulty'],
+      },
+    },
+  },
+  required: ['harmonization_summary', 'questions'],
+});
+
 const createGovernanceReviewResponseSchema = (Type: any, expectedCount: number) => ({
   type: Type.OBJECT,
   properties: {
@@ -1168,6 +1527,92 @@ const createRepairResponseSchema = (Type: any, expectedCount: number) => ({
   required: ['repair_summary', 'questions'],
 });
 
+const harmonizeGeneratedBatch = async ({
+  ai,
+  Type,
+  model,
+  area,
+  topic,
+  difficulty,
+  validateWithWeb,
+  questions,
+  force = false,
+}: {
+  ai: any;
+  Type: any;
+  model: string;
+  area: string;
+  topic: string;
+  difficulty: string;
+  validateWithWeb: boolean;
+  questions: NormalizedQuestion[];
+  force?: boolean;
+}) => {
+  if (!questions.length) {
+    return {
+      harmonizedQuestions: questions,
+      harmonizationSummary: '',
+      harmonizationApplied: false,
+    };
+  }
+
+  const normalizedDifficulty = normalizeDifficulty(difficulty || questions[0]?.difficulty);
+  const shouldHarmonize = force || shouldProactivelyHarmonizeBatch(questions);
+  if (!shouldHarmonize) {
+    return {
+      harmonizedQuestions: questions,
+      harmonizationSummary: '',
+      harmonizationApplied: false,
+    };
+  }
+
+  const prompt = `
+HARMONIZACAO PRE-VALIDACAO DO LOTE DE QUESTOES
+AREA: ${area}
+TOPICO: ${topic}
+DIFICULDADE BASE: ${normalizedDifficulty}
+
+${buildAlternativeBalanceContract(normalizedDifficulty)}
+
+DIAGNOSTICO INICIAL DO LOTE:
+${buildAlternativeBalanceDiagnostics(questions)}
+
+OBJETIVO:
+- reescrever cada bloco de alternativas como se estivesse a criar as 4 opcoes do zero a partir do mesmo molde sintatico
+- preservar AREA, TOPICO, dificuldade, gabarito, explicacao e diversidade de formato dos enunciados
+- impedir que a alternativa correta pareca melhor apenas por ser mais longa, mais detalhada ou mais profissional
+- se uma alternativa estiver curta demais, fortalece-a com detalhe plausivel; se a correta estiver longa demais, encurte-a sem perder rigor
+- devolver o lote pronto para seguir para a validacao estrutural final
+- devolver JSON puro
+
+QUESTOES A HARMONIZAR:
+${JSON.stringify(questions, null, 2)}
+`;
+
+  const response = await generateContentWithTimeout(
+    ai,
+    {
+      model,
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: createHarmonizationResponseSchema(Type, questions.length),
+      },
+    },
+    `A harmonizacao pre-validacao do modelo ${model}`,
+  );
+
+  const rawText = extractResponseText(response);
+  const parsed = rawText ? (parseGeneratedPayload(rawText) as HarmonizationPayload) : null;
+  const harmonizedQuestions = prepareQuestionsForValidation(normalizeQuestions(parsed?.questions || []));
+
+  return {
+    harmonizedQuestions,
+    harmonizationSummary: String(parsed?.harmonization_summary || '').trim(),
+    harmonizationApplied: true,
+  };
+};
+
 const repairGeneratedBatch = async ({
   ai,
   Type,
@@ -1175,6 +1620,7 @@ const repairGeneratedBatch = async ({
   area,
   topic,
   validateWithWeb,
+  topicGroundingNotes,
   questions,
   validationErrors,
 }: {
@@ -1184,6 +1630,7 @@ const repairGeneratedBatch = async ({
   area: string;
   topic: string;
   validateWithWeb: boolean;
+  topicGroundingNotes: string;
   questions: NormalizedQuestion[];
   validationErrors: string[];
 }) => {
@@ -1198,6 +1645,10 @@ const repairGeneratedBatch = async ({
 REVISE O LOTE DE QUESTOES ABAIXO SEM MUDAR O TEMA CENTRAL.
 AREA: ${area}
 TOPICO: ${topic}
+${buildAlternativeBalanceContract(questions[0]?.difficulty)}
+${topicGroundingNotes}
+PLANO MINIMO DE VARIEDADE DO LOTE:
+${buildQuestionFormatPlan(questions.length)}
 
 PROBLEMAS DETETADOS PELO VALIDADOR:
 ${validationErrors.map((error) => `- ${error}`).join('\n')}
@@ -1206,9 +1657,12 @@ OBJETIVO:
 - devolver exatamente ${questions.length} questoes
 - manter exatamente ${EXPECTED_ALTERNATIVES} alternativas por questao
 - manter apenas 1 alternativa correta por questao
+- respeitar o plano minimo de variedade Q1..Q${questions.length}, para o lote nao voltar uniforme
 - variar o formato dos enunciados no mesmo lote, evitando que todas usem o mesmo fecho
 - aceitar e misturar formatos como pergunta direta com "?", afirmacao com "Excepto:", "Assinale a falsa:", "Assinale a verdadeira:" e comandos como "Assinale a alternativa correta."
-- encurtar ou reequilibrar as alternativas para que a correta nao fique visualmente muito maior do que as outras
+- reconstruir cada grupo de alternativas desde a origem, como um conjunto unico, em vez de apenas cortar a opcao correta no fim
+- reescrever as alternativas com paralelismo sintatico e de detalhe; a correta nao pode parecer mais completa nem ocupar 2 ou mais linhas a mais num ecra movel
+- se necessario, encurte a correta e fortaleça os distratores para que todas parecam igualmente plausiveis a primeira vista
 - preservar dificuldade, sentido tecnico e clareza
 - manter portugues de Angola e estilo de concurso
 - devolver JSON puro
@@ -1225,7 +1679,6 @@ ${JSON.stringify(questions, null, 2)}
       config: {
         responseMimeType: 'application/json',
         responseSchema: createRepairResponseSchema(Type, questions.length),
-        tools: validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
       },
     },
     `A reparacao do lote no modelo ${model}`,
@@ -1233,7 +1686,31 @@ ${JSON.stringify(questions, null, 2)}
 
   const rawText = extractResponseText(response);
   const parsed = rawText ? parseGeneratedPayload(rawText) : null;
-  const repairedQuestions = prepareQuestionsForValidation(normalizeQuestions(parsed?.questions || []));
+  const normalizedRepairBatch = prepareQuestionsForValidation(normalizeQuestions(parsed?.questions || []));
+  let repairedQuestions = normalizedRepairBatch;
+  let repairHarmonizationSummary = '';
+
+  try {
+    const harmonizedRepairBatch = await harmonizeGeneratedBatch({
+      ai,
+      Type,
+      model,
+      area,
+      topic,
+      difficulty: questions[0]?.difficulty || 'medium',
+      validateWithWeb,
+      questions: normalizedRepairBatch,
+    });
+    repairedQuestions = harmonizedRepairBatch.harmonizedQuestions;
+    repairHarmonizationSummary = harmonizedRepairBatch.harmonizationSummary;
+  } catch (harmonizationError) {
+    console.warn(
+      '[generate-questions] repair harmonization failed',
+      model,
+      getErrorMessage(harmonizationError),
+    );
+  }
+
   const repairValidationErrors = validateQuestions(repairedQuestions, EXPECTED_ALTERNATIVES, {
     expectedCount: questions.length,
   });
@@ -1244,7 +1721,12 @@ ${JSON.stringify(questions, null, 2)}
 
   return {
     repairedQuestions,
-    repairSummary: String(parsed?.repair_summary || '').trim(),
+    repairSummary: [
+      String(parsed?.repair_summary || '').trim(),
+      repairHarmonizationSummary,
+    ]
+      .filter(Boolean)
+      .join(' '),
   };
 };
 
@@ -1256,6 +1738,7 @@ const reviewGeneratedBatch = async ({
   topic,
   sourceMode,
   validateWithWeb,
+  topicGroundingNotes,
   questions,
   referenceQuestions,
 }: {
@@ -1266,6 +1749,7 @@ const reviewGeneratedBatch = async ({
   topic: string;
   sourceMode: SourceMode;
   validateWithWeb: boolean;
+  topicGroundingNotes: string;
   questions: NormalizedQuestion[];
   referenceQuestions: string[];
 }) => {
@@ -1282,6 +1766,8 @@ const reviewGeneratedBatch = async ({
     topic,
     sourceMode,
     validateWithWeb,
+    topicGroundingNotes,
+    formatPlan: buildQuestionFormatPlan(questions.length),
     questions,
   });
 
@@ -1322,7 +1808,31 @@ const reviewGeneratedBatch = async ({
       difficulty: String(item.difficulty || '').trim(),
     }));
 
-  const approvedQuestions = prepareQuestionsForValidation(normalizeQuestions(approvedPayload));
+  const normalizedApprovedQuestions = prepareQuestionsForValidation(normalizeQuestions(approvedPayload));
+  let approvedQuestions = normalizedApprovedQuestions;
+  let reviewHarmonizationSummary = '';
+
+  try {
+    const harmonizedReviewedBatch = await harmonizeGeneratedBatch({
+      ai,
+      Type,
+      model,
+      area,
+      topic,
+      difficulty: normalizedApprovedQuestions[0]?.difficulty || questions[0]?.difficulty || 'medium',
+      validateWithWeb,
+      questions: normalizedApprovedQuestions,
+    });
+    approvedQuestions = harmonizedReviewedBatch.harmonizedQuestions;
+    reviewHarmonizationSummary = harmonizedReviewedBatch.harmonizationSummary;
+  } catch (harmonizationError) {
+    console.warn(
+      '[generate-questions] governance harmonization failed',
+      model,
+      getErrorMessage(harmonizationError),
+    );
+  }
+
   const reviewValidationErrors = approvedQuestions.length
     ? validateQuestions(approvedQuestions, EXPECTED_ALTERNATIVES, { referenceQuestions })
     : [];
@@ -1341,7 +1851,12 @@ const reviewGeneratedBatch = async ({
 
   return {
     approvedQuestions,
-    reviewerSummary: String(parsed?.reviewer_summary || '').trim(),
+    reviewerSummary: [
+      String(parsed?.reviewer_summary || '').trim(),
+      reviewHarmonizationSummary,
+    ]
+      .filter(Boolean)
+      .join(' '),
     rejectedReasons,
   };
 };
@@ -1364,7 +1879,12 @@ const prepareGenerationSource = async (
 ): Promise<PreparedGenerationSource> => {
   const sourceMode = normalizeSourceMode(body?.source_mode);
   const resolvedTheme = String(body?.source_theme || body?.custom_topic_name || body?.topic_name || '').trim();
-  const validateWithWeb = Boolean(body?.validate_with_web) || sourceMode !== 'topic';
+  const isCustomTopicRequest = Boolean(String(body?.custom_topic_name || '').trim());
+  const topicGrounding = resolveTopicGroundingHint({
+    area: String(body?.area_name || '').trim(),
+    topic: resolvedTheme,
+  });
+  const validateWithWeb = Boolean(body?.validate_with_web) || sourceMode !== 'topic' || isCustomTopicRequest || topicGrounding.forceValidateWithWeb;
   const baseContext = String(body?.context || '').trim();
 
   if (sourceMode === 'material_text') {
@@ -1378,6 +1898,7 @@ const prepareGenerationSource = async (
       resolvedTheme,
       rawContext: sourceText,
       validateWithWeb,
+      topicGrounding,
       filePart: null,
       cleanup: null,
     };
@@ -1400,6 +1921,7 @@ const prepareGenerationSource = async (
       resolvedTheme,
       rawContext: baseContext,
       validateWithWeb,
+      topicGrounding,
       filePart: {
         uri: activeFile.uri || '',
         mimeType: activeFile.mimeType || mimeType,
@@ -1416,6 +1938,7 @@ const prepareGenerationSource = async (
     resolvedTheme,
     rawContext: baseContext,
     validateWithWeb,
+    topicGrounding,
     filePart: null,
     cleanup: null,
   };
@@ -1634,6 +2157,7 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({
         model: modelName,
         model_candidates: modelCandidates,
+        api_key_candidates: geminiApiKeys.length,
         mode: geminiApiKey ? 'server-api' : 'missing-gemini-key',
         can_generate: Boolean(geminiApiKey),
         can_save: Boolean(databaseUrl || hasSupabase),
@@ -1657,9 +2181,6 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ error: 'Area e topico sao obrigatorios.' });
       }
 
-      const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-      const preparedSource = await prepareGenerationSource(req.body || {}, ai);
-      const resolvedTheme = preparedSource.resolvedTheme || requestedTopicName;
       const existingQuestions = hasSupabase || databaseUrl
         ? await fetchExistingTopicQuestions(resolvedAreaId, topic_id, topic_name, custom_topic_name)
         : [];
@@ -1669,244 +2190,316 @@ export default async function handler(req: any, res: any) {
       let coverageSummary: string[] = [];
       let validationSummaryParts: string[] = [];
       let lastError: unknown = null;
+      let resolvedTheme = requestedTopicName;
+      let sourceModeUsed: SourceMode = normalizeSourceMode(req.body?.source_mode);
+      let validateWithWebUsed = Boolean(req.body?.validate_with_web) || sourceModeUsed !== 'topic';
+      let topicGroundingNotes = '';
 
-      try {
-        for (const candidateModel of modelCandidates) {
-          let candidateValidationErrors: string[] = [];
-          try {
-            const candidateQuestions: NormalizedQuestion[] = [];
-            let candidateCoverageSummary: string[] = [];
-            const candidateValidationSummaryParts: string[] = [];
+      for (const [apiKeyIndex, candidateApiKey] of geminiApiKeys.entries()) {
+        const ai = new GoogleGenAI({ apiKey: candidateApiKey });
+        let preparedSource: PreparedGenerationSource | null = null;
 
-            while (candidateQuestions.length < requestedCount) {
-              const remainingCount = requestedCount - candidateQuestions.length;
-              const batchCount = Math.min(MAX_GENERATION_BATCH_SIZE, remainingCount);
-              const referenceQuestions = [
-                ...existingQuestions.map((item) => item.content),
-                ...candidateQuestions.map((question) => question.question),
-              ];
-              const prompt = buildQuestionsPrompt({
-                area: resolvedAreaName,
-                topic: resolvedTheme,
-                count: batchCount,
-                difficulty: normalizeDifficulty(difficulty),
+        try {
+          preparedSource = await prepareGenerationSource(req.body || {}, ai);
+          resolvedTheme = preparedSource.resolvedTheme || requestedTopicName;
+          sourceModeUsed = preparedSource.sourceMode;
+          validateWithWebUsed = preparedSource.validateWithWeb;
+          topicGroundingNotes = buildTopicGroundingPromptSection({
+            area: resolvedAreaName,
+            topic: resolvedTheme,
+            validateWithWeb: preparedSource.validateWithWeb,
+          }).section;
+
+          for (const candidateModel of modelCandidates) {
+            let candidateValidationErrors: string[] = [];
+            try {
+              const candidateQuestions: NormalizedQuestion[] = [];
+              let candidateCoverageSummary: string[] = [];
+              const candidateValidationSummaryParts: string[] = [];
+
+              while (candidateQuestions.length < requestedCount) {
+                const remainingCount = requestedCount - candidateQuestions.length;
+                const batchCount = Math.min(MAX_GENERATION_BATCH_SIZE, remainingCount);
+                const referenceQuestions = [
+                  ...existingQuestions.map((item) => item.content),
+                  ...candidateQuestions.map((question) => question.question),
+                ];
+                const prompt = buildQuestionsPrompt({
+                  area: resolvedAreaName,
+                  topic: resolvedTheme,
+                  count: batchCount,
+                  difficulty: normalizeDifficulty(difficulty),
                 rawContent: preparedSource.rawContext,
                 sourceMode: preparedSource.sourceMode,
                 validateWithWeb: preparedSource.validateWithWeb,
+                topicGrounding: preparedSource.topicGrounding,
                 existingQuestions: [
-                  ...candidateQuestions.map((question) => ({
-                    content: question.question,
-                    difficulty: question.difficulty,
-                  })),
-                  ...existingQuestions,
-                ].slice(0, MAX_REFERENCE_QUESTIONS),
-              });
-
-              const contents = preparedSource.filePart
-                ? [{
-                  role: 'user',
-                  parts: [
-                    createPartFromText(prompt),
-                    createPartFromUri(preparedSource.filePart.uri, preparedSource.filePart.mimeType),
-                  ],
-                }]
-                : prompt;
-
-              candidateValidationErrors = [];
-
-              for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt += 1) {
-                const response = await generateContentWithTimeout(
-                  ai,
-                  {
-                    model: candidateModel,
-                    contents,
-                    config: {
-                      responseMimeType: 'application/json',
-                      responseSchema: createResponseSchema(Type, batchCount),
-                      tools: preparedSource.validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
-                    },
-                  },
-                  `A geracao do modelo ${candidateModel}`,
-                );
-                const rawText = extractResponseText(response);
-                const parsedBatch = rawText ? parseGeneratedPayload(rawText) : null;
-                const normalizedBatch = prepareQuestionsForValidation(normalizeQuestions(parsedBatch?.questions || []));
-                const filteredBatch = filterUniqueQuestions(normalizedBatch, {
-                  referenceQuestions,
+                    ...candidateQuestions.map((question) => ({
+                      content: question.question,
+                      difficulty: question.difficulty,
+                    })),
+                    ...existingQuestions,
+                  ].slice(0, MAX_REFERENCE_QUESTIONS),
                 });
-                let uniqueBatch = filteredBatch.uniqueQuestions;
 
-                const structuralValidationErrors = uniqueBatch.length
-                  ? validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES, { referenceQuestions })
-                  : [
-                    filteredBatch.skippedQuestions.length
-                      ? 'A IA devolveu apenas perguntas repetidas nesta tentativa.'
-                      : 'Nenhuma pergunta valida foi gerada nesta tentativa.',
-                  ];
-                const diversityValidationIssues = uniqueBatch.length
-                  ? getFormatDiversityIssues(uniqueBatch)
-                  : [];
-                candidateValidationErrors = [...structuralValidationErrors, ...diversityValidationIssues];
+                const contents = preparedSource.filePart
+                  ? [{
+                    role: 'user',
+                    parts: [
+                      createPartFromText(prompt),
+                      createPartFromUri(preparedSource.filePart.uri, preparedSource.filePart.mimeType),
+                    ],
+                  }]
+                  : prompt;
 
-                if (candidateValidationErrors.length && uniqueBatch.length) {
+                candidateValidationErrors = [];
+
+                for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt += 1) {
+                  const response = await generateContentWithTimeout(
+                    ai,
+                    {
+                      model: candidateModel,
+                      contents,
+                      config: {
+                        responseMimeType: 'application/json',
+                        responseSchema: createResponseSchema(Type, batchCount),
+                        tools: preparedSource.validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
+                      },
+                    },
+                    `A geracao do modelo ${candidateModel}`,
+                  );
+                  const rawText = extractResponseText(response);
+                  const parsedBatch = rawText ? parseGeneratedPayload(rawText) : null;
+                  const normalizedBatch = prepareQuestionsForValidation(normalizeQuestions(parsedBatch?.questions || []));
+                  let candidateBatchForValidation = normalizedBatch;
+                  let harmonizationSummary = '';
+
                   try {
-                    const repairedBatch = await repairGeneratedBatch({
+                    const harmonizedBatch = await harmonizeGeneratedBatch({
                       ai,
                       Type,
                       model: candidateModel,
                       area: resolvedAreaName,
                       topic: resolvedTheme,
+                      difficulty: normalizeDifficulty(difficulty),
                       validateWithWeb: preparedSource.validateWithWeb,
+                      questions: normalizedBatch,
+                    });
+
+                    candidateBatchForValidation = harmonizedBatch.harmonizedQuestions;
+                    harmonizationSummary = harmonizedBatch.harmonizationSummary;
+                  } catch (harmonizationError) {
+                    console.warn(
+                      '[generate-questions] pre-validation harmonization failed',
+                      candidateModel,
+                      getErrorMessage(harmonizationError),
+                    );
+                  }
+
+                  const filteredBatch = filterUniqueQuestions(candidateBatchForValidation, {
+                    referenceQuestions,
+                  });
+                  let uniqueBatch = filteredBatch.uniqueQuestions;
+
+                  const structuralValidationErrors = uniqueBatch.length
+                    ? validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES, { referenceQuestions })
+                    : [
+                      filteredBatch.skippedQuestions.length
+                        ? 'A IA devolveu apenas perguntas repetidas nesta tentativa.'
+                        : 'Nenhuma pergunta valida foi gerada nesta tentativa.',
+                    ];
+                  const diversityValidationIssues = uniqueBatch.length
+                    ? getFormatDiversityIssues(uniqueBatch)
+                    : [];
+                  candidateValidationErrors = [...structuralValidationErrors, ...diversityValidationIssues];
+
+                  if (candidateValidationErrors.length && uniqueBatch.length) {
+                    try {
+                      const repairedBatch = await repairGeneratedBatch({
+                        ai,
+                        Type,
+                      model: candidateModel,
+                      area: resolvedAreaName,
+                      topic: resolvedTheme,
+                      validateWithWeb: preparedSource.validateWithWeb,
+                      topicGroundingNotes,
                       questions: uniqueBatch,
                       validationErrors: candidateValidationErrors,
                     });
 
-                    uniqueBatch = repairedBatch.repairedQuestions;
-                    const repairedStructuralErrors = validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES, { referenceQuestions });
-                    const repairedDiversityIssues = getFormatDiversityIssues(uniqueBatch);
-                    candidateValidationErrors = repairedStructuralErrors;
+                      uniqueBatch = repairedBatch.repairedQuestions;
+                      const repairedStructuralErrors = validateQuestions(uniqueBatch, EXPECTED_ALTERNATIVES, { referenceQuestions });
+                      const repairedDiversityIssues = getFormatDiversityIssues(uniqueBatch);
+                      candidateValidationErrors = repairedStructuralErrors;
 
-                    if (!repairedStructuralErrors.length && repairedDiversityIssues.length) {
-                      candidateValidationSummaryParts.push(`A IA manteve boa cobertura tecnica, mas o lote ainda ficou um pouco uniforme no formato: ${repairedDiversityIssues.join('; ')}.`);
-                    }
+                      if (!repairedStructuralErrors.length && repairedDiversityIssues.length) {
+                        candidateValidationSummaryParts.push(`A IA manteve boa cobertura tecnica, mas o lote ainda ficou um pouco uniforme no formato: ${repairedDiversityIssues.join('; ')}.`);
+                      }
 
-                    if (!repairedStructuralErrors.length && repairedBatch.repairSummary) {
-                      candidateValidationSummaryParts.push(repairedBatch.repairSummary);
+                      if (!repairedStructuralErrors.length && repairedBatch.repairSummary) {
+                        candidateValidationSummaryParts.push(repairedBatch.repairSummary);
+                      }
+                    } catch (repairError) {
+                      console.warn(
+                        '[generate-questions] repair step failed',
+                        candidateModel,
+                        getErrorMessage(repairError),
+                      );
                     }
-                  } catch (repairError) {
-                    console.warn(
-                      '[generate-questions] repair step failed',
-                      candidateModel,
-                      getErrorMessage(repairError),
-                    );
                   }
+
+                  if (!candidateValidationErrors.length) {
+                    const reviewedBatch = await reviewGeneratedBatch({
+                      ai,
+                      Type,
+                      model: candidateModel,
+                      area: resolvedAreaName,
+                      topic: resolvedTheme,
+                      sourceMode: preparedSource.sourceMode,
+                      validateWithWeb: preparedSource.validateWithWeb,
+                      topicGroundingNotes,
+                      questions: uniqueBatch,
+                      referenceQuestions,
+                    });
+
+                    if (!reviewedBatch.approvedQuestions.length) {
+                      candidateValidationErrors = reviewedBatch.rejectedReasons.length
+                        ? reviewedBatch.rejectedReasons
+                        : ['A revisao tecnica reprovou todas as perguntas desta tentativa.'];
+                      continue;
+                    }
+
+                    const balancedBatch = prepareQuestionsForValidation(reviewedBatch.approvedQuestions);
+                    candidateQuestions.push(...balancedBatch);
+                    candidateCoverageSummary = mergeCoverageSummary(candidateCoverageSummary, parsedBatch?.coverage_summary);
+                    const validationSummary = String(parsedBatch?.validation_summary || '').trim();
+                    if (validationSummary) {
+                      candidateValidationSummaryParts.push(validationSummary);
+                    }
+                    if (harmonizationSummary) {
+                      candidateValidationSummaryParts.push(harmonizationSummary);
+                    }
+                    if (reviewedBatch.reviewerSummary) {
+                      candidateValidationSummaryParts.push(reviewedBatch.reviewerSummary);
+                    }
+                    if (filteredBatch.skippedQuestions.length) {
+                      candidateValidationSummaryParts.push(
+                        `${filteredBatch.skippedQuestions.length} perguntas repetidas foram descartadas automaticamente nesta rodada.`
+                      );
+                    }
+                    if (reviewedBatch.rejectedReasons.length) {
+                      candidateValidationSummaryParts.push(
+                        `${reviewedBatch.rejectedReasons.length} perguntas foram bloqueadas pela revisao tecnica por risco de erro ou inadequacao area-topico.`
+                      );
+                    }
+                    break;
+                  }
+
+                  console.warn(
+                    '[generate-questions] validation failed attempt',
+                    attempt,
+                    candidateModel,
+                    `batch=${batchCount}`,
+                    candidateValidationErrors,
+                    filteredBatch.skippedQuestions,
+                  );
                 }
 
-                if (!candidateValidationErrors.length) {
-                  const reviewedBatch = await reviewGeneratedBatch({
-                    ai,
-                    Type,
-                    model: candidateModel,
-                    area: resolvedAreaName,
-                    topic: resolvedTheme,
-                    sourceMode: preparedSource.sourceMode,
-                    validateWithWeb: preparedSource.validateWithWeb,
-                    questions: uniqueBatch,
-                    referenceQuestions,
-                  });
-
-                  if (!reviewedBatch.approvedQuestions.length) {
-                    candidateValidationErrors = reviewedBatch.rejectedReasons.length
-                      ? reviewedBatch.rejectedReasons
-                      : ['A revisao tecnica reprovou todas as perguntas desta tentativa.'];
-                    continue;
-                  }
-
-                  const balancedBatch = prepareQuestionsForValidation(reviewedBatch.approvedQuestions);
-                  candidateQuestions.push(...balancedBatch);
-                  candidateCoverageSummary = mergeCoverageSummary(candidateCoverageSummary, parsedBatch?.coverage_summary);
-                  const validationSummary = String(parsedBatch?.validation_summary || '').trim();
-                  if (validationSummary) {
-                    candidateValidationSummaryParts.push(validationSummary);
-                  }
-                  if (reviewedBatch.reviewerSummary) {
-                    candidateValidationSummaryParts.push(reviewedBatch.reviewerSummary);
-                  }
-                  if (filteredBatch.skippedQuestions.length) {
-                    candidateValidationSummaryParts.push(
-                      `${filteredBatch.skippedQuestions.length} perguntas repetidas foram descartadas automaticamente nesta rodada.`
-                    );
-                  }
-                  if (reviewedBatch.rejectedReasons.length) {
-                    candidateValidationSummaryParts.push(
-                      `${reviewedBatch.rejectedReasons.length} perguntas foram bloqueadas pela revisao tecnica por risco de erro ou inadequacao area-topico.`
-                    );
-                  }
+                if (candidateValidationErrors.length) {
                   break;
                 }
-
-                console.warn(
-                  '[generate-questions] validation failed attempt',
-                  attempt,
-                  candidateModel,
-                  `batch=${batchCount}`,
-                  candidateValidationErrors,
-                  filteredBatch.skippedQuestions,
-                );
               }
 
-              if (candidateValidationErrors.length) {
+              if (!candidateValidationErrors.length && candidateQuestions.length === requestedCount) {
+                normalized = candidateQuestions;
+                coverageSummary = candidateCoverageSummary;
+                validationSummaryParts = candidateValidationSummaryParts;
+                validationErrors = [];
+                modelUsed = candidateModel;
                 break;
               }
+            } catch (error) {
+              lastError = error;
+              console.warn('[generate-questions] model failed', candidateModel, getErrorMessage(error));
+              continue;
             }
 
-            if (!candidateValidationErrors.length && candidateQuestions.length === requestedCount) {
-              normalized = candidateQuestions;
-              coverageSummary = candidateCoverageSummary;
-              validationSummaryParts = candidateValidationSummaryParts;
-              validationErrors = [];
-              modelUsed = candidateModel;
+            if (!normalized.length) {
+              validationErrors = candidateValidationErrors.length
+                ? candidateValidationErrors
+                : [`Nao foi possivel completar o lote de ${requestedCount} perguntas com o modelo ${candidateModel}.`];
+            }
+
+            if (normalized.length === requestedCount) {
               break;
             }
-          } catch (error) {
-            lastError = error;
-            console.warn('[generate-questions] model failed', candidateModel, getErrorMessage(error));
-            continue;
           }
 
-          if (!normalized.length) {
-            validationErrors = candidateValidationErrors.length
-              ? candidateValidationErrors
-              : [`Nao foi possivel completar o lote de ${requestedCount} perguntas com o modelo ${candidateModel}.`];
+          if (!normalized.length && !validationErrors.length && lastError) {
+            throw lastError;
+          }
+        } catch (error) {
+          lastError = error;
+          const canTryNextKey = shouldRetryWithAnotherGeminiKey(error) && apiKeyIndex < geminiApiKeys.length - 1;
+
+          if (!canTryNextKey) {
+            throw error;
           }
 
-          if (normalized.length === requestedCount) {
-            break;
+          console.warn(
+            '[generate-questions] switching gemini key after failure',
+            `key=${apiKeyIndex + 1}/${geminiApiKeys.length}`,
+            getErrorMessage(error),
+          );
+          continue;
+        } finally {
+          if (preparedSource?.cleanup) {
+            await preparedSource.cleanup();
           }
         }
 
-        if (!normalized.length && !validationErrors.length && lastError) {
-          throw lastError;
-        }
-
-        if (!normalized.length) {
-          return res.status(422).json({
-            error: `A IA nao conseguiu fechar ${requestedCount} perguntas validas apos varias tentativas.`,
-            validation_errors: validationErrors,
-          });
-        }
-
-        if (validationErrors.length || normalized.length !== requestedCount) {
-          return res.status(422).json({
-            error: `A IA nao conseguiu entregar exatamente ${requestedCount} perguntas validas.`,
-            validation_errors: validationErrors,
-          });
-        }
-
-        return res.status(200).json({
-          area_id: resolvedAreaId,
-          area_name: resolvedAreaName,
-          topic_id,
-          topic_name,
-          custom_topic_name,
-          count: requestedCount,
-          difficulty: normalizeDifficulty(difficulty),
-          model_used: modelUsed,
-          source_mode: preparedSource.sourceMode,
-          source_theme: resolvedTheme,
-          validate_with_web: preparedSource.validateWithWeb,
-          validation_summary: Array.from(new Set(validationSummaryParts.filter(Boolean))).join(' ')
-            || (preparedSource.validateWithWeb
-              ? 'Conteudo consolidado com validacao web e revisao tecnica por area antes da montagem final das questoes.'
-              : 'Conteudo estruturado a partir do topico, seguido de revisao tecnica por area antes da aprovacao final.'),
-          coverage_summary: coverageSummary.length ? coverageSummary : createCoverageSummary(normalized),
-          questions: normalized,
-        });
-      } finally {
-        if (preparedSource.cleanup) {
-          await preparedSource.cleanup();
+        if (normalized.length === requestedCount || validationErrors.length) {
+          break;
         }
       }
+
+      if (!normalized.length && !validationErrors.length && lastError) {
+        throw lastError;
+      }
+
+      if (!normalized.length) {
+        return res.status(422).json({
+          error: `A IA nao conseguiu fechar ${requestedCount} perguntas validas apos varias tentativas.`,
+          validation_errors: validationErrors,
+        });
+      }
+
+      if (validationErrors.length || normalized.length !== requestedCount) {
+        return res.status(422).json({
+          error: `A IA nao conseguiu entregar exatamente ${requestedCount} perguntas validas.`,
+          validation_errors: validationErrors,
+        });
+      }
+
+      return res.status(200).json({
+        area_id: resolvedAreaId,
+        area_name: resolvedAreaName,
+        topic_id,
+        topic_name,
+        custom_topic_name,
+        count: requestedCount,
+        difficulty: normalizeDifficulty(difficulty),
+        model_used: modelUsed,
+        source_mode: sourceModeUsed,
+        source_theme: resolvedTheme,
+        validate_with_web: validateWithWebUsed,
+        validation_summary: Array.from(new Set(validationSummaryParts.filter(Boolean))).join(' ')
+          || (validateWithWebUsed
+            ? 'Conteudo consolidado com validacao web e revisao tecnica por area antes da montagem final das questoes.'
+            : 'Conteudo estruturado a partir do topico, seguido de revisao tecnica por area antes da aprovacao final.'),
+        coverage_summary: coverageSummary.length ? coverageSummary : createCoverageSummary(normalized),
+        questions: normalized,
+      });
     }
 
     if (action === 'save') {
@@ -1956,8 +2549,9 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'Acao invalida.' });
   } catch (error) {
     console.error('API Error:', error);
-    return res.status(500).json({ error: getErrorMessage(error) });
+    return res.status(getErrorStatusCode(error)).json({ error: getErrorMessage(error) });
   }
 }
 
 export const _validateQuestionsForTest = validateQuestions;
+export const _analyzeAlternativeBalanceForTest = analyzeAlternativeBalance;
