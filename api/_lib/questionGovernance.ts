@@ -172,6 +172,7 @@ export const buildGovernanceReviewPrompt = ({
   sourceMode,
   validateWithWeb,
   topicGroundingNotes,
+  formatPlan,
   questions,
 }: {
   area: string;
@@ -179,6 +180,7 @@ export const buildGovernanceReviewPrompt = ({
   sourceMode: string;
   validateWithWeb: boolean;
   topicGroundingNotes: string;
+  formatPlan: string;
   questions: GovernanceQuestion[];
 }) => {
   const profile = resolveAreaGovernanceProfile(area);
@@ -194,6 +196,7 @@ ESPECIALISTA RESPONSAVEL: ${profile.specialistTitle}
 ESCOPO TECNICO:
 ${profile.scope}
 ${topicGroundingNotes ? `\n${topicGroundingNotes}` : ''}
+${formatPlan ? `\nPLANO MINIMO DE VARIEDADE DO LOTE:\n${formatPlan}` : ''}
 
 RISCOS QUE VOCE DEVE CAUCIONAR COM RIGOR:
 ${listItems(profile.keyRisks)}
@@ -210,7 +213,8 @@ TAREFA:
 - Toda explicacao aprovada deve terminar com base bibliografica curta e confiavel.
 - Nunca aprove questao fora da area declarada ou claramente deslocada do topico declarado.
 - Nunca aceite inversao de conceitos, cadeias, aminoacidos, unidades, valores ou nomenclatura.
-- Mantenha o estilo de concurso: enunciado afirmativo terminado em "Excepto:", "Assinale a falsa:" ou "Assinale a verdadeira:".
+- Preserve o estilo de concurso sem homogeneizar o lote: aceite e mantenha perguntas com "?", comandos como "Assinale a alternativa correta." e afirmacoes terminadas em "Excepto:", "Assinale a falsa:" ou "Assinale a verdadeira:".
+- Se o lote estiver demasiado uniforme, reescreva enunciados suficientes para cumprir o plano minimo de variedade, sem mexer no tema central.
 - Corrija lotes em que a alternativa correta esteja visualmente maior do que as demais; as opcoes devem ter tamanho e estrutura semelhantes.
 - Quando precisar corrigir alternativas, reconstrua o bloco inteiro como um conjunto unico desde a origem, em vez de apenas cortar a correta.
 - Reprove e reescreva alternativas quando a correta parecer mais completa, mais especifica ou mais convincente apenas pelo tamanho.

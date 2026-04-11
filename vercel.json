@@ -1,4 +1,12 @@
 {
+  "functions": {
+    "api/generate-questions.ts": {
+      "maxDuration": 300
+    },
+    "api/ai-mentor.ts": {
+      "maxDuration": 120
+    }
+  },
   "crons": [
     {
       "path": "/api/cron-daily",

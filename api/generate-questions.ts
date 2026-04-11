@@ -738,6 +738,35 @@ const getFormatDiversityIssues = (questions: NormalizedQuestion[]) => {
   return issues;
 };
 
+const QUESTION_FORMAT_RECIPES = [
+  {
+    label: 'pergunta direta terminada com "?"',
+    guidance: 'Use uma abertura direta, como "Qual", "Que", "Quando" ou "Como", sem repetir a abertura de outra questao do lote.',
+  },
+  {
+    label: 'comando natural terminado com "Assinale a alternativa correta."',
+    guidance: 'Use uma abertura natural, como "Sobre", "Em relacao a" ou "No contexto de", sem copiar a estrutura das demais.',
+  },
+  {
+    label: 'afirmacao tecnica terminada com "Excepto:"',
+    guidance: 'Formule a ideia como criterio, regra ou conjunto de afirmacoes e feche com "Excepto:".',
+  },
+  {
+    label: 'afirmacao tecnica terminada com "Assinale a verdadeira:"',
+    guidance: 'Use formulacao afirmativa ou comparativa e feche com "Assinale a verdadeira:".',
+  },
+  {
+    label: 'afirmacao tecnica terminada com "Assinale a falsa:"',
+    guidance: 'Use formulacao afirmativa ou normativa e feche com "Assinale a falsa:".',
+  },
+] as const;
+
+const buildQuestionFormatPlan = (count: number) =>
+  Array.from({ length: count }, (_, index) => {
+    const recipe = QUESTION_FORMAT_RECIPES[index % QUESTION_FORMAT_RECIPES.length];
+    return `- Q${index + 1}: ${recipe.label}. ${recipe.guidance}`;
+  }).join('\n');
+
 const getSupabase = async () => {
   if (!supabaseUrl || !supabaseServiceKey) return null;
   if (!supabaseClientPromise) {
@@ -804,6 +833,9 @@ GUIA DE DIFICULDADE: ${getDifficultyInstruction(difficulty)}
 ${buildAlternativeBalanceContract(difficulty)}
 ${topicGroundingSection}
 
+PLANO MINIMO DE VARIEDADE DO LOTE:
+${buildQuestionFormatPlan(count)}
+
 QUESTOES JA EXISTENTES NESTE TOPICO. NAO REPITA, NAO REESCREVA E NAO CRIE VARIACOES MUITO PARECIDAS:
 ${formatReferenceQuestions(existingQuestions)}
 
@@ -814,6 +846,7 @@ REGRAS IMPORTANTES:
 - Esgote o tema ao longo do lote, cobrindo diferentes subtopicos sem repeticao
 - Se o topico for institucional, use as atribuicoes reais do orgao e nao responsabilidades inferidas por senso comum
 - Se o topico for cultura geral, mantenha o lote em conhecimentos gerais e nao force tecnicismo da area declarada
+- Respeite o plano minimo de variedade acima; nao deixe 4 ou 5 enunciados no mesmo formato quando o lote tiver tamanho suficiente para variar
 - Gere exatamente ${count} perguntas neste lote, nem mais nem menos
 - A dificuldade precisa refletir claramente o nivel pedido
 - Gere exatamente 4 alternativas por pergunta (A, B, C, D)
@@ -823,6 +856,7 @@ REGRAS IMPORTANTES:
 - Varie o formato dos enunciados dentro do mesmo lote para nao ficar robotico
 - Misture perguntas diretas com "?", afirmacoes tecnicas com "Excepto:", "Assinale a falsa:" ou "Assinale a verdadeira:", e comandos naturais como "Assinale a alternativa correta."
 - Nao repita a mesma abertura ou o mesmo fecho em todas as perguntas do lote
+- Antes de devolver o JSON final, confira se o lote cumpre o plano de variedade Q1..Q${count} e reescreva os enunciados que estiverem excessivamente parecidos
 - Mantenha paralelismo entre as alternativas, com tamanhos visuais semelhantes; a correta nao pode ser sistematicamente a mais longa
 - Mantenha o mesmo nivel de detalhe entre as 4 alternativas; a correta nao pode parecer a opcao mais completa, mais especifica ou mais "profissional" do lote
 - Pense no layout mobile: a correta nao pode ocupar 2 ou mais linhas a mais do que os distratores num ecra estreito
@@ -1528,7 +1562,6 @@ ${JSON.stringify(questions, null, 2)}
       config: {
         responseMimeType: 'application/json',
         responseSchema: createHarmonizationResponseSchema(Type, questions.length),
-        tools: validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
       },
     },
     `A harmonizacao pre-validacao do modelo ${model}`,
@@ -1579,6 +1612,8 @@ AREA: ${area}
 TOPICO: ${topic}
 ${buildAlternativeBalanceContract(questions[0]?.difficulty)}
 ${topicGroundingNotes}
+PLANO MINIMO DE VARIEDADE DO LOTE:
+${buildQuestionFormatPlan(questions.length)}
 
 PROBLEMAS DETETADOS PELO VALIDADOR:
 ${validationErrors.map((error) => `- ${error}`).join('\n')}
@@ -1587,6 +1622,7 @@ OBJETIVO:
 - devolver exatamente ${questions.length} questoes
 - manter exatamente ${EXPECTED_ALTERNATIVES} alternativas por questao
 - manter apenas 1 alternativa correta por questao
+- respeitar o plano minimo de variedade Q1..Q${questions.length}, para o lote nao voltar uniforme
 - variar o formato dos enunciados no mesmo lote, evitando que todas usem o mesmo fecho
 - aceitar e misturar formatos como pergunta direta com "?", afirmacao com "Excepto:", "Assinale a falsa:", "Assinale a verdadeira:" e comandos como "Assinale a alternativa correta."
 - reconstruir cada grupo de alternativas desde a origem, como um conjunto unico, em vez de apenas cortar a opcao correta no fim
@@ -1608,7 +1644,6 @@ ${JSON.stringify(questions, null, 2)}
       config: {
         responseMimeType: 'application/json',
         responseSchema: createRepairResponseSchema(Type, questions.length),
-        tools: validateWithWeb ? ([{ type: 'google_search' }] as any) : undefined,
       },
     },
     `A reparacao do lote no modelo ${model}`,
@@ -1697,6 +1732,7 @@ const reviewGeneratedBatch = async ({
     sourceMode,
     validateWithWeb,
     topicGroundingNotes,
+    formatPlan: buildQuestionFormatPlan(questions.length),
     questions,
   });
 
